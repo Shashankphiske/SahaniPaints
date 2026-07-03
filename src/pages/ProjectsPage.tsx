@@ -1720,37 +1720,35 @@ interface LabourCrewTabProps {
 function LabourCrewTab({ attendance }: LabourCrewTabProps) {
   // Aggregate attendance data: Group by worker
   const aggregatedLabour = useMemo(() => {
-    const map: Record<string, { name: string; paymentPerDay: number; days: string[]; phone: string }> = {};
+    const map: Record<string, { name: string; paymentPerDay: number; daysValueSum: number; phone: string }> = {};
 
     attendance.forEach((att) => {
       const labourId = att.labourId;
       const lName = att.labour?.name || "Unknown Crew";
       const paymentRate = Number(att.labour?.paymentPerDay || 0);
       const phoneNum = att.labour?.phonenumber || "—";
+      const val = Number(att.workDayValue ?? 1.0);
       
       const parsedDate = new Date(att.date);
       if (isNaN(parsedDate.getTime())) return;
-      const dateStr = parsedDate.toISOString().split("T")[0];
 
       if (!map[labourId]) {
         map[labourId] = {
           name: lName,
           paymentPerDay: paymentRate,
-          days: [],
+          daysValueSum: 0,
           phone: phoneNum,
         };
       }
-      if (!map[labourId].days.includes(dateStr)) {
-        map[labourId].days.push(dateStr);
-      }
+      map[labourId].daysValueSum += val;
     });
 
     return Object.entries(map).map(([id, item]) => ({
       id,
       name: item.name,
       paymentPerDay: item.paymentPerDay,
-      daysPresentCount: item.days.length,
-      totalWages: item.days.length * item.paymentPerDay,
+      daysPresentCount: item.daysValueSum,
+      totalWages: item.daysValueSum * item.paymentPerDay,
       phone: item.phone,
     }));
   }, [attendance]);
@@ -2001,25 +1999,23 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
   // Compute Labour Cost from attendance ledger
   const labourCost = useMemo(() => {
     const attendance = fullProject.attendance ?? [];
-    const map: Record<string, { paymentPerDay: number; days: string[] }> = {};
+    const map: Record<string, { paymentPerDay: number; daysValueSum: number }> = {};
 
     attendance.forEach((att: any) => {
       const labourId = att.labourId;
       const paymentRate = Number(att.labour?.paymentPerDay || 0);
+      const val = Number(att.workDayValue ?? 1.0);
       
       const parsedDate = new Date(att.date);
       if (isNaN(parsedDate.getTime())) return;
-      const dateStr = parsedDate.toISOString().split("T")[0];
 
       if (!map[labourId]) {
-        map[labourId] = { paymentPerDay: paymentRate, days: [] };
+        map[labourId] = { paymentPerDay: paymentRate, daysValueSum: 0 };
       }
-      if (!map[labourId].days.includes(dateStr)) {
-        map[labourId].days.push(dateStr);
-      }
+      map[labourId].daysValueSum += val;
     });
 
-    return Object.values(map).reduce((sum, item) => sum + item.days.length * item.paymentPerDay, 0);
+    return Object.values(map).reduce((sum, item) => sum + item.daysValueSum * item.paymentPerDay, 0);
   }, [fullProject.attendance]);
 
   const totalCost = productCost + labourCost;

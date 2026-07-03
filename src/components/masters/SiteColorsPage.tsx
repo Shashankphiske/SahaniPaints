@@ -72,6 +72,7 @@ export default function SiteColorsPage() {
   const modalAreaRef = useRef<HTMLDivElement>(null);
   const modalColorRef = useRef<HTMLDivElement>(null);
   const [creatingArea, setCreatingArea] = useState(false);
+  const [modalDescription, setModalDescription] = useState("");
 
   // Modal states for duplicating mappings from another project
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
@@ -130,6 +131,7 @@ export default function SiteColorsPage() {
     setSelectedColor(null);
     setModalAreaSearch("");
     setModalColorSearch("");
+    setModalDescription("");
     setModalAreaOpen(false);
     setModalColorOpen(false);
     setIsAddModalOpen(true);
@@ -213,6 +215,7 @@ export default function SiteColorsPage() {
         projectId: selectedProject.id,
         areaId: selectedArea.id,
         colorId: selectedColor.id,
+        description: modalDescription.trim() || null,
       };
       const result = await apiRequest.create<ProjectAreaColor>("project-area-colors", payload);
 
@@ -221,6 +224,7 @@ export default function SiteColorsPage() {
         projectId: selectedProject.id,
         areaId: selectedArea.id,
         colorId: selectedColor.id,
+        description: modalDescription.trim() || null,
         area: selectedArea,
         color: selectedColor,
       };
@@ -285,6 +289,7 @@ export default function SiteColorsPage() {
           projectId: selectedProject.id,
           areaId: sm.areaId,
           colorId: sm.colorId,
+          description: sm.description || null,
         };
         const result = await apiRequest.create<ProjectAreaColor>("project-area-colors", payload);
         createdMappings.push({
@@ -292,6 +297,7 @@ export default function SiteColorsPage() {
           projectId: selectedProject.id,
           areaId: sm.areaId,
           colorId: sm.colorId,
+          description: sm.description || null,
           area: sm.area,
           color: sm.color,
         });
@@ -567,6 +573,7 @@ export default function SiteColorsPage() {
                   <tr className="border-b border-slate-100 dark:border-zinc-900/60 bg-slate-50/50 dark:bg-zinc-900/10">
                     <th className="p-4 pl-6 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Site Area</th>
                     <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Mapped Color & Shade</th>
+                    <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Description</th>
                     <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest text-right pr-6">Action</th>
                   </tr>
                 </thead>
@@ -581,6 +588,9 @@ export default function SiteColorsPage() {
                           <span>{m.color?.name}</span>
                           <span className="text-[10px] text-muted-foreground font-mono font-bold border-l border-slate-200 dark:border-zinc-800 pl-2">({m.color?.shade})</span>
                         </Badge>
+                      </td>
+                      <td className="p-4 text-xs text-slate-600 dark:text-zinc-400 font-semibold max-w-[220px] truncate">
+                        {m.description || <span className="text-muted-foreground italic font-normal">—</span>}
                       </td>
                       <td className="p-4 text-right pr-6">
                         <Button
@@ -723,6 +733,19 @@ export default function SiteColorsPage() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Description Input */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                Description / Remarks
+              </label>
+              <Input
+                className="rounded-xl border-slate-200 dark:border-zinc-800 focus:ring-primary/20 focus:border-primary text-sm font-semibold"
+                placeholder="e.g. Living room primary wall, double coat"
+                value={modalDescription}
+                onChange={(e) => setModalDescription(e.target.value)}
+              />
             </div>
 
             {/* Action buttons */}

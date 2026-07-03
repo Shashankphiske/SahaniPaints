@@ -73,7 +73,9 @@ export default function LabourDashboard({
 
   // Calculations
   const rate = Number(labour.paymentPerDay || 0);
-  const totalAttendanceDays = attendanceList.length;
+  const totalAttendanceDays = useMemo(() => {
+    return attendanceList.reduce((sum, a) => sum + Number(a.workDayValue ?? 1.0), 0);
+  }, [attendanceList]);
   const totalCharge = totalAttendanceDays * rate;
 
   const totalPaid = useMemo(() => {
@@ -302,17 +304,26 @@ export default function LabourDashboard({
                     <tr className="bg-slate-50 dark:bg-zinc-900 border-b">
                       <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Marked Date</th>
                       <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Project Site</th>
+                      <th className="p-4 font-semibold text-slate-600 dark:text-slate-400">Shift Type</th>
                       <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Daily Payment Rate</th>
+                      <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Earned Wage</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-zinc-800">
-                    {attendanceList.map((a) => (
-                      <tr key={a.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
-                        <td className="p-4 font-semibold text-slate-800 dark:text-slate-200">{formatDate(a.date)}</td>
-                        <td className="p-4 text-slate-600 dark:text-slate-400">{a.project?.name || "—"}</td>
-                        <td className="p-4 text-right font-semibold text-slate-800 dark:text-slate-200">{formatPrice(rate)}</td>
-                      </tr>
-                    ))}
+                    {attendanceList.map((a) => {
+                      const val = Number(a.workDayValue ?? 1.0);
+                      const earnedWage = rate * val;
+                      const shiftLabel = a.workDayType === "NIGHT" ? "Night (0.5x)" : a.workDayType === "BOTH" ? "Both (1.5x)" : "Day (1.0x)";
+                      return (
+                        <tr key={a.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
+                          <td className="p-4 font-semibold text-slate-800 dark:text-slate-200">{formatDate(a.date)}</td>
+                          <td className="p-4 text-slate-600 dark:text-slate-400">{a.project?.name || "—"}</td>
+                          <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">{shiftLabel}</td>
+                          <td className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">{formatPrice(rate)}</td>
+                          <td className="p-4 text-right font-bold text-slate-800 dark:text-slate-200">{formatPrice(earnedWage)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

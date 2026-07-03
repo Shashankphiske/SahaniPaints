@@ -38,6 +38,11 @@ const formatDate = (dateStr: any) => {
   }
 };
 
+interface QueuedLabour {
+  labour: Labour;
+  shift: "DAY" | "NIGHT" | "BOTH";
+}
+
 export default function LabourAttendancePage() {
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: laboursData } = useMasterData<Labour>("labours");
@@ -53,7 +58,7 @@ export default function LabourAttendancePage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [copyFromDate, setCopyFromDate] = useState("");
   // Temporary queue states before marking present
-  const [tempSelectedLabours, setTempSelectedLabours] = useState<Labour[]>([]);
+  const [tempSelectedLabours, setTempSelectedLabours] = useState<QueuedLabour[]>([]);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
 
   // Site (Project) search dropdown states
@@ -147,7 +152,7 @@ export default function LabourAttendancePage() {
     }
 
     // Check if already queued
-    if (tempSelectedLabours.some((l) => l.id === labour.id)) {
+    if (tempSelectedLabours.some((item) => item.labour.id === labour.id)) {
       toast({
         title: "Labourer already queued",
         description: `"${labour.name}" is already in the list to be added.`,
@@ -183,13 +188,19 @@ export default function LabourAttendancePage() {
       return;
     }
 
-    setTempSelectedLabours((prev) => [...prev, labour]);
+    setTempSelectedLabours((prev) => [...prev, { labour, shift: "DAY" }]);
     setLabourOpen(false);
     setLabourSearch("");
   };
 
   const handleRemoveFromQueue = (labourId: string) => {
-    setTempSelectedLabours((prev) => prev.filter((l) => l.id !== labourId));
+    setTempSelectedLabours((prev) => prev.filter((item) => item.labour.id !== labourId));
+  };
+
+  const handleUpdateQueueShift = (labourId: string, shift: "DAY" | "NIGHT" | "BOTH") => {
+    setTempSelectedLabours((prev) =>
+      prev.map((item) => (item.labour.id === labourId ? { ...item, shift } : item))
+    );
   };
 
   const handleSaveAttendance = async () => {
@@ -199,12 +210,20 @@ export default function LabourAttendancePage() {
     let successCount = 0;
     const newRecords: LabourAttendance[] = [];
 
-    for (const labour of tempSelectedLabours) {
+    const shiftValues = {
+      DAY: 1.0,
+      NIGHT: 0.5,
+      BOTH: 1.5,
+    };
+
+    for (const item of tempSelectedLabours) {
       try {
         const payload = {
           date: new Date(currentDate).toISOString(),
           projectId: selectedProject.id,
-          labourId: labour.id,
+          labourId: item.labour.id,
+          workDayType: item.shift,
+          workDayValue: shiftValues[item.shift],
         };
 
         const result = await apiRequest.create<LabourAttendance>("labour-attendance", payload as any);
@@ -214,16 +233,16 @@ export default function LabourAttendancePage() {
           ...result,
           project: { name: selectedProject.name },
           labour: {
-            name: labour.name,
-            paymentPerDay: Number(labour.paymentPerDay),
-            phonenumber: labour.phonenumber,
+            name: item.labour.name,
+            paymentPerDay: Number(item.labour.paymentPerDay),
+            phonenumber: item.labour.phonenumber,
           },
         };
         newRecords.push(fullRecord);
         successCount++;
       } catch (err: any) {
         toast({
-          title: `Failed to mark ${labour.name}`,
+          title: `Failed to mark ${item.labour.name}`,
           description: err.message || "An error occurred.",
           variant: "destructive",
         });
@@ -332,6 +351,8 @@ export default function LabourAttendancePage() {
         date: new Date(currentDate).toISOString(),
         projectId: selectedProject.id,
         labourId: r.labourId,
+        workDayType: r.workDayType || "DAY",
+        workDayValue: Number(r.workDayValue || 1.0),
       }));
 
       const results = await apiRequest.bulkCreate<LabourAttendance>("labour-attendance", payload as any);
@@ -618,26 +639,44 @@ export default function LabourAttendancePage() {
                       )}
                     </Button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {tempSelectedLabours.map((l) => (
-                      <Badge
-                        key={l.id}
-                        variant="secondary"
-                        className="pl-3 pr-2 py-1.5 flex items-center gap-1.5 rounded-full border border-slate-300/60 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-semibold"
-                      >
-                        <span className="text-slate-800 dark:text-slate-200">{l.name}</span>
-                        <span className="text-[10px] text-muted-foreground font-bold">
-                          (₹{l.paymentPerDay})
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFromQueue(l.id)}
-                          className="hover:text-destructive text-muted-foreground p-0.5 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-805 transition-colors"
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {tempSelectedLabours.map(({ labour: l, shift }) => {
+                      const baseRate = Number(l.paymentPerDay || 0);
+                      const multiplier = shift === "DAY" ? 1.0 : shift === "NIGHT" ? 0.5 : 1.5;
+                      const calculatedWage = baseRate * multiplier;
+                      
+                      return (
+                        <div
+                          key={l.id}
+                          className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm"
                         >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
+                          <div className="space-y-0.5">
+                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold">
+                              Base: ₹{baseRate}/day · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <select
+                              value={shift}
+                              onChange={(e) => handleUpdateQueueShift(l.id, e.target.value as any)}
+                              className="h-8 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-2 py-0.5 text-xs font-bold text-slate-700 dark:text-zinc-350 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                            >
+                              <option value="DAY">Day (1.0x)</option>
+                              <option value="NIGHT">Night (0.5x)</option>
+                              <option value="BOTH">Both (1.5x)</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFromQueue(l.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-905 transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -777,26 +816,42 @@ export default function LabourAttendancePage() {
 
                         <div className="p-5 pt-4 space-y-4">
                           <div className="flex flex-wrap gap-2">
-                            {g.records.map((r) => (
-                              <Badge
-                                key={r.id}
-                                variant="secondary"
-                                className="pl-3 pr-2 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-1.5 select-none"
-                              >
-                                <span className="text-slate-700 dark:text-slate-300">
-                                  {r.labour?.name}{" "}
-                                  <span className="text-[10px] opacity-75 font-mono">
-                                    (₹{r.labour?.paymentPerDay})
-                                  </span>
-                                </span>
-                                <button
-                                  onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                  className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
+                            {g.records.map((r) => {
+                              const baseRate = Number(r.labour?.paymentPerDay || 0);
+                              const val = Number(r.workDayValue ?? 1.0);
+                              const wage = baseRate * val;
+                              const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
+                              const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
+                                : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
+                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
+
+                              return (
+                                <Badge
+                                  key={r.id}
+                                  variant="secondary"
+                                  className="pl-3 pr-2 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-2 select-none"
                                 >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
+                                  <span className="text-slate-700 dark:text-slate-300">
+                                    {r.labour?.name}{" "}
+                                    <span className="text-[9px] opacity-60 font-mono">
+                                      (₹{baseRate})
+                                    </span>
+                                  </span>
+                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${shiftColor}`}>
+                                    {shiftLabel} ({val}x)
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
+                                    ₹{wage}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
+                                    className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -849,26 +904,42 @@ export default function LabourAttendancePage() {
 
                         <div className="p-5 pt-4 space-y-4">
                           <div className="flex flex-wrap gap-2">
-                            {g.records.map((r) => (
-                              <Badge
-                                key={r.id}
-                                variant="secondary"
-                                className="pl-3 pr-2 py-1 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-1.5 select-none"
-                              >
-                                <span className="text-slate-700 dark:text-slate-300">
-                                  {r.labour?.name}{" "}
-                                  <span className="text-[10px] opacity-75 font-mono">
-                                    (₹{r.labour?.paymentPerDay})
-                                  </span>
-                                </span>
-                                <button
-                                  onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                  className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
+                            {g.records.map((r) => {
+                              const baseRate = Number(r.labour?.paymentPerDay || 0);
+                              const val = Number(r.workDayValue ?? 1.0);
+                              const wage = baseRate * val;
+                              const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
+                              const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
+                                : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
+                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
+
+                              return (
+                                <Badge
+                                  key={r.id}
+                                  variant="secondary"
+                                  className="pl-3 pr-2 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-2 select-none"
                                 >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
+                                  <span className="text-slate-700 dark:text-slate-300">
+                                    {r.labour?.name}{" "}
+                                    <span className="text-[9px] opacity-60 font-mono">
+                                      (₹{baseRate})
+                                    </span>
+                                  </span>
+                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${shiftColor}`}>
+                                    {shiftLabel} ({val}x)
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
+                                    ₹{wage}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
+                                    className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>

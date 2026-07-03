@@ -179,6 +179,7 @@ export interface ProjectAreaColor {
   projectId: string;
   areaId: string;
   colorId: string;
+  description?: string | null;
   createdAt: Date;
   color?: Color;
   area?: Area;
@@ -197,6 +198,8 @@ export interface LabourAttendance {
   date: Date;
   projectId: string;
   labourId: string;
+  workDayType?: string;
+  workDayValue?: number | any;
   createdAt: Date;
   project?: {
     name: string;
