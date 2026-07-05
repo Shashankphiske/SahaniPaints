@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useMasterData } from "../hooks/use-master-data";
 import { apiRequest } from "../lib/api";
 import type { Project, Customer, Product, LabourAttendance, LabourPayment } from "../types/master";
@@ -1094,6 +1095,7 @@ function OverviewEditTab({ fullProject, customers, onSuccess }: OverviewEditTabP
         <MaterialUsedTab
           projectId={fullProject.id}
           projectProducts={fullProject.projectProducts || []}
+          materialLogs={fullProject.materialLogs || []}
           onSuccess={onSuccess}
         />
       </div>
@@ -1522,71 +1524,23 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
 interface MaterialUsedTabProps {
   projectId: string;
   projectProducts: any[];
+  materialLogs: any[];
   onSuccess: () => void;
 }
 
-function MaterialUsedTab({ projectId, projectProducts, onSuccess }: MaterialUsedTabProps) {
-  const [litresState, setLitresState] = useState<Record<string, number | "">>({});
-  const [updating, setUpdating] = useState(false);
-
-  useEffect(() => {
-    const state: Record<string, number | ""> = {};
-    projectProducts.forEach((pp) => {
-      state[pp.id] = pp.litresUsed != null ? Number(pp.litresUsed) : "";
-    });
-    setLitresState(state);
-  }, [projectProducts]);
-
-  const handleLitresChange = (id: string, value: string) => {
-    setLitresState((prev) => ({
-      ...prev,
-      [id]: value === "" ? "" : Number(value),
-    }));
-  };
-
-  const handleSaveLitres = async () => {
-    setUpdating(true);
-    try {
-      const payloadProducts = projectProducts.map((pp) => {
-        const inputVal = litresState[pp.id];
-        return {
-          productId: pp.productId,
-          area: Number(pp.area),
-          unit: pp.unit,
-          rate: Number(pp.rate),
-          litresUsed: inputVal === "" ? null : Number(inputVal),
-        };
-      });
-
-      await apiRequest.update("projects", projectId, {
-        projectProducts: payloadProducts,
-      } as any);
-
-      toast({
-        title: "Material Usage Saved",
-        description: "Actual litres used and coverages updated.",
-      });
-      onSuccess();
-    } catch (err: any) {
-      toast({
-        title: "Failed to Save",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
+function MaterialUsedTab({ projectId, projectProducts, materialLogs, onSuccess }: MaterialUsedTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Material Usage</h3>
-          <p className="text-xs text-muted-foreground">Log litres used on-site to view paint coverage efficiency.</p>
+          <p className="text-xs text-muted-foreground">Logged material paint quantities delivered on project site.</p>
         </div>
-        <Button onClick={handleSaveLitres} disabled={updating} size="sm" className="font-bold">
-          {updating ? "Saving..." : "Save Material Usage"}
+        <Button asChild size="sm" className="font-bold">
+          <Link to="/material-usage">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Log Materials
+          </Link>
         </Button>
       </div>
 
@@ -1596,15 +1550,16 @@ function MaterialUsedTab({ projectId, projectProducts, onSuccess }: MaterialUsed
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>Area</TableHead>
-              <TableHead>Litres Used</TableHead>
+              <TableHead>Litres Logged</TableHead>
               <TableHead>Coverage</TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {projectProducts.map((pp) => {
-              const currentLitres = litresState[pp.id];
-              const litresNum = currentLitres === "" || currentLitres === undefined ? 0 : Number(currentLitres);
+              // Calculate logged quantity from project materialLogs matching productId
+              const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
+              const litresNum = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
 
               const coverageSqFtL = pp.product?.coverageSqFt != null ? Number(pp.product.coverageSqFt) : 0;
               const coverageRnFtL = pp.product?.coverageRnFt != null ? Number(pp.product.coverageRnFt) : 0;
@@ -1621,19 +1576,8 @@ function MaterialUsedTab({ projectId, projectProducts, onSuccess }: MaterialUsed
                   <TableCell>
                     {fmt(pp.area)} {pp.unit}
                   </TableCell>
-                  <TableCell className="w-40">
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={currentLitres}
-                        onChange={(e) => handleLitresChange(pp.id, e.target.value)}
-                        placeholder="0.00"
-                        className="h-9 font-medium"
-                      />
-                      <span className="text-xs font-bold text-muted-foreground">L</span>
-                    </div>
+                  <TableCell className="font-semibold text-slate-800 dark:text-slate-200">
+                    {fmt(litresNum)} L
                   </TableCell>
                   <TableCell>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">{fmt(actualCoverage)}</span>
@@ -1983,18 +1927,23 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
   // Compute Product Cost
   const productCost = useMemo(() => {
     const projectProducts = fullProject.projectProducts ?? [];
+    const materialLogs = fullProject.materialLogs ?? [];
+
     return projectProducts.reduce((sum: number, pp: any) => {
       const priceLitre = Number(pp.product?.price || 0);
 
-      // Litres used
-      if (pp.litresUsed != null && Number(pp.litresUsed) > 0) {
-        return sum + Number(pp.litresUsed) * priceLitre;
+      // Find the logged litres used for this product in this project
+      const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
+      const totalLoggedQuantity = loggedProducts.reduce((s: number, log: any) => s + Number(log.quantity || 0), 0);
+
+      if (totalLoggedQuantity > 0) {
+        return sum + totalLoggedQuantity * priceLitre;
       }
 
       // Fallback: area * rate (which is rate * area = total row price)
       return sum + Number(pp.rate) * Number(pp.area);
     }, 0);
-  }, [fullProject.projectProducts]);
+  }, [fullProject.projectProducts, fullProject.materialLogs]);
 
   // Compute Labour Cost from attendance ledger
   const labourCost = useMemo(() => {

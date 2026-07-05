@@ -25,7 +25,12 @@ import SiteColorsPage from "./components/masters/SiteColorsPage";
 import LaboursPage from "./components/masters/LaboursPage";
 import AreasPage from "./components/masters/AreasPage";
 import LabourAttendancePage from "./components/attendance/LabourAttendancePage";
+import MaterialLogsPage from "./components/materials/MaterialLogsPage";
+import PaymentsPage from "./components/payments/PaymentsPage";
+import ContractorPaymentsPage from "./components/payments/ContractorPaymentsPage";
+import WeeklyDiaryPage from "./components/payments/WeeklyDiaryPage";
 import StoresPage from "./components/masters/StoresPage";
+import ContractorsPage from "./components/masters/ContractorsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +81,10 @@ export default function App() {
               <Route path="/projects" element={<Protected><ProjectsPage /></Protected>} />
               <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
               <Route path="/labour-attendance" element={<Protected><LabourAttendancePage /></Protected>} />
+              <Route path="/material-usage" element={<Protected><MaterialLogsPage /></Protected>} />
+              <Route path="/payments" element={<Protected><PaymentsPage /></Protected>} />
+              <Route path="/contractor-payments" element={<Protected><ContractorPaymentsPage /></Protected>} />
+              <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
               <Route
                 path="/settings"
                 element={
@@ -94,6 +103,7 @@ export default function App() {
               <Route path="/masters/site-colors" element={<Protected><SiteColorsPage /></Protected>} />
               <Route path="/masters/areas" element={<Protected><AreasPage /></Protected>} />
               <Route path="/masters/labours" element={<Protected><LaboursPage /></Protected>} />
+              <Route path="/masters/contractors" element={<Protected><ContractorsPage /></Protected>} />
               <Route path="/masters/stores" element={<Protected><StoresPage /></Protected>} />
 
               {/* Catch-all Routing */}

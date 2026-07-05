@@ -7,6 +7,8 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { apiRequest } from "../../lib/api";
 import { toast } from "../../hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Pencil } from "lucide-react";
 
 const StatCard = ({ title, value, icon: Icon, className = "" }: { title: string; value: string | number; icon: any; className?: string }) => (
   <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-5 rounded-2xl shadow-sm flex items-center justify-between">
@@ -51,10 +53,13 @@ export default function LabourDashboard({
   } = useMasterData<Project>("projects", true);
 
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentType, setPaymentType] = useState<"OUTGOING" | "INCOMING" >("OUTGOING");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const [paymentProject, setPaymentProject] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<LabourPayment | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const attendanceList = useMemo(() => Array.isArray(attendanceRaw) ? attendanceRaw : [], [attendanceRaw]);
   const paymentsList = useMemo(() => Array.isArray(paymentsRaw) ? paymentsRaw : [], [paymentsRaw]);
@@ -79,7 +84,10 @@ export default function LabourDashboard({
   const totalCharge = totalAttendanceDays * rate;
 
   const totalPaid = useMemo(() => {
-    return paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    return paymentsList.reduce((sum, p) => {
+      const amt = Number(p.amount || 0);
+      return p.type === "INCOMING" ? sum - amt : sum + amt;
+    }, 0);
   }, [paymentsList]);
 
   const balanceDue = totalCharge - totalPaid;
@@ -117,21 +125,35 @@ export default function LabourDashboard({
 
     setSubmittingPayment(true);
     try {
-      createPayment({
+      const payload = {
         labourId: labour.id,
         projectId: paymentProject || null,
         amount,
+        type: paymentType,
         paymentDate: new Date(paymentDate).toISOString(),
         remarks: paymentRemarks || null,
-      } as any);
+      };
+
+      if (editingPayment) {
+        await apiRequest.update("labour-payments", editingPayment.id, payload as any);
+        toast({
+          title: "Payment updated",
+          description: `Successfully updated payment record.`
+        });
+      } else {
+        await createPayment(payload as any);
+        toast({
+          title: "Payment recorded",
+          description: `Successfully logged payment of ${formatPrice(amount)}`,
+        });
+      }
 
       setPaymentAmount("");
       setPaymentRemarks("");
       setPaymentProject("");
-      toast({
-        title: "Payment recorded",
-        description: `Successfully logged payment of ${formatPrice(amount)}`,
-      });
+      setPaymentType("OUTGOING");
+      setIsPaymentModalOpen(false);
+      setEditingPayment(null);
     } catch (err: any) {
       toast({
         title: "Failed to record payment",
@@ -164,6 +186,13 @@ export default function LabourDashboard({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-zinc-300">Labour Profile</span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                labour.type === "MONTHLY"
+                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/40"
+                  : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-450 border border-amber-200/40"
+              }`}>
+                {labour.type === "MONTHLY" ? "Monthly" : "Weekly"}
+              </span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50 truncate mt-0.5">{labour.name}</h1>
             {labour.phonenumber && (
@@ -334,14 +363,33 @@ export default function LabourDashboard({
 
       {/* PAYMENTS TAB */}
       {activeTab === "payments" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
-          {/* LEDGER */}
-          <div className="lg:col-span-2 bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
-              <Coins size={18} className="text-primary" />
-              <h2 className="text-lg font-bold">Payments Ledger Log</h2>
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex justify-between items-center bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+            <div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Payout & Recovery Records</h3>
+              <p className="text-xs text-slate-400">View payroll history for this worker.</p>
             </div>
-            <div className="border-t pt-2">
+            <Button
+              onClick={() => {
+                setEditingPayment(null);
+                setPaymentAmount("");
+                setPaymentRemarks("");
+                setPaymentProject("");
+                setPaymentType("OUTGOING");
+                setPaymentDate(new Date().toISOString().split("T")[0]);
+                setIsPaymentModalOpen(true);
+              }}
+              size="sm"
+              className="font-bold text-xs"
+            >
+              <Plus size={14} className="mr-1" />
+              Log Payout
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6">
+            {/* Payouts list */}
+            <div className="bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
               {paymentsLoading ? (
                 <div className="flex justify-center py-10">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -357,7 +405,7 @@ export default function LabourDashboard({
                         <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Project Site</th>
                         <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Remarks</th>
                         <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Amount</th>
-                        <th className="p-4 text-center font-semibold text-slate-600 dark:text-slate-400 w-16">Action</th>
+                        <th className="p-4 text-center font-semibold text-slate-600 dark:text-slate-400 w-24">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-zinc-800">
@@ -368,8 +416,26 @@ export default function LabourDashboard({
                           <td className="p-4 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={p.remarks || ""}>
                             {p.remarks || "—"}
                           </td>
-                          <td className="p-4 text-right font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(Number(p.amount))}</td>
-                          <td className="p-4 text-center">
+                          <td className={`p-4 text-right font-bold ${p.type === "INCOMING" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                            {p.type === "INCOMING" ? "+" : "-"}{formatPrice(Number(p.amount))}
+                          </td>
+                          <td className="p-4 text-center space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingPayment(p);
+                                setPaymentAmount(p.amount.toString());
+                                setPaymentRemarks(p.remarks || "");
+                                setPaymentProject(p.projectId || "");
+                                setPaymentType(p.type);
+                                setPaymentDate(p.paymentDate.split("T")[0]);
+                                setIsPaymentModalOpen(true);
+                              }}
+                              className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                            >
+                              <Pencil size={15} />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -388,61 +454,80 @@ export default function LabourDashboard({
             </div>
           </div>
 
-          {/* ADD PAYMENT FORM */}
-          <div className="lg:col-span-1 bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4 h-fit">
-            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
-              <Plus size={18} className="text-primary" />
-              <h2 className="text-lg font-bold">Log New Payment</h2>
-            </div>
-            <form onSubmit={handleAddPayment} className="border-t pt-4 flex flex-col gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">Date Paid *</label>
-                <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
-              </div>
+          <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingPayment ? "Edit Labour Payout" : "Log New Payout"}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAddPayment} className="space-y-4 pt-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">Date Paid *</label>
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">Amount (₹) *</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter amount paid"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  required
-                />
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">Amount (₹) *</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Enter amount paid"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    required
+                  />
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">Associated Project (Site)</label>
-                <select
-                  value={paymentProject}
-                  onChange={(e) => setPaymentProject(e.target.value)}
-                  className="flex w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">Global (Not Site-Specific)</option>
-                  {projectsList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">Flow Type *</label>
+                  <select
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value as any)}
+                    className="flex w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none"
+                  >
+                    <option value="OUTGOING">Outgoing Payment (Payout)</option>
+                    <option value="INCOMING">Incoming Payment (Recovery/Return)</option>
+                  </select>
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500">Remarks / Reference</label>
-                <textarea
-                  placeholder="Payment remarks (e.g. Cash, GPay, Advance...)"
-                  value={paymentRemarks}
-                  onChange={(e) => setPaymentRemarks(e.target.value)}
-                  className="flex min-h-[80px] w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">Associated Project (Site)</label>
+                  <select
+                    value={paymentProject}
+                    onChange={(e) => setPaymentProject(e.target.value)}
+                    className="flex w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none"
+                  >
+                    <option value="">Global (Not Site-Specific)</option>
+                    {projectsList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <Button type="submit" disabled={submittingPayment} className="w-full flex items-center justify-center gap-2 mt-2">
-                {submittingPayment ? "Recording..." : "Record Payment"}
-              </Button>
-            </form>
-          </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-500">Remarks / Reference</label>
+                  <textarea
+                    placeholder="Payment remarks (e.g. Cash, GPay, Advance...)"
+                    value={paymentRemarks}
+                    onChange={(e) => setPaymentRemarks(e.target.value)}
+                    className="flex min-h-[80px] w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                  <Button type="button" variant="ghost" onClick={() => setIsPaymentModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submittingPayment}>
+                    {submittingPayment ? "Saving..." : (editingPayment ? "Save Changes" : "Log Payout")}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 

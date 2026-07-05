@@ -3,11 +3,11 @@ import { MasterPageLayout } from "./MasterPageLayout";
 import { DataTable } from "./DataTable";
 import type { ColumnDef } from "./DataTable";
 import { useMasterData } from "../../hooks/use-master-data";
-import type { Labour } from "../../types/master";
+import type { Contractor } from "../../types/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
 import { ChevronDown, Loader2 } from "lucide-react";
-import LabourDashboard from "./LabourDashboard";
+import ContractorDashboard from "./ContractorDashboard";
 
 // Format date helper: "dd MMM yyyy"
 const formatDate = (dateStr: any) => {
@@ -25,29 +25,18 @@ const formatDate = (dateStr: any) => {
   }
 };
 
-const formatCurrency = (amount: any) => {
-  const parsed = Number(amount);
-  if (isNaN(parsed)) return "—";
-  return `₹${parsed.toLocaleString("en-IN", { maximumFractionDigits: 2 })} per day`;
-};
-
-const columns: ColumnDef<Labour>[] = [
-  { key: "name", header: "Labour Name" },
-  {
-    key: "paymentPerDay",
-    header: "Payment Per Day",
-    render: (l) => formatCurrency(l.paymentPerDay),
-  },
+const columns: ColumnDef<Contractor>[] = [
+  { key: "name", header: "Contractor Name" },
   {
     key: "type",
     header: "Type",
-    render: (l) => {
-      const isMonthly = l.type === "MONTHLY";
+    render: (c) => {
+      const isMonthly = c.type === "MONTHLY";
       return (
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-          isMonthly 
+          isMonthly
             ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border border-indigo-200/40"
-            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-450 border border-amber-200/40"
+            : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/40"
         }`}>
           {isMonthly ? "Monthly" : "Weekly"}
         </span>
@@ -57,16 +46,21 @@ const columns: ColumnDef<Labour>[] = [
   {
     key: "phonenumber",
     header: "Phone Number",
-    render: (l) => l.phonenumber ?? "—",
+    render: (c) => c.phonenumber ?? "—",
+  },
+  {
+    key: "email",
+    header: "Email Address",
+    render: (c) => c.email ?? "—",
   },
   {
     key: "createdAt",
     header: "Created At",
-    render: (l) => formatDate(l.createdAt),
+    render: (c) => formatDate(c.createdAt),
   },
 ];
 
-export default function LaboursPage() {
+export default function ContractorsPage() {
   const {
     data,
     isLoading,
@@ -79,12 +73,12 @@ export default function LaboursPage() {
     triggerSearch,
     forceServerSearch,
     isServerSearching,
-  } = useMasterData<Labour>("labours", true, undefined, true);
+  } = useMasterData<Contractor>("contractors", true, undefined, true);
 
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Labour | null>(null);
-  const [selectedLabour, setSelectedLabour] = useState<Labour | null>(null);
+  const [editingItem, setEditingItem] = useState<Contractor | null>(null);
+  const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null);
 
   const items = useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
@@ -92,19 +86,21 @@ export default function LaboursPage() {
     if (!search) return items;
     const term = search.toLowerCase();
     return items.filter(
-      (l) =>
-        l.name?.toLowerCase().includes(term) ||
-        l.phonenumber?.toLowerCase().includes(term)
+      (c) =>
+        c.name?.toLowerCase().includes(term) ||
+        c.phonenumber?.toLowerCase().includes(term) ||
+        c.email?.toLowerCase().includes(term)
     );
   }, [items, search]);
 
   const handleSearch = (term: string) => {
     setSearch(term);
-    const localHits = items.filter((l) => {
+    const localHits = items.filter((c) => {
       const t = term.toLowerCase();
       return (
-        l.name?.toLowerCase().includes(t) ||
-        l.phonenumber?.toLowerCase().includes(t)
+        c.name?.toLowerCase().includes(t) ||
+        c.phonenumber?.toLowerCase().includes(t) ||
+        c.email?.toLowerCase().includes(t)
       );
     });
     triggerSearch(term, localHits);
@@ -115,7 +111,7 @@ export default function LaboursPage() {
     forceServerSearch(term);
   };
 
-  const handleSave = (formData: Partial<Labour>) => {
+  const handleSave = (formData: Partial<Contractor>) => {
     if (editingItem) {
       update({ id: editingItem.id, data: formData });
     } else {
@@ -129,14 +125,14 @@ export default function LaboursPage() {
     setEditingItem(null);
   };
 
-  if (selectedLabour) {
+  if (selectedContractor) {
     return (
-      <LabourDashboard
-        labour={selectedLabour}
-        onBack={() => setSelectedLabour(null)}
+      <ContractorDashboard
+        contractor={selectedContractor}
+        onBack={() => setSelectedContractor(null)}
         handleSave={(formData) => {
-          update({ id: selectedLabour.id, data: formData });
-          setSelectedLabour((prev) => prev ? { ...prev, ...formData } : null);
+          update({ id: selectedContractor.id, data: formData });
+          setSelectedContractor((prev) => prev ? { ...prev, ...formData } : null);
         }}
       />
     );
@@ -145,9 +141,9 @@ export default function LaboursPage() {
   return (
     <>
       <MasterPageLayout
-        title="Labours"
-        resource="labours"
-        searchPlaceholder="Search labours by name or phone..."
+        title="Contractors"
+        resource="contractors"
+        searchPlaceholder="Search contractors by name, phone or email..."
         onSearch={handleSearch}
         onSearchSubmit={handleSearchSubmit}
         onAdd={() => setIsModalOpen(true)}
@@ -156,13 +152,13 @@ export default function LaboursPage() {
           columns={columns}
           data={filtered}
           isLoading={isLoading || isServerSearching}
-          onRowClick={(item) => setSelectedLabour(item)}
+          onRowClick={(item) => setSelectedContractor(item)}
           onEdit={(item) => {
             setEditingItem(item);
             setIsModalOpen(true);
           }}
           onDelete={(item) => {
-            if (window.confirm("Are you sure you want to delete this labourer?")) {
+            if (window.confirm("Are you sure you want to delete this contractor?")) {
               remove(item.id);
             }
           }}
@@ -191,10 +187,10 @@ export default function LaboursPage() {
       <Dialog open={isModalOpen} onOpenChange={closeModal}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Labour" : "Add New Labour"}</DialogTitle>
+            <DialogTitle>{editingItem ? "Edit Contractor" : "Add New Contractor"}</DialogTitle>
           </DialogHeader>
           <MasterForm
-            resource="labours"
+            resource="contractors"
             initialData={editingItem ?? undefined}
             onSubmit={handleSave}
             onCancel={closeModal}

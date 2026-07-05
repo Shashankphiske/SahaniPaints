@@ -119,6 +119,9 @@ export interface Project {
   attendance?: any[];
   tasks?: any[];
   labourPayments?: any[];
+  materialLogs?: any[];
+  projectPayments?: any[];
+  contractorPayments?: any[];
 }
 
 export interface ProjectData {
@@ -190,6 +193,7 @@ export interface Labour {
   name: string;
   paymentPerDay: number | any;
   phonenumber: string | null;
+  type: "WEEKLY" | "MONTHLY";
   createdAt: Date;
 }
 
@@ -216,6 +220,7 @@ export interface LabourPayment {
   labourId: string;
   projectId?: string | null;
   amount: number;
+  type: "INCOMING" | "OUTGOING";
   paymentDate: string;
   remarks?: string | null;
   createdAt: string;
@@ -230,4 +235,60 @@ export interface LabourPaymentData {
   amount: number;
   paymentDate?: string;
   remarks?: string | null;
+}
+
+export interface ProjectMaterialLog {
+  id: string;
+  date: string;
+  projectId: string;
+  productId: string;
+  quantity: number;
+  createdAt: string;
+  project?: {
+    name: string;
+  };
+  product?: {
+    name: string;
+    price: number;
+  };
+}
+
+export interface ProjectPayment {
+  id: string;
+  projectId: string;
+  amount: number;
+  type: "INCOMING" | "OUTGOING";
+  paymentDate: string;
+  remarks?: string | null;
+  createdAt: string;
+  project?: {
+    name: string;
+  };
+}
+
+export interface Contractor {
+  id: string;
+  name: string;
+  phonenumber?: string | null;
+  email?: string | null;
+  address?: string | null;
+  type: "WEEKLY" | "MONTHLY";
+  createdAt: string;
+}
+
+export interface ContractorPayment {
+  id: string;
+  contractorId: string;
+  projectId?: string | null;
+  amount: number;
+  type: "INCOMING" | "OUTGOING";
+  paymentDate: string;
+  remarks?: string | null;
+  createdAt: string;
+  contractor?: {
+    name: string;
+  };
+  project?: {
+    name: string;
+  };
 }

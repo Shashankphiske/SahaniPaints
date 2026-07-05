@@ -12,8 +12,12 @@ export const ROUTE_ACCESS_MAP: Record<string, string> = {
   "/masters/site-colors": "site-colors",
   "/masters/areas": "site-colors",
   "/masters/labours": "labours",
+  "/masters/contractors": "labours",
   "/masters/stores": "stores",
   "/labour-attendance": "labour-attendance",
+  "/material-usage": "dashboard",
+  "/payments": "dashboard",
+  "/contractor-payments": "dashboard",
 };
 
 export function getAccessKeyForPath(path: string): string | undefined {

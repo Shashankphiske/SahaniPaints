@@ -5,7 +5,7 @@ import { apiRequest } from "../../lib/api";
 import { Switch } from "../ui/switch";
 
 interface MasterFormProps {
-  resource: "customers" | "brands" | "users" | "tasks" | "inquiries" | "interiors" | "sales-associates" | "products" | "colors" | "labours" | "areas";
+  resource: "customers" | "brands" | "users" | "tasks" | "inquiries" | "interiors" | "sales-associates" | "products" | "colors" | "labours" | "areas" | "contractors";
   initialData?: any;
   editing?: boolean;
   onSubmit: (data: any) => void;
@@ -38,8 +38,9 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   inquiries: ["projectName", "customerName", "phonenumber", "followUpDate", "comments"],
   products: ["name", "brandId", "category", "price", "coverageSqFt", "coverageRnFt", "hasToken"],
   colors: ["name", "shade"],
-  labours: ["name", "paymentPerDay", "phonenumber"],
-  areas: ["name"]
+  labours: ["name", "paymentPerDay", "phonenumber", "type"],
+  areas: ["name"],
+  contractors: ["name", "phonenumber", "email", "address", "type"]
 };
 
 function useClickOutside(ref: React.RefObject<HTMLDivElement>, cb: () => void) {
@@ -196,6 +197,10 @@ export function MasterForm({
         });
         const initialRoleLabel = ROLES.find(r => r.value === initialRoleKey)?.label || "";
         setRoleSearch(initialRoleLabel);
+      } else if (resource === "labours" || resource === "contractors") {
+        setFormData({
+          type: "WEEKLY"
+        });
       } else {
         setFormData({});
       }
@@ -319,6 +324,10 @@ export function MasterForm({
 
     if (resource === "areas") {
       if (!formData.name?.trim()) newErrors.name = "Area name is required";
+    }
+
+    if (normalizedResource === "contractors") {
+      if (!formData.name?.trim()) newErrors.name = "Contractor name is required";
     }
 
     setErrors(newErrors);
@@ -1008,6 +1017,34 @@ export function MasterForm({
                 placeholder="Enter phone number"
               />
             </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Labour Type</label>
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900 border dark:border-zinc-800 p-1 rounded-xl w-fit">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, type: "WEEKLY" }))}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    (formData.type || "WEEKLY") === "WEEKLY"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, type: "MONTHLY" }))}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    formData.type === "MONTHLY"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Monthly
+                </button>
+              </div>
+            </div>
           </>
         );
 
@@ -1023,6 +1060,80 @@ export function MasterForm({
                 placeholder="Enter area name (e.g. Living Room)"
               />
               {errors.name && <p className="text-xs text-destructive font-semibold">{errors.name}</p>}
+            </div>
+          </>
+        );
+
+      case "contractors":
+        return (
+          <>
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-muted-foreground">Contractor Name *</label>
+              <Input
+                name="name"
+                value={formData.name || ""}
+                onChange={handleChange}
+                placeholder="Enter contractor name"
+              />
+              {errors.name && <p className="text-xs text-destructive font-semibold">{errors.name}</p>}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-muted-foreground">Phone Number</label>
+              <Input
+                name="phonenumber"
+                value={formData.phonenumber || ""}
+                onChange={handleChange}
+                placeholder="Enter phone number"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-muted-foreground">Email</label>
+              <Input
+                name="email"
+                value={formData.email || ""}
+                onChange={handleChange}
+                placeholder="Enter email address"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-muted-foreground">Address</label>
+              <Input
+                name="address"
+                value={formData.address || ""}
+                onChange={handleChange}
+                placeholder="Enter address"
+              />
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Contractor Type</label>
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900 border dark:border-zinc-800 p-1 rounded-xl w-fit">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, type: "WEEKLY" }))}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    (formData.type || "WEEKLY") === "WEEKLY"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, type: "MONTHLY" }))}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    formData.type === "MONTHLY"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Monthly
+                </button>
+              </div>
             </div>
           </>
         );

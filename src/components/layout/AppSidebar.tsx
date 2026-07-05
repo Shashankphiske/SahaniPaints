@@ -13,9 +13,13 @@ import {
   Paintbrush,
   Hammer,
   ClipboardCheck,
+  ClipboardList,
   FolderOpen,
   Store,
   MapPin,
+  Coins,
+  Briefcase,
+  BookOpen
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "../NavLink";
@@ -61,6 +65,10 @@ const mainItems = [
   { title: "Customers", url: "/customers", icon: Users },
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Labour Attendance", url: "/labour-attendance", icon: ClipboardCheck },
+  { title: "Material Logs", url: "/material-usage", icon: ClipboardList },
+  { title: "Regular Payments", url: "/payments", icon: Coins },
+  { title: "Contractor Payments", url: "/contractor-payments", icon: Briefcase },
+  { title: "Weekly Diary", url: "/weekly-diary", icon: BookOpen },
 ];
 
 const mastersItems = [
@@ -72,6 +80,7 @@ const mastersItems = [
   { title: "Site Colors", url: "/masters/site-colors", icon: Paintbrush },
   { title: "Areas", url: "/masters/areas", icon: MapPin },
   { title: "Labours", url: "/masters/labours", icon: Hammer },
+  { title: "Contractors", url: "/masters/contractors", icon: Briefcase },
 ];
 
 const bottomItems = [
