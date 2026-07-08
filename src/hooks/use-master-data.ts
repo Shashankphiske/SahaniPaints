@@ -409,6 +409,7 @@ export function useMasterData<T extends { id: string | number }>(
       } else {
         handleSingleItem(res, sent);
       }
+      queryClient.invalidateQueries({ queryKey: [`${resource}_infinite`] });
     },
     onError: (error: any) => {
       console.error(`Error creating ${resource}:`, error);
@@ -440,6 +441,7 @@ export function useMasterData<T extends { id: string | number }>(
         )
       );
       broadcast(resource, { action: "UPDATE", resource, data: broadcastData });
+      queryClient.invalidateQueries({ queryKey: [`${resource}_infinite`] });
     },
     onError: (error: any) => {
       console.error(`Error updating ${resource}:`, error);
@@ -461,6 +463,7 @@ export function useMasterData<T extends { id: string | number }>(
 
       deleteAllCaches(deletedId);
       broadcast(resource, { action: "DELETE", resource, data: { id: deletedId } });
+      queryClient.invalidateQueries({ queryKey: [`${resource}_infinite`] });
     },
     onError: (error: any) => {
       console.error(`Error deleting ${resource}:`, error);
@@ -541,7 +544,8 @@ export function useMasterData<T extends { id: string | number }>(
 
   return {
     data,
-    isLoading: infiniteQuery.isLoading,
+    isLoading: infiniteQuery.isLoading || isMutating,
+    isMutating,
     isFetchingNextPage: infiniteQuery.isFetchingNextPage,
     hasNextPage: infiniteQuery.hasNextPage,
     fetchNextPage: infiniteQuery.fetchNextPage,
@@ -553,7 +557,6 @@ export function useMasterData<T extends { id: string | number }>(
     update,
     updateAsync,
     remove,
-    removeAsync,
-    isMutating
+    removeAsync
   };
 }
