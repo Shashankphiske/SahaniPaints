@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../lib/api";
 import type { Project, Labour, LabourAttendance } from "../../types/master";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
@@ -44,6 +45,7 @@ interface QueuedLabour {
 }
 
 export default function LabourAttendancePage() {
+  const { user } = useAuth();
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: laboursData } = useMasterData<Labour>("labours");
 
@@ -224,6 +226,7 @@ export default function LabourAttendancePage() {
           labourId: item.labour.id,
           workDayType: item.shift,
           workDayValue: shiftValues[item.shift],
+          markedById: user?.id || null,
         };
 
         const result = await apiRequest.create<LabourAttendance>("labour-attendance", payload as any);
@@ -237,6 +240,7 @@ export default function LabourAttendancePage() {
             paymentPerDay: Number(item.labour.paymentPerDay),
             phonenumber: item.labour.phonenumber,
           },
+          markedBy: user ? { id: user.id, username: user.username || "" } : null,
         };
         newRecords.push(fullRecord);
         successCount++;
@@ -353,6 +357,7 @@ export default function LabourAttendancePage() {
         labourId: r.labourId,
         workDayType: r.workDayType || "DAY",
         workDayValue: Number(r.workDayValue || 1.0),
+        markedById: user?.id || null,
       }));
 
       const results = await apiRequest.bulkCreate<LabourAttendance>("labour-attendance", payload as any);
@@ -372,6 +377,7 @@ export default function LabourAttendancePage() {
                 phonenumber: matchingLabour.phonenumber,
               }
             : undefined,
+          markedBy: user ? { id: user.id, username: user.username || "" } : null,
         };
       });
 
@@ -843,6 +849,11 @@ export default function LabourAttendancePage() {
                                   <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
                                     ₹{wage}
                                   </span>
+                                  {r.markedBy?.username && (
+                                    <span className="text-[9px] text-slate-400 font-medium italic hidden sm:inline">
+                                      by {r.markedBy.username}
+                                    </span>
+                                  )}
                                   <button
                                     onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
                                     className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
@@ -931,6 +942,11 @@ export default function LabourAttendancePage() {
                                   <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
                                     ₹{wage}
                                   </span>
+                                  {r.markedBy?.username && (
+                                    <span className="text-[9px] text-slate-400 font-medium italic hidden sm:inline">
+                                      by {r.markedBy.username}
+                                    </span>
+                                  )}
                                   <button
                                     onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
                                     className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"

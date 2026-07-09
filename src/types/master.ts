@@ -204,6 +204,7 @@ export interface LabourAttendance {
   labourId: string;
   workDayType?: string;
   workDayValue?: number | any;
+  markedById?: string | null;
   createdAt: Date;
   project?: {
     name: string;
@@ -213,6 +214,10 @@ export interface LabourAttendance {
     paymentPerDay: number;
     phonenumber: string | null;
   };
+  markedBy?: {
+    id: string;
+    username: string;
+  } | null;
 }
 
 export interface LabourPayment {
