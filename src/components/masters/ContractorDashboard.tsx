@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { apiRequest } from "../../lib/api";
 import { toast } from "../../hooks/use-toast";
 import { supabase } from "@/lib/realtime";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Pencil } from "lucide-react";
 
@@ -48,6 +49,7 @@ export default function ContractorDashboard({
   const [paymentType, setPaymentType] = useState<"OUTGOING" | "INCOMING">("OUTGOING");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [paymentProject, setPaymentProject] = useState("");
+  const [paymentProjectDisplay, setPaymentProjectDisplay] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [editingPayment, setEditingPayment] = useState<ContractorPayment | null>(null);
@@ -156,6 +158,7 @@ export default function ContractorDashboard({
       setPaymentAmount("");
       setPaymentRemarks("");
       setPaymentProject("");
+      setPaymentProjectDisplay("");
       setPaymentType("OUTGOING");
       setIsPaymentModalOpen(false);
       setEditingPayment(null);
@@ -337,6 +340,7 @@ export default function ContractorDashboard({
                 setPaymentAmount("");
                 setPaymentRemarks("");
                 setPaymentProject("");
+                setPaymentProjectDisplay("");
                 setPaymentType("OUTGOING");
                 setPaymentDate(new Date().toISOString().split("T")[0]);
                 setIsPaymentModalOpen(true);
@@ -395,11 +399,12 @@ export default function ContractorDashboard({
                               setPaymentAmount(p.amount.toString());
                               setPaymentRemarks(p.remarks || "");
                               setPaymentProject(p.projectId || "");
+                              setPaymentProjectDisplay(projectsList.find((pr) => pr.id === p.projectId)?.name || "");
                               setPaymentType(p.type);
                               setPaymentDate(p.paymentDate.split("T")[0]);
                               setIsPaymentModalOpen(true);
                             }}
-                            className="text-slate-400 hover:text-blue-600 p-2 rounded-lg transition-colors"
+                            className="text-slate-400 hover:text-blue-600 p-2"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -429,18 +434,19 @@ export default function ContractorDashboard({
               <form onSubmit={handleAddPayment} className="space-y-4 pt-2">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-500 uppercase">Project Site (Optional)</label>
-                  <select
+                  <SearchableSelect
                     value={paymentProject}
-                    onChange={(e) => setPaymentProject(e.target.value)}
-                    className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-                  >
-                    <option value="">General payout (No specific site)</option>
-                    {projectsList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    displayValue={paymentProjectDisplay}
+                    options={projectsList
+                      .filter((p) => !paymentProjectDisplay || p.name.toLowerCase().includes(paymentProjectDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((p) => ({ id: p.id, label: p.name }))}
+                    placeholder="General payout (No specific site)"
+                    allLabel="General payout (No specific site)"
+                    onSearchChange={setPaymentProjectDisplay}
+                    onSelect={(id, label) => { setPaymentProject(id); setPaymentProjectDisplay(id ? label : ""); }}
+                    onClear={() => { setPaymentProject(""); setPaymentProjectDisplay(""); }}
+                  />
                 </div>
 
                 <div className="space-y-1">

@@ -31,7 +31,12 @@ const columns: ColumnDef<Product>[] = [
   {
     key: "price",
     header: "Price",
-    render: (p) => `₹${Number(p.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per litre`,
+    render: (p) => `₹${Number(p.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  },
+  {
+    key: "size",
+    header: "Pack Size",
+    render: (p) => p.size || "1ltr",
   },
   {
     key: "coverage",

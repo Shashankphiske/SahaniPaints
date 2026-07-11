@@ -155,6 +155,7 @@ export interface Product {
   coverageSqFt?: number | any;
   coverageRnFt?: number | any;
   hasToken?: boolean;
+  size?: string;
   createdAt: Date;
   brand?: {
     id: string;
@@ -255,6 +256,7 @@ export interface ProjectMaterialLog {
   product?: {
     name: string;
     price: number;
+    size?: string;
   };
 }
 

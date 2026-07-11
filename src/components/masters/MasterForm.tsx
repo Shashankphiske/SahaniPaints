@@ -36,7 +36,7 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   users: ["username", "email", "password", "phonenumber", "role", "address"],
   tasks: ["title", "projectId", "priority", "status", "taskDate", "description"],
   inquiries: ["projectName", "customerName", "phonenumber", "followUpDate", "comments"],
-  products: ["name", "brandId", "category", "price", "coverageSqFt", "coverageRnFt", "hasToken"],
+  products: ["name", "brandId", "category", "price", "coverageSqFt", "coverageRnFt", "hasToken", "size"],
   colors: ["name", "shade"],
   labours: ["name", "paymentPerDay", "phonenumber", "type"],
   areas: ["name"],
@@ -372,6 +372,9 @@ export function MasterForm({
         payload.coverageRnFt = null;
       }
       payload.hasToken = !!payload.hasToken;
+      if (!payload.size) {
+        payload.size = "1ltr";
+      }
     }
     
     // Automatically assign the role if creating/editing from a role-filtered page
@@ -896,17 +899,36 @@ export function MasterForm({
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) *</label>
-              <Input
-                type="number"
-                step="0.01"
-                name="price"
-                value={formData.price || ""}
-                onChange={handleChange}
-                placeholder="Enter price per litre"
-              />
-              {errors.price && <p className="text-xs text-destructive font-semibold">{errors.price}</p>}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) *</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  name="price"
+                  value={formData.price || ""}
+                  onChange={handleChange}
+                  placeholder="Enter price per litre"
+                />
+                {errors.price && <p className="text-xs text-destructive font-semibold">{errors.price}</p>}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-semibold text-slate-500">Pack Size *</label>
+                <select
+                  name="size"
+                  value={formData.size || "1ltr"}
+                  onChange={handleChange}
+                  className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="500ml">500ml</option>
+                  <option value="1ltr">1ltr</option>
+                  <option value="4ltr">4ltr</option>
+                  <option value="10ltr">10ltr</option>
+                  <option value="20ltr">20ltr</option>
+                </select>
+                {errors.size && <p className="text-xs text-destructive font-semibold">{errors.size}</p>}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import {
   Coins,
   Loader2,
@@ -49,8 +50,14 @@ export default function ContractorPaymentsPage() {
   // Search/Filters state
   const [filterSearch, setFilterSearch] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
   const [filterContractorId, setFilterContractorId] = useState("");
+  const [filterContractorDisplay, setFilterContractorDisplay] = useState("");
   const [filterDate, setFilterDate] = useState("");
+
+  // Form display state
+  const [conContractorDisplay, setConContractorDisplay] = useState("");
+  const [conProjectDisplay, setConProjectDisplay] = useState("");
 
   const fetchContractorPayments = async () => {
     setLoadingContractorPayments(true);
@@ -258,33 +265,39 @@ export default function ContractorPaymentsPage() {
           </div>
           <div className="space-y-1 w-full sm:w-48">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
-            <select
+            <SearchableSelect
               value={filterProjectId}
-              onChange={(e) => setFilterProjectId(e.target.value)}
-              className="w-full h-9 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-xs font-semibold focus:outline-none"
-            >
-              <option value="">All Projects</option>
-              {projectsList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              displayValue={filterProjectDisplay}
+              options={projectsList
+                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((p) => ({ id: p.id, label: p.name }))}
+              placeholder="All Projects"
+              allLabel="All Projects"
+              onSearchChange={setFilterProjectDisplay}
+              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+              inputHeight="h-9"
+              textSize="text-xs"
+            />
           </div>
           <div className="space-y-1 w-full sm:w-48">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Contractor</label>
-            <select
+            <SearchableSelect
               value={filterContractorId}
-              onChange={(e) => setFilterContractorId(e.target.value)}
-              className="w-full h-9 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-xs font-semibold focus:outline-none"
-            >
-              <option value="">All Contractors</option>
-              {contractorsList.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              displayValue={filterContractorDisplay}
+              options={contractorsList
+                .filter((c) => !filterContractorDisplay || c.name.toLowerCase().includes(filterContractorDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((c) => ({ id: c.id, label: c.name }))}
+              placeholder="All Contractors"
+              allLabel="All Contractors"
+              onSearchChange={setFilterContractorDisplay}
+              onSelect={(id, label) => { setFilterContractorId(id); setFilterContractorDisplay(id ? label : ""); }}
+              onClear={() => { setFilterContractorId(""); setFilterContractorDisplay(""); }}
+              inputHeight="h-9"
+              textSize="text-xs"
+            />
           </div>
           <div className="space-y-1 w-full sm:w-40">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Log Date</label>
@@ -410,37 +423,38 @@ export default function ContractorPaymentsPage() {
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                 Select Contractor *
               </label>
-              <select
+              <SearchableSelect
                 value={conContractorId}
-                onChange={(e) => setConContractorId(e.target.value)}
+                displayValue={conContractorDisplay}
+                options={contractorsList
+                  .filter((c) => !conContractorDisplay || c.name.toLowerCase().includes(conContractorDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Choose contractor..."
+                onSearchChange={setConContractorDisplay}
+                onSelect={(id, label) => { setConContractorId(id); setConContractorDisplay(label); }}
+                onClear={() => { setConContractorId(""); setConContractorDisplay(""); }}
                 required
-                className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-              >
-                <option value="">Choose contractor...</option>
-                {contractorsList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                 Associated Project (Optional)
               </label>
-              <select
+              <SearchableSelect
                 value={conProjectId}
-                onChange={(e) => setConProjectId(e.target.value)}
-                className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-              >
-                <option value="">General (No specific site)</option>
-                {projectsList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                displayValue={conProjectDisplay}
+                options={projectsList
+                  .filter((p) => !conProjectDisplay || p.name.toLowerCase().includes(conProjectDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="General (No specific site)"
+                allLabel="General (No specific site)"
+                onSearchChange={setConProjectDisplay}
+                onSelect={(id, label) => { setConProjectId(id); setConProjectDisplay(id ? label : ""); }}
+                onClear={() => { setConProjectId(""); setConProjectDisplay(""); }}
+              />
             </div>
 
             <div className="space-y-1">

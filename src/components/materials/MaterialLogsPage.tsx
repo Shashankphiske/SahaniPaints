@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import {
   Calendar,
   Building,
@@ -21,6 +22,21 @@ import {
 } from "lucide-react";
 import type { Project, Product, ProjectMaterialLog } from "@/types/master";
 import { supabase } from "@/lib/realtime";
+
+const getProductSizeInLitres = (sizeStr?: string): number => {
+  if (!sizeStr) return 1;
+  const normalized = sizeStr.toLowerCase().trim();
+  if (normalized.endsWith("ml")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val / 1000;
+  }
+  if (normalized.endsWith("ltr")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val;
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 1 : val;
+};
 
 interface QueuedMaterial {
   product: Product;
@@ -82,8 +98,9 @@ export default function MaterialLogsPage() {
 
   // Listings filtration states
   const [filterSearch, setFilterSearch] = useState("");
-  const [filterDate, setFilterDate] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
+  const [filterDate, setFilterDate] = useState("");
 
   const { toast } = useToast();
 
@@ -261,6 +278,7 @@ export default function MaterialLogsPage() {
           product: {
             name: item.product.name,
             price: Number(item.product.price),
+            size: item.product.size,
           },
         };
         newRecords.push(fullRecord);
@@ -376,6 +394,7 @@ export default function MaterialLogsPage() {
             ? {
                 name: matchingProduct.name,
                 price: Number(matchingProduct.price),
+                size: matchingProduct.size,
               }
             : undefined,
         };
@@ -680,7 +699,8 @@ export default function MaterialLogsPage() {
                   {tempSelectedMaterials.map(({ product: p, quantity, allocatedArea, unit }) => {
                     const coverageSqFtL = p.coverageSqFt != null ? Number(p.coverageSqFt) : 0;
                     const coverageRnFtL = p.coverageRnFt != null ? Number(p.coverageRnFt) : 0;
-                    const actualCoverage = unit === "sq.ft" ? quantity * coverageSqFtL : quantity * coverageRnFtL;
+                    const packSizeL = getProductSizeInLitres(p.size);
+                    const actualCoverage = unit === "sq.ft" ? (quantity * packSizeL) * coverageSqFtL : (quantity * packSizeL) * coverageRnFtL;
                     const isExceeding = actualCoverage > allocatedArea;
 
                     return (
@@ -807,18 +827,21 @@ export default function MaterialLogsPage() {
           </div>
           <div className="space-y-1 w-full sm:w-48">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
-            <select
+            <SearchableSelect
               value={filterProjectId}
-              onChange={(e) => setFilterProjectId(e.target.value)}
-              className="w-full h-9 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="">All Projects</option>
-              {projectsList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              displayValue={filterProjectDisplay}
+              options={projectsList
+                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((p) => ({ id: p.id, label: p.name }))}
+              placeholder="All Projects"
+              allLabel="All Projects"
+              onSearchChange={setFilterProjectDisplay}
+              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+              inputHeight="h-9"
+              textSize="text-xs"
+            />
           </div>
           <div className="space-y-1 w-full sm:w-40">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Log Date</label>
@@ -898,7 +921,7 @@ export default function MaterialLogsPage() {
                                 <span className="text-slate-700 dark:text-slate-300">
                                   {r.product?.name || "Paint Product"}{" "}
                                   <span className="text-[10px] font-extrabold text-primary ml-1">
-                                    {Number(r.quantity)} L
+                                    {Number(r.quantity) * getProductSizeInLitres(r.product?.size)} L ({Number(r.quantity)} pack{Number(r.quantity) > 1 ? "s" : ""})
                                   </span>
                                 </span>
                                 <button
@@ -970,7 +993,7 @@ export default function MaterialLogsPage() {
                                 <span className="text-slate-700 dark:text-slate-300">
                                   {r.product?.name || "Paint Product"}{" "}
                                   <span className="text-[10px] font-extrabold text-primary ml-1">
-                                    {Number(r.quantity)} L
+                                    {Number(r.quantity) * getProductSizeInLitres(r.product?.size)} L ({Number(r.quantity)} pack{Number(r.quantity) > 1 ? "s" : ""})
                                   </span>
                                 </span>
                                 <button

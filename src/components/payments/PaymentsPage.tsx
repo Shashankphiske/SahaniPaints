@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import {
   Coins,
   Loader2,
@@ -61,8 +62,15 @@ export default function PaymentsPage() {
   // Search/Filters state
   const [filterSearch, setFilterSearch] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
   const [filterLabourId, setFilterLabourId] = useState("");
+  const [filterLabourDisplay, setFilterLabourDisplay] = useState("");
   const [filterDate, setFilterDate] = useState("");
+
+  // Form display text state (for SearchableSelect)
+  const [projProjectDisplay, setProjProjectDisplay] = useState("");
+  const [labLabourDisplay, setLabLabourDisplay] = useState("");
+  const [labProjectDisplay, setLabProjectDisplay] = useState("");
 
   const fetchProjectPayments = async () => {
     setLoadingProjectPayments(true);
@@ -397,34 +405,40 @@ export default function PaymentsPage() {
           </div>
           <div className="space-y-1 w-full sm:w-48">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
-            <select
+            <SearchableSelect
               value={filterProjectId}
-              onChange={(e) => setFilterProjectId(e.target.value)}
-              className="w-full h-9 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-xs font-semibold focus:outline-none"
-            >
-              <option value="">All Projects</option>
-              {projectsList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              displayValue={filterProjectDisplay}
+              options={projectsList
+                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((p) => ({ id: p.id, label: p.name }))}
+              placeholder="All Projects"
+              allLabel="All Projects"
+              onSearchChange={setFilterProjectDisplay}
+              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+              inputHeight="h-9"
+              textSize="text-xs"
+            />
           </div>
           {activeTab === "labour" && (
             <div className="space-y-1 w-full sm:w-48">
               <label className="text-[10px] font-extrabold text-slate-400 uppercase">Labour Worker</label>
-              <select
+              <SearchableSelect
                 value={filterLabourId}
-                onChange={(e) => setFilterLabourId(e.target.value)}
-                className="w-full h-9 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-xs font-semibold focus:outline-none"
-              >
-                <option value="">All Labours</option>
-                {laboursList.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
+                displayValue={filterLabourDisplay}
+                options={laboursList
+                  .filter((l) => !filterLabourDisplay || l.name.toLowerCase().includes(filterLabourDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((l) => ({ id: l.id, label: l.name }))}
+                placeholder="All Labours"
+                allLabel="All Labours"
+                onSearchChange={setFilterLabourDisplay}
+                onSelect={(id, label) => { setFilterLabourId(id); setFilterLabourDisplay(id ? label : ""); }}
+                onClear={() => { setFilterLabourId(""); setFilterLabourDisplay(""); }}
+                inputHeight="h-9"
+                textSize="text-xs"
+              />
             </div>
           )}
           <div className="space-y-1 w-full sm:w-40">
@@ -643,19 +657,19 @@ export default function PaymentsPage() {
                 <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                   Project Site *
                 </label>
-                <select
+                <SearchableSelect
                   value={projProjectId}
-                  onChange={(e) => setProjProjectId(e.target.value)}
+                  displayValue={projProjectDisplay}
+                  options={projectsList
+                    .filter((p) => !projProjectDisplay || p.name.toLowerCase().includes(projProjectDisplay.toLowerCase()))
+                    .slice(0, 10)
+                    .map((p) => ({ id: p.id, label: p.name }))}
+                  placeholder="Select Project Site..."
+                  onSearchChange={setProjProjectDisplay}
+                  onSelect={(id, label) => { setProjProjectId(id); setProjProjectDisplay(label); }}
+                  onClear={() => { setProjProjectId(""); setProjProjectDisplay(""); }}
                   required
-                  className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-                >
-                  <option value="">Select Project Site...</option>
-                  {projectsList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="space-y-1">
@@ -734,37 +748,38 @@ export default function PaymentsPage() {
                 <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                   Select Labour *
                 </label>
-                <select
+                <SearchableSelect
                   value={labLabourId}
-                  onChange={(e) => setLabLabourId(e.target.value)}
+                  displayValue={labLabourDisplay}
+                  options={laboursList
+                    .filter((l) => !labLabourDisplay || l.name.toLowerCase().includes(labLabourDisplay.toLowerCase()))
+                    .slice(0, 10)
+                    .map((l) => ({ id: l.id, label: l.name }))}
+                  placeholder="Choose worker..."
+                  onSearchChange={setLabLabourDisplay}
+                  onSelect={(id, label) => { setLabLabourId(id); setLabLabourDisplay(label); }}
+                  onClear={() => { setLabLabourId(""); setLabLabourDisplay(""); }}
                   required
-                  className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-                >
-                  <option value="">Choose worker...</option>
-                  {laboursList.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                   Associated Project (Optional)
                 </label>
-                <select
+                <SearchableSelect
                   value={labProjectId}
-                  onChange={(e) => setLabProjectId(e.target.value)}
-                  className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-                >
-                  <option value="">General (No specific site)</option>
-                  {projectsList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  displayValue={labProjectDisplay}
+                  options={projectsList
+                    .filter((p) => !labProjectDisplay || p.name.toLowerCase().includes(labProjectDisplay.toLowerCase()))
+                    .slice(0, 10)
+                    .map((p) => ({ id: p.id, label: p.name }))}
+                  placeholder="General (No specific site)"
+                  allLabel="General (No specific site)"
+                  onSearchChange={setLabProjectDisplay}
+                  onSelect={(id, label) => { setLabProjectId(id); setLabProjectDisplay(id ? label : ""); }}
+                  onClear={() => { setLabProjectId(""); setLabProjectDisplay(""); }}
+                />
               </div>
 
               <div className="space-y-1">

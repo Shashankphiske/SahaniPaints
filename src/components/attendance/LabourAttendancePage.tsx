@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../lib/api";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import type { Project, Labour, LabourAttendance } from "../../types/master";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
@@ -79,6 +80,7 @@ export default function LabourAttendancePage() {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
 
   // Sync projects list
   useEffect(() => {
@@ -749,18 +751,19 @@ export default function LabourAttendancePage() {
               <Building className="h-3 w-3" />
               Filter by Site
             </span>
-            <select
+            <SearchableSelect
               value={filterProjectId}
-              onChange={(e) => setFilterProjectId(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">All Project Sites</option>
-              {projectsData?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              displayValue={filterProjectDisplay}
+              options={(projectsData ?? [])
+                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((p) => ({ id: p.id, label: p.name }))}
+              placeholder="All Project Sites"
+              allLabel="All Project Sites"
+              onSearchChange={setFilterProjectDisplay}
+              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+            />
           </div>
 
           <Button

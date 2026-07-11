@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { apiRequest } from "../../lib/api";
 import { toast } from "../../hooks/use-toast";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Pencil } from "lucide-react";
 
@@ -53,9 +54,10 @@ export default function LabourDashboard({
   } = useMasterData<Project>("projects", true);
 
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<"OUTGOING" | "INCOMING" >("OUTGOING");
+  const [paymentType, setPaymentType] = useState<"OUTGOING" | "INCOMING">("OUTGOING");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const [paymentProject, setPaymentProject] = useState("");
+  const [paymentProjectDisplay, setPaymentProjectDisplay] = useState("");
   const [paymentRemarks, setPaymentRemarks] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [editingPayment, setEditingPayment] = useState<LabourPayment | null>(null);
@@ -151,6 +153,7 @@ export default function LabourDashboard({
       setPaymentAmount("");
       setPaymentRemarks("");
       setPaymentProject("");
+      setPaymentProjectDisplay("");
       setPaymentType("OUTGOING");
       setIsPaymentModalOpen(false);
       setEditingPayment(null);
@@ -428,6 +431,7 @@ export default function LabourDashboard({
                                 setPaymentAmount(p.amount.toString());
                                 setPaymentRemarks(p.remarks || "");
                                 setPaymentProject(p.projectId || "");
+                                setPaymentProjectDisplay(projectsList.find((pr) => pr.id === p.projectId)?.name || "");
                                 setPaymentType(p.type);
                                 setPaymentDate(p.paymentDate.split("T")[0]);
                                 setIsPaymentModalOpen(true);
@@ -493,18 +497,19 @@ export default function LabourDashboard({
 
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-500">Associated Project (Site)</label>
-                  <select
+                  <SearchableSelect
                     value={paymentProject}
-                    onChange={(e) => setPaymentProject(e.target.value)}
-                    className="flex w-full rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none"
-                  >
-                    <option value="">Global (Not Site-Specific)</option>
-                    {projectsList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    displayValue={paymentProjectDisplay}
+                    options={projectsList
+                      .filter((p) => !paymentProjectDisplay || p.name.toLowerCase().includes(paymentProjectDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((p) => ({ id: p.id, label: p.name }))}
+                    placeholder="Global (Not Site-Specific)"
+                    allLabel="Global (Not Site-Specific)"
+                    onSearchChange={setPaymentProjectDisplay}
+                    onSelect={(id, label) => { setPaymentProject(id); setPaymentProjectDisplay(id ? label : ""); }}
+                    onClear={() => { setPaymentProject(""); setPaymentProjectDisplay(""); }}
+                  />
                 </div>
 
                 <div className="space-y-1">

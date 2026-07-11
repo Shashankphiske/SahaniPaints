@@ -10,6 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { toast } from "../hooks/use-toast";
+import { SearchableSelect } from "../components/ui/SearchableSelect";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { MasterForm } from "../components/masters/MasterForm";
 import {
   Loader2,
   Plus,
@@ -56,6 +59,21 @@ const formatDate = (dateStr: any) => {
   } catch {
     return "—";
   }
+};
+
+const getProductSizeInLitres = (sizeStr?: string): number => {
+  if (!sizeStr) return 1;
+  const normalized = sizeStr.toLowerCase().trim();
+  if (normalized.endsWith("ml")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val / 1000;
+  }
+  if (normalized.endsWith("ltr")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val;
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 1 : val;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -305,6 +323,7 @@ export default function ProjectsPage() {
             customers={customers}
             products={products}
             onCancel={() => setIsCreating(false)}
+            onCreateCustomer={customersData.createAsync}
             onSave={async (projectPayload) => {
               try {
                 await projectsData.createAsync(projectPayload);
@@ -332,6 +351,7 @@ export default function ProjectsPage() {
             loadingDetails={loadingDetails}
             products={products}
             customers={customers}
+            onCreateCustomer={customersData.createAsync}
             onBack={() => {
               setViewingProject(null);
               projectsData.forceServerSearch(""); // Refresh cache list
@@ -351,15 +371,18 @@ interface CreateProjectFormProps {
   customers: Customer[];
   products: Product[];
   onCancel: () => void;
+  onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSave: (payload: any) => Promise<void>;
 }
 
-function CreateProjectForm({ customers, products, onCancel, onSave }: CreateProjectFormProps) {
+function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, onSave }: CreateProjectFormProps) {
   // Form fields
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [customerDisplay, setCustomerDisplay] = useState("");
   const [projectDate, setProjectDate] = useState("");
   const [status, setStatus] = useState<any>("PENDING");
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   // Selected products rows
   const [rows, setRows] = useState<PaintProductRow[]>([
@@ -555,20 +578,31 @@ function CreateProjectForm({ customers, products, onCancel, onSave }: CreateProj
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground block">Customer</label>
-                  <select
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground block">Customer *</label>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-5 w-5 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800"
+                      onClick={() => setIsCustomerModalOpen(true)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <SearchableSelect
                     value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    displayValue={customerDisplay}
+                    options={customers
+                      .filter((c) => !customerDisplay || c.name.toLowerCase().includes(customerDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((c) => ({ id: c.id, label: c.name }))}
+                    placeholder="Select customer"
+                    onSearchChange={setCustomerDisplay}
+                    onSelect={(id, label) => { setCustomerId(id); setCustomerDisplay(label); }}
+                    onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
                     required
-                  >
-                    <option value="">Select customer</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div className="space-y-1">
@@ -603,18 +637,22 @@ function CreateProjectForm({ customers, products, onCancel, onSave }: CreateProj
                 {rows.map((row, idx) => (
                   <div key={idx} className="p-4 space-y-3">
                     <div className="flex items-start gap-2">
-                      <select
+                      <SearchableSelect
                         value={row.productId}
-                        onChange={(e) => handleRowChange(idx, "productId", e.target.value)}
-                        className="flex h-10 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <option value="">Choose product</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} (₹{Number(p.price)}/L)
-                          </option>
-                        ))}
-                      </select>
+                        displayValue={products.find((p) => p.id === row.productId)?.name || ""}
+                        options={products
+                          .filter((p) => {
+                            const display = products.find((pr) => pr.id === row.productId)?.name || "";
+                            return !display || p.name.toLowerCase().includes(display.toLowerCase());
+                          })
+                          .slice(0, 10)
+                          .map((p) => ({ id: p.id, label: `${p.name} (₹${Number(p.price)}/L)` }))}
+                        placeholder="Choose product"
+                        onSearchChange={() => {}}
+                        onSelect={(id) => handleRowChange(idx, "productId", id)}
+                        onClear={() => handleRowChange(idx, "productId", "")}
+                        className="flex-1"
+                      />
                       <Button
                         type="button"
                         variant="ghost"
@@ -801,6 +839,41 @@ function CreateProjectForm({ customers, products, onCancel, onSave }: CreateProj
           </div>
         </div>
       </form>
+
+      {/* Create customer modal */}
+      <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add New Customer</DialogTitle>
+          </DialogHeader>
+          <MasterForm
+            resource="customers"
+            onSubmit={async (formData) => {
+              try {
+                const newCustomer = await onCreateCustomer(formData);
+                if (newCustomer && newCustomer.id) {
+                  setCustomerId(newCustomer.id);
+                  setCustomerDisplay(newCustomer.name);
+                  toast({
+                    title: "Customer Added",
+                    description: `${newCustomer.name} has been added successfully.`,
+                  });
+                }
+              } catch (err: any) {
+                toast({
+                  title: "Failed to Add Customer",
+                  description: err.message || "Something went wrong.",
+                  variant: "destructive",
+                });
+              } finally {
+                setIsCustomerModalOpen(false);
+              }
+            }}
+            onCancel={() => setIsCustomerModalOpen(false)}
+            editing={false}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -814,6 +887,7 @@ interface ProjectDetailViewProps {
   loadingDetails: boolean;
   products: Product[];
   customers: Customer[];
+  onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onBack: () => void;
   onRefresh: () => void;
 }
@@ -824,6 +898,7 @@ function ProjectDetailView({
   loadingDetails,
   products,
   customers,
+  onCreateCustomer,
   onBack,
   onRefresh,
 }: ProjectDetailViewProps) {
@@ -929,6 +1004,7 @@ function ProjectDetailView({
           <OverviewEditTab
             fullProject={fullProject}
             customers={customers}
+            onCreateCustomer={onCreateCustomer}
             onSuccess={onRefresh}
           />
         </TabsContent>
@@ -965,21 +1041,27 @@ function ProjectDetailView({
 interface OverviewEditTabProps {
   fullProject: any;
   customers: Customer[];
+  onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSuccess: () => void;
 }
 
-function OverviewEditTab({ fullProject, customers, onSuccess }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess }: OverviewEditTabProps) {
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
+  const [customerDisplay, setCustomerDisplay] = useState(
+    () => customers.find((c) => c.id === fullProject.customerId)?.name || ""
+  );
   const [projectDate, setProjectDate] = useState(() => {
     return fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "";
   });
   const [status, setStatus] = useState<any>(fullProject.status);
   const [saving, setSaving] = useState(false);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
   useEffect(() => {
     setName(fullProject.name);
     setCustomerId(fullProject.customerId || "");
+    setCustomerDisplay(customers.find((c) => c.id === fullProject.customerId)?.name || "");
     setProjectDate(fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "");
     setStatus(fullProject.status);
   }, [fullProject]);
@@ -1041,21 +1123,33 @@ function OverviewEditTab({ fullProject, customers, onSuccess }: OverviewEditTabP
           </div>
 
           <div className="space-y-1">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Customer *
-            </span>
-            <select
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                Customer *
+              </span>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 rounded-full hover:bg-slate-100 dark:hover:bg-zinc-800"
+                onClick={() => setIsCustomerModalOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <SearchableSelect
               value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
+              displayValue={customerDisplay}
+              options={customers
+                .filter((c) => !customerDisplay || c.name.toLowerCase().includes(customerDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((c) => ({ id: c.id, label: c.name }))}
+              placeholder="Select customer"
+              onSearchChange={setCustomerDisplay}
+              onSelect={(id, label) => { setCustomerId(id); setCustomerDisplay(label); }}
+              onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
               required
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="space-y-1">
@@ -1081,14 +1175,50 @@ function OverviewEditTab({ fullProject, customers, onSuccess }: OverviewEditTabP
               <option value="COMPLETED">Completed</option>
               <option value="DEFAULTER">Defaulter</option>
             </select>
-          </div>
           <div className="flex justify-end pt-2 col-span-1 md:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
             <Button type="submit" disabled={saving} size="sm" className="font-bold">
               {saving ? "Saving Details..." : "Save Details"}
             </Button>
           </div>
+          </div>
         </div>
       </form>
+
+      {/* Create customer modal */}
+      <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add New Customer</DialogTitle>
+          </DialogHeader>
+          <MasterForm
+            resource="customers"
+            onSubmit={async (formData) => {
+              try {
+                const newCustomer = await onCreateCustomer(formData);
+                if (newCustomer && newCustomer.id) {
+                  setCustomerId(newCustomer.id);
+                  setCustomerDisplay(newCustomer.name);
+                  toast({
+                    title: "Customer Added",
+                    description: `${newCustomer.name} has been added successfully.`,
+                  });
+                }
+              } catch (err: any) {
+                toast({
+                  title: "Failed to Add Customer",
+                  description: err.message || "Something went wrong.",
+                  variant: "destructive",
+                });
+              } finally {
+                setIsCustomerModalOpen(false);
+              }
+            }}
+            onCancel={() => setIsCustomerModalOpen(false)}
+            editing={false}
+          />
+        </DialogContent>
+      </Dialog>
+
 
       {/* Material Used Section */}
       <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
@@ -1275,18 +1405,21 @@ function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProdu
                 {rows.map((row, idx) => (
                   <TableRow key={idx}>
                     <TableCell className="p-3">
-                      <select
+                      <SearchableSelect
                         value={row.productId}
-                        onChange={(e) => handleRowChange(idx, "productId", e.target.value)}
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none"
-                      >
-                        <option value="">Choose Product</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} (₹{Number(p.price)}/L)
-                          </option>
-                        ))}
-                      </select>
+                        displayValue={products.find((p) => p.id === row.productId)?.name || ""}
+                        options={products
+                          .filter((p) => {
+                            const display = products.find((pr) => pr.id === row.productId)?.name || "";
+                            return !display || p.name.toLowerCase().includes(display.toLowerCase());
+                          })
+                          .slice(0, 10)
+                          .map((p) => ({ id: p.id, label: `${p.name} (₹${Number(p.price)}/L)` }))}
+                        placeholder="Choose Product"
+                        onSearchChange={() => {}}
+                        onSelect={(id) => handleRowChange(idx, "productId", id)}
+                        onClear={() => handleRowChange(idx, "productId", "")}
+                      />
                     </TableCell>
                     <TableCell className="p-3">
                       <Input
@@ -1559,7 +1692,8 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, onSuccess }
             {projectProducts.map((pp) => {
               // Calculate logged quantity from project materialLogs matching productId
               const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
-              const litresNum = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
+              const packSizeL = getProductSizeInLitres(pp.product?.size);
+              const litresNum = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0) * packSizeL;
 
               const coverageSqFtL = pp.product?.coverageSqFt != null ? Number(pp.product.coverageSqFt) : 0;
               const coverageRnFtL = pp.product?.coverageRnFt != null ? Number(pp.product.coverageRnFt) : 0;
@@ -1937,7 +2071,8 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
       const totalLoggedQuantity = loggedProducts.reduce((s: number, log: any) => s + Number(log.quantity || 0), 0);
 
       if (totalLoggedQuantity > 0) {
-        return sum + totalLoggedQuantity * priceLitre;
+        const packSizeL = getProductSizeInLitres(pp.product?.size);
+        return sum + (totalLoggedQuantity * packSizeL) * priceLitre;
       }
 
       // Fallback: area * rate (which is rate * area = total row price)
