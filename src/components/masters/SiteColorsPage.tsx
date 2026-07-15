@@ -51,8 +51,10 @@ const getAvatarColor = (name: string) => {
 
 export default function SiteColorsPage() {
   const { data: projectsData, isLoading: loadingProjects } = useMasterData<Project>("projects");
-  const { data: colorsData } = useMasterData<Color>("colors");
-  const { data: globalAreasData } = useMasterData<Area>("areas");
+  const colorsQuery = useMasterData<Color>("colors");
+  const areasQuery = useMasterData<Area>("areas");
+  const colorsData = colorsQuery.data;
+  const globalAreasData = areasQuery.data;
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [mappings, setMappings] = useState<ProjectAreaColor[]>([]);
@@ -72,6 +74,9 @@ export default function SiteColorsPage() {
   const modalAreaRef = useRef<HTMLDivElement>(null);
   const modalColorRef = useRef<HTMLDivElement>(null);
   const [creatingArea, setCreatingArea] = useState(false);
+  const [hasSearchedArea, setHasSearchedArea] = useState(false);
+  const [hasSearchedColor, setHasSearchedColor] = useState(false);
+  const [creatingColor, setCreatingColor] = useState(false);
   const [modalDescription, setModalDescription] = useState("");
 
   // Modal states for duplicating mappings from another project
@@ -134,6 +139,8 @@ export default function SiteColorsPage() {
     setModalDescription("");
     setModalAreaOpen(false);
     setModalColorOpen(false);
+    setHasSearchedArea(false);
+    setHasSearchedColor(false);
     setIsAddModalOpen(true);
   };
 
@@ -158,8 +165,9 @@ export default function SiteColorsPage() {
     setCreatingArea(true);
     try {
       const created = await apiRequest.create<Area>("areas", { name: name.trim() });
-      setSelectedArea(created);
-      setModalAreaSearch(created.name);
+      const fullCreated = { ...created, name: name.trim() };
+      setSelectedArea(fullCreated);
+      setModalAreaSearch(name.trim());
       setModalAreaOpen(false);
       toast({
         title: "Area created",
@@ -175,7 +183,30 @@ export default function SiteColorsPage() {
       setCreatingArea(false);
     }
   };
-
+  // Create global color inline
+  const handleCreateGlobalColorInline = async (name: string) => {
+    if (!name.trim()) return;
+    setCreatingColor(true);
+    try {
+      const created = await apiRequest.create<Color>("colors", { name: name.trim() });
+      const fullCreated = { ...created, name: name.trim() };
+      setSelectedColor(fullCreated);
+      setModalColorSearch(name.trim());
+      setModalColorOpen(false);
+      toast({
+        title: "Color created",
+        description: `Created global color "${name.trim()}".`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Failed to create color",
+        description: err.message || "An error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingColor(false);
+    }
+  };
   // Save color-area mapping to project
   const handleSaveMapping = async () => {
     if (!selectedProject) return;
@@ -586,7 +617,11 @@ export default function SiteColorsPage() {
                       <td className="p-4">
                         <Badge variant="secondary" className="pl-3 pr-2.5 py-1 flex items-center w-fit gap-2 rounded-full border border-slate-200/50 dark:border-zinc-800 bg-slate-100/50 dark:bg-zinc-900/30 font-semibold text-xs text-slate-800 dark:text-slate-300">
                           <span>{m.color?.name}</span>
-                          <span className="text-[10px] text-muted-foreground font-mono font-bold border-l border-slate-200 dark:border-zinc-800 pl-2">({m.color?.shade})</span>
+                          {m.color?.shade && (
+                            <span className="text-xs text-slate-900 dark:text-slate-50 font-mono font-extrabold border-l border-slate-200 dark:border-zinc-800 pl-2">
+                              {m.color.shade}
+                            </span>
+                          )}
                         </Badge>
                       </td>
                       <td className="p-4 text-xs text-slate-600 dark:text-zinc-400 font-semibold max-w-[220px] truncate">
@@ -635,6 +670,14 @@ export default function SiteColorsPage() {
                     setModalAreaSearch(e.target.value);
                     setSelectedArea(null);
                     setModalAreaOpen(true);
+                    setHasSearchedArea(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      areasQuery.forceServerSearch(modalAreaSearch);
+                      setHasSearchedArea(true);
+                    }
                   }}
                 />
                 <button
@@ -661,7 +704,7 @@ export default function SiteColorsPage() {
                       <span>{area.name}</span>
                     </div>
                   ))}
-                  {modalAreaSearch.trim() && !filteredGlobalAreas.some(a => a.name.toLowerCase() === modalAreaSearch.toLowerCase().trim()) && (
+                  {hasSearchedArea && modalAreaSearch.trim() && !filteredGlobalAreas.some(a => a.name.toLowerCase() === modalAreaSearch.toLowerCase().trim()) && (
                     <div
                       className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-xs text-primary font-bold flex items-center gap-1.5 border-t border-slate-100 dark:border-zinc-900"
                       onMouseDown={() => handleCreateGlobalAreaInline(modalAreaSearch)}
@@ -674,7 +717,7 @@ export default function SiteColorsPage() {
                       Create global area: "{modalAreaSearch}"
                     </div>
                   )}
-                  {!modalAreaSearch.trim() && filteredGlobalAreas.length === 0 && (
+                  {(!hasSearchedArea || !modalAreaSearch.trim()) && filteredGlobalAreas.length === 0 && (
                     <div className="px-4 py-3 text-xs text-muted-foreground italic font-semibold">
                       No unused areas found.
                     </div>
@@ -699,6 +742,14 @@ export default function SiteColorsPage() {
                     setModalColorSearch(e.target.value);
                     setSelectedColor(null);
                     setModalColorOpen(true);
+                    setHasSearchedColor(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      colorsQuery.forceServerSearch(modalColorSearch);
+                      setHasSearchedColor(true);
+                    }
                   }}
                 />
                 <button
@@ -718,15 +769,28 @@ export default function SiteColorsPage() {
                       className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900/80 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between text-slate-900 dark:text-slate-100"
                       onMouseDown={() => {
                         setSelectedColor(color);
-                        setModalColorSearch(`${color.name} (${color.shade})`);
+                        setModalColorSearch(color.shade ? `${color.name} (${color.shade})` : color.name);
                         setModalColorOpen(false);
                       }}
                     >
                       <span>{color.name}</span>
-                      <span className="text-xs text-muted-foreground font-mono">({color.shade})</span>
+                      {color.shade && <span className="text-xs text-muted-foreground font-mono">({color.shade})</span>}
                     </div>
                   ))}
-                  {filteredColors.length === 0 && (
+                  {hasSearchedColor && modalColorSearch.trim() && !filteredColors.some(c => c.name.toLowerCase() === modalColorSearch.toLowerCase().trim()) && (
+                    <div
+                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-xs text-primary font-bold flex items-center gap-1.5 border-t border-slate-100 dark:border-zinc-900"
+                      onMouseDown={() => handleCreateGlobalColorInline(modalColorSearch)}
+                    >
+                      {creatingColor ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Create global color: "{modalColorSearch}"
+                    </div>
+                  )}
+                  {(!hasSearchedColor || !modalColorSearch.trim()) && filteredColors.length === 0 && (
                     <div className="px-4 py-3 text-xs text-muted-foreground italic font-semibold">
                       No matching colors found.
                     </div>

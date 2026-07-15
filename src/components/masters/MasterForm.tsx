@@ -312,7 +312,6 @@ export function MasterForm({
 
     if (normalizedResource === "colors") {
       if (!formData.name?.trim()) newErrors.name = "Color name is required";
-      if (!formData.shade?.trim()) newErrors.shade = "Shade number is required";
     }
 
     if (normalizedResource === "labours") {
@@ -992,14 +991,13 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Shade Number *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Shade Number</label>
               <Input
                 name="shade"
                 value={formData.shade || ""}
                 onChange={handleChange}
                 placeholder="Enter shade number (e.g. 4502)"
               />
-              {errors.shade && <p className="text-xs text-destructive font-semibold">{errors.shade}</p>}
             </div>
           </>
         );

@@ -267,9 +267,16 @@ function TaskCard({ task, onView, onEdit, onDelete }: TaskCardProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
-          <Calendar className="h-3.5 w-3.5 shrink-0" />
-          <span>{formatDate(task.taskDate)}</span>
+        <div className="flex items-center justify-between text-xs text-muted-foreground pt-1.5 border-t border-border/50">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{formatDate(task.taskDate)}</span>
+          </div>
+          {task.project?.name && (
+            <span className="text-[10px] font-semibold text-primary truncate max-w-[50%]" title={task.project.name}>
+              {task.project.name}
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>

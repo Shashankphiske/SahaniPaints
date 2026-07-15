@@ -89,10 +89,11 @@ const STATUS_STYLES: Record<string, string> = {
 
 interface PaintProductRow {
   productId: string;
-  area: number;
+  area: number | "";
   unit: "sq.ft" | "rn.ft";
-  rate: number;
+  rate: number | "";
   litresUsed?: number | null;
+  _search?: string;
 }
 
 export default function ProjectsPage() {
@@ -100,8 +101,21 @@ export default function ProjectsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // Search & Filter listing state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+
+  const projectParams = useMemo(() => {
+    const params: Record<string, any> = {};
+    if (startDateFilter) params.startDate = startDateFilter;
+    if (endDateFilter) params.endDate = endDateFilter;
+    return params;
+  }, [startDateFilter, endDateFilter]);
+
   // Load projects, customers, products
-  const projectsData = useMasterData<Project>("projects", true, undefined, true);
+  const projectsData = useMasterData<Project>("projects", true, projectParams, true);
   const customersData = useMasterData<Customer>("customers", true);
   const productsData = useMasterData<Product>("products", true);
 
@@ -145,9 +159,7 @@ export default function ProjectsPage() {
     }
   }, [viewingProject]);
 
-  // Search & Filter listing state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // List filtering logic
 
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
@@ -207,7 +219,25 @@ export default function ProjectsPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">From:</span>
+                    <Input
+                      type="date"
+                      value={startDateFilter}
+                      onChange={(e) => setStartDateFilter(e.target.value)}
+                      className="h-10 w-full sm:w-36 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">To:</span>
+                    <Input
+                      type="date"
+                      value={endDateFilter}
+                      onChange={(e) => setEndDateFilter(e.target.value)}
+                      className="h-10 w-full sm:w-36 text-xs"
+                    />
+                  </div>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
@@ -340,6 +370,8 @@ export default function ProjectsPage() {
                 });
               }
             }}
+            onSearchCustomers={(query) => customersData.forceServerSearch(query)}
+            onSearchProducts={(query) => productsData.forceServerSearch(query)}
           />
         )}
 
@@ -357,6 +389,8 @@ export default function ProjectsPage() {
               projectsData.forceServerSearch(""); // Refresh cache list
             }}
             onRefresh={() => fetchFullProjectDetails(viewingProject.id)}
+            onSearchCustomers={(query) => customersData.forceServerSearch(query)}
+            onSearchProducts={(query) => productsData.forceServerSearch(query)}
           />
         )}
       </div>
@@ -373,9 +407,11 @@ interface CreateProjectFormProps {
   onCancel: () => void;
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSave: (payload: any) => Promise<void>;
+  onSearchCustomers?: (query: string) => void;
+  onSearchProducts?: (query: string) => void;
 }
 
-function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, onSave }: CreateProjectFormProps) {
+function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts }: CreateProjectFormProps) {
   // Form fields
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -386,12 +422,12 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
 
   // Selected products rows
   const [rows, setRows] = useState<PaintProductRow[]>([
-    { productId: "", area: 0, unit: "sq.ft", rate: 0 },
+    { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" },
   ]);
 
   // Tax and Discount
-  const [taxRate, setTaxRate] = useState(0);
-  const [discount, setDiscount] = useState(0);
+  const [taxRate, setTaxRate] = useState<number | "">("");
+  const [discount, setDiscount] = useState<number | "">("");
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount");
   const [showAdvancedPricing, setShowAdvancedPricing] = useState(false);
 
@@ -399,14 +435,14 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
   const [saving, setSaving] = useState(false);
 
   const subtotal = useMemo(() => {
-    return rows.reduce((sum, row) => sum + (row.rate * row.area || 0), 0);
+    return rows.reduce((sum, row) => sum + (Number(row.rate || 0) * Number(row.area || 0) || 0), 0);
   }, [rows]);
 
-  const taxAmount = useMemo(() => (subtotal * taxRate) / 100, [subtotal, taxRate]);
+  const taxAmount = useMemo(() => (subtotal * Number(taxRate || 0)) / 100, [subtotal, taxRate]);
 
   const discountAmount = useMemo(() => {
-    if (discountType === "percent") return (subtotal * discount) / 100;
-    return discount;
+    if (discountType === "percent") return (subtotal * Number(discount || 0)) / 100;
+    return Number(discount || 0);
   }, [subtotal, discount, discountType]);
 
   const computedAgreedPrice = useMemo(() => {
@@ -416,12 +452,12 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
   const finalPrice = agreedPrice !== "" ? Number(agreedPrice) : computedAgreedPrice;
 
   const handleAddRow = () => {
-    setRows((prev) => [...prev, { productId: "", area: 0, unit: "sq.ft", rate: 0 }]);
+    setRows((prev) => [...prev, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
   };
 
   const handleRemoveRow = (index: number) => {
     if (rows.length === 1) {
-      setRows([{ productId: "", area: 0, unit: "sq.ft", rate: 0 }]);
+      setRows([{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
     } else {
       setRows((prev) => prev.filter((_, i) => i !== index));
     }
@@ -458,11 +494,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
       return;
     }
 
-    const filteredRows = rows.filter((r) => r.productId && r.area > 0);
-    if (filteredRows.length === 0) {
-      alert("Please add at least one product line item with an area greater than 0.");
-      return;
-    }
+    const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
 
     setSaving(true);
     try {
@@ -471,11 +503,11 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
         name,
         customerId,
         _customerName: cust?.name,
-        projectDate: new Date(projectDate).toISOString(),
+        projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
         totalAmount: subtotal,
-        tax: taxRate,
-        discount,
+        tax: Number(taxRate || 0),
+        discount: Number(discount || 0),
         discountType,
         agreedPrice: finalPrice,
         projectProducts: filteredRows.map((r) => ({
@@ -497,7 +529,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
       alert("Please select a customer first.");
       return;
     }
-    const filteredRows = rows.filter((r) => r.productId && r.area > 0);
+    const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
     if (filteredRows.length === 0) {
       alert("Please add product selections to generate quotation.");
       return;
@@ -508,10 +540,10 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
       return {
         productName: prod?.name || "Paint Product",
         brandName: prod?.brand?.name,
-        area: r.area,
+        area: Number(r.area || 0),
         unit: r.unit,
-        rate: r.rate,
-        total: r.rate * r.area,
+        rate: Number(r.rate || 0),
+        total: Number(r.rate || 0) * Number(r.area || 0),
       };
     });
 
@@ -528,9 +560,9 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
       products: productsForPDF,
       summary: {
         subtotal,
-        tax: taxRate,
+        tax: Number(taxRate || 0),
         taxAmount,
-        discount,
+        discount: Number(discount || 0),
         discountType,
         discountAmount,
         agreedPrice: finalPrice,
@@ -601,6 +633,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                     onSearchChange={setCustomerDisplay}
                     onSelect={(id, label) => { setCustomerId(id); setCustomerDisplay(label); }}
                     onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
+                    onEnter={(val) => onSearchCustomers?.(val)}
                     required
                   />
                 </div>
@@ -611,7 +644,6 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                     type="date"
                     value={projectDate}
                     onChange={(e) => setProjectDate(e.target.value)}
-                    required
                   />
                 </div>
               </div>
@@ -637,20 +669,27 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                 {rows.map((row, idx) => (
                   <div key={idx} className="p-4 space-y-3">
                     <div className="flex items-start gap-2">
-                      <SearchableSelect
+                       <SearchableSelect
                         value={row.productId}
-                        displayValue={products.find((p) => p.id === row.productId)?.name || ""}
+                        displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
                         options={products
                           .filter((p) => {
-                            const display = products.find((pr) => pr.id === row.productId)?.name || "";
+                            const display = row._search !== undefined ? row._search : "";
                             return !display || p.name.toLowerCase().includes(display.toLowerCase());
                           })
                           .slice(0, 10)
-                          .map((p) => ({ id: p.id, label: `${p.name} (₹${Number(p.price)}/L)` }))}
+                          .map((p) => ({ id: p.id, label: p.name }))}
                         placeholder="Choose product"
-                        onSearchChange={() => {}}
-                        onSelect={(id) => handleRowChange(idx, "productId", id)}
-                        onClear={() => handleRowChange(idx, "productId", "")}
+                        onSearchChange={(query) => handleRowChange(idx, "_search", query)}
+                        onSelect={(id, label) => {
+                          handleRowChange(idx, "productId", id);
+                          handleRowChange(idx, "_search", label);
+                        }}
+                        onClear={() => {
+                          handleRowChange(idx, "productId", "");
+                          handleRowChange(idx, "_search", "");
+                        }}
+                        onEnter={(val) => onSearchProducts?.(val)}
                         className="flex-1"
                       />
                       <Button
@@ -702,7 +741,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                     <div className="flex justify-end text-sm">
                       <span className="text-muted-foreground mr-1">Line total:</span>
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        ₹{fmt(row.rate * row.area || 0)}
+                        ₹{fmt(Number(row.rate || 0) * Number(row.area || 0))}
                       </span>
                     </div>
                   </div>
@@ -736,8 +775,8 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                       type="number"
                       min="0"
                       max="100"
-                      value={taxRate || ""}
-                      onChange={(e) => setTaxRate(Number(e.target.value))}
+                      value={taxRate}
+                      onChange={(e) => setTaxRate(e.target.value === "" ? "" : Number(e.target.value))}
                       placeholder="0"
                     />
                   </div>
@@ -747,8 +786,8 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                       <Input
                         type="number"
                         min="0"
-                        value={discount || ""}
-                        onChange={(e) => setDiscount(Number(e.target.value))}
+                        value={discount}
+                        onChange={(e) => setDiscount(e.target.value === "" ? "" : Number(e.target.value))}
                         placeholder="0"
                         className="flex-1"
                       />
@@ -777,7 +816,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                   <span className="text-slate-500">Subtotal</span>
                   <span className="font-medium text-slate-800 dark:text-slate-200">₹{fmt(subtotal)}</span>
                 </div>
-                {taxRate > 0 && (
+                {Number(taxRate || 0) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-slate-500">Tax ({taxRate}%)</span>
                     <span className="font-medium text-emerald-600 dark:text-emerald-400">+ ₹{fmt(taxAmount)}</span>
@@ -890,6 +929,8 @@ interface ProjectDetailViewProps {
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onBack: () => void;
   onRefresh: () => void;
+  onSearchCustomers?: (query: string) => void;
+  onSearchProducts?: (query: string) => void;
 }
 
 function ProjectDetailView({
@@ -901,6 +942,8 @@ function ProjectDetailView({
   onCreateCustomer,
   onBack,
   onRefresh,
+  onSearchCustomers,
+  onSearchProducts,
 }: ProjectDetailViewProps) {
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -999,13 +1042,14 @@ function ProjectDetailView({
           </TabsTrigger>
         </TabsList>
 
-        {/* TAB 1: CONSOLIDATED OVERVIEW & SPEC DETAILS */}
+         {/* TAB 1: CONSOLIDATED OVERVIEW & SPEC DETAILS */}
         <TabsContent value="overview">
           <OverviewEditTab
             fullProject={fullProject}
             customers={customers}
             onCreateCustomer={onCreateCustomer}
             onSuccess={onRefresh}
+            onSearchCustomers={onSearchCustomers}
           />
         </TabsContent>
 
@@ -1015,6 +1059,7 @@ function ProjectDetailView({
             fullProject={fullProject}
             products={products}
             onSuccess={onRefresh}
+            onSearchProducts={onSearchProducts}
           />
         </TabsContent>
 
@@ -1043,9 +1088,10 @@ interface OverviewEditTabProps {
   customers: Customer[];
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSuccess: () => void;
+  onSearchCustomers?: (query: string) => void;
 }
 
-function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, onSearchCustomers }: OverviewEditTabProps) {
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
   const [customerDisplay, setCustomerDisplay] = useState(
@@ -1077,7 +1123,7 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess }
         name,
         customerId,
         _customerName: cust?.name,
-        projectDate: new Date(projectDate).toISOString(),
+        projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
         totalAmount: Number(fullProject.totalAmount),
         tax: Number(fullProject.tax || 0),
@@ -1148,15 +1194,16 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess }
               onSearchChange={setCustomerDisplay}
               onSelect={(id, label) => { setCustomerId(id); setCustomerDisplay(label); }}
               onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
+              onEnter={(val) => onSearchCustomers?.(val)}
               required
             />
           </div>
 
           <div className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Deadline Date *
+              Deadline Date
             </span>
-            <Input type="date" value={projectDate} onChange={(e) => setProjectDate(e.target.value)} required />
+            <Input type="date" value={projectDate} onChange={(e) => setProjectDate(e.target.value)} />
           </div>
 
           <div className="space-y-1">
@@ -1264,33 +1311,38 @@ interface SelectedProductsTabProps {
   fullProject: any;
   products: Product[];
   onSuccess: () => void;
+  onSearchProducts?: (query: string) => void;
 }
 
-function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProductsTabProps) {
+function SelectedProductsTab({ fullProject, products, onSuccess, onSearchProducts }: SelectedProductsTabProps) {
   const [rows, setRows] = useState<PaintProductRow[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (fullProject.projectProducts) {
       setRows(
-        fullProject.projectProducts.map((pp: any) => ({
-          productId: pp.productId,
-          area: Number(pp.area),
-          unit: pp.unit as any,
-          rate: Number(pp.rate),
-          litresUsed: pp.litresUsed != null ? Number(pp.litresUsed) : null,
-        }))
+        fullProject.projectProducts.map((pp: any) => {
+          const prodName = products.find((p) => p.id === pp.productId)?.name || "";
+          return {
+            productId: pp.productId,
+            area: Number(pp.area),
+            unit: pp.unit as any,
+            rate: Number(pp.rate),
+            litresUsed: pp.litresUsed != null ? Number(pp.litresUsed) : null,
+            _search: prodName,
+          };
+        })
       );
     }
-  }, [fullProject.projectProducts]);
+  }, [fullProject.projectProducts, products]);
 
   const handleAddRow = () => {
-    setRows((prev) => [...prev, { productId: "", area: 0, unit: "sq.ft", rate: 0 }]);
+    setRows((prev) => [...prev, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
   };
 
   const handleRemoveRow = (index: number) => {
     if (rows.length === 1) {
-      setRows([{ productId: "", area: 0, unit: "sq.ft", rate: 0 }]);
+      setRows([{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
     } else {
       setRows((prev) => prev.filter((_, i) => i !== index));
     }
@@ -1308,10 +1360,10 @@ function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProdu
           if (coverage && coverage > 0) {
             row.rate = Number(prod.price) / coverage;
           } else {
-            row.rate = 0;
+            row.rate = "";
           }
         } else {
-          row.rate = 0;
+          row.rate = "";
         }
       }
 
@@ -1322,15 +1374,11 @@ function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProdu
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const filteredRows = rows.filter((r) => r.productId && r.area > 0);
-    if (filteredRows.length === 0) {
-      alert("Please select at least one product with area > 0.");
-      return;
-    }
+    const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
 
     setSaving(true);
     try {
-      const newSubtotal = filteredRows.reduce((sum, r) => sum + (r.rate * r.area || 0), 0);
+      const newSubtotal = filteredRows.reduce((sum, r) => sum + (Number(r.rate || 0) * Number(r.area || 0)), 0);
       const payload = {
         name: fullProject.name,
         customerId: fullProject.customerId,
@@ -1405,20 +1453,27 @@ function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProdu
                 {rows.map((row, idx) => (
                   <TableRow key={idx}>
                     <TableCell className="p-3">
-                      <SearchableSelect
+                       <SearchableSelect
                         value={row.productId}
-                        displayValue={products.find((p) => p.id === row.productId)?.name || ""}
+                        displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
                         options={products
                           .filter((p) => {
-                            const display = products.find((pr) => pr.id === row.productId)?.name || "";
+                            const display = row._search !== undefined ? row._search : "";
                             return !display || p.name.toLowerCase().includes(display.toLowerCase());
                           })
                           .slice(0, 10)
-                          .map((p) => ({ id: p.id, label: `${p.name} (₹${Number(p.price)}/L)` }))}
+                          .map((p) => ({ id: p.id, label: p.name }))}
                         placeholder="Choose Product"
-                        onSearchChange={() => {}}
-                        onSelect={(id) => handleRowChange(idx, "productId", id)}
-                        onClear={() => handleRowChange(idx, "productId", "")}
+                        onSearchChange={(query) => handleRowChange(idx, "_search", query)}
+                        onSelect={(id, label) => {
+                          handleRowChange(idx, "productId", id);
+                          handleRowChange(idx, "_search", label);
+                        }}
+                        onClear={() => {
+                          handleRowChange(idx, "productId", "");
+                          handleRowChange(idx, "_search", "");
+                        }}
+                        onEnter={(val) => onSearchProducts?.(val)}
                       />
                     </TableCell>
                     <TableCell className="p-3">
@@ -1450,7 +1505,7 @@ function SelectedProductsTab({ fullProject, products, onSuccess }: SelectedProdu
                       />
                     </TableCell>
                     <TableCell className="p-3 text-right font-semibold">
-                      ₹{fmt(row.rate * row.area || 0)}
+                      ₹{fmt(Number(row.rate || 0) * Number(row.area || 0))}
                     </TableCell>
                     <TableCell className="p-3 text-right">
                       <Button
@@ -1487,8 +1542,12 @@ interface QuotationTabProps {
 }
 
 function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
-  const [taxRate, setTaxRate] = useState(Number(fullProject.tax || 0));
-  const [discount, setDiscount] = useState(Number(fullProject.discount || 0));
+  const [taxRate, setTaxRate] = useState<number | "">(
+    fullProject.tax ? Number(fullProject.tax) : ""
+  );
+  const [discount, setDiscount] = useState<number | "">(
+    fullProject.discount ? Number(fullProject.discount) : ""
+  );
   const [discountType, setDiscountType] = useState<"amount" | "percent">(
     (fullProject.discountType || "amount") as any
   );
@@ -1501,14 +1560,14 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
   }, [fullProject.projectProducts]);
 
   const taxAmount = useMemo(() => {
-    return (subtotal * taxRate) / 100;
+    return (subtotal * Number(taxRate || 0)) / 100;
   }, [subtotal, taxRate]);
 
   const discountAmount = useMemo(() => {
     if (discountType === "percent") {
-      return (subtotal * discount) / 100;
+      return (subtotal * Number(discount || 0)) / 100;
     }
-    return discount;
+    return Number(discount || 0);
   }, [subtotal, discount, discountType]);
 
   const computedAgreedPrice = useMemo(() => {
@@ -1527,8 +1586,8 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
         projectDate: fullProject.projectDate,
         status: fullProject.status,
         totalAmount: subtotal,
-        tax: taxRate,
-        discount,
+        tax: Number(taxRate || 0),
+        discount: Number(discount || 0),
         discountType,
         agreedPrice: finalPrice,
         projectProducts: (fullProject.projectProducts || []).map((pp: any) => ({
@@ -1571,8 +1630,8 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
                 type="number"
                 min="0"
                 max="100"
-                value={taxRate || ""}
-                onChange={(e) => setTaxRate(Number(e.target.value))}
+                value={taxRate}
+                onChange={(e) => setTaxRate(e.target.value === "" ? "" : Number(e.target.value))}
               />
             </div>
             <div className="space-y-1">
@@ -1581,8 +1640,8 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
                 <Input
                   type="number"
                   min="0"
-                  value={discount || ""}
-                  onChange={(e) => setDiscount(Number(e.target.value))}
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value === "" ? "" : Number(e.target.value))}
                   className="flex-1"
                 />
                 <select

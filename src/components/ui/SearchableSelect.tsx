@@ -24,6 +24,8 @@ interface SearchableSelectProps {
   onSelect: (id: string, label: string) => void;
   /** Called when user clears selection */
   onClear?: () => void;
+  /** Called when user hits Enter */
+  onEnter?: (query: string) => void;
   /** Whether the field is required */
   required?: boolean;
   /** Extra class on the wrapper div */
@@ -49,6 +51,7 @@ export function SearchableSelect({
   onSearchChange,
   onSelect,
   onClear,
+  onEnter,
   required,
   className = "",
   inputHeight = "h-10",
@@ -98,6 +101,12 @@ export function SearchableSelect({
           value={displayValue}
           onChange={handleInputChange}
           onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onEnter?.(displayValue);
+            }
+          }}
           placeholder={placeholder}
           disabled={disabled}
           required={required && !value}
