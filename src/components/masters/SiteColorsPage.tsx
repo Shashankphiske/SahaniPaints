@@ -409,9 +409,6 @@ export default function SiteColorsPage() {
               <Paintbrush className="h-7 w-7 text-primary animate-pulse" />
               Site Colors Mapping
             </h1>
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              Select an active construction project site to configure room color schemes and color code mappings.
-            </p>
           </div>
         </div>
 

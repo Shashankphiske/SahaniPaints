@@ -32,6 +32,7 @@ const ROLES = [
 
 const RESOURCE_FIELDS: Record<string, string[]> = {
   customers: ["name", "email", "phonenumber", "alternatePhonenumber", "address"],
+  interiors: ["name", "email", "phonenumber", "alternatePhonenumber", "address", "commissionFeePercentage"],
   brands: ["name", "description"],
   users: ["username", "email", "password", "phonenumber", "role", "address"],
   tasks: ["title", "projectId", "priority", "status", "taskDate", "description"],
@@ -144,7 +145,7 @@ export function MasterForm({
 
   // Normalize resource name for submission
   const normalizedResource = 
-    resource === "interiors" || resource === "sales-associates" ? "users" : resource;
+    resource === "sales-associates" ? "users" : resource;
 
   useEffect(() => {
     // Set initial form values
@@ -401,15 +402,16 @@ export function MasterForm({
   const renderFormFields = () => {
     switch (normalizedResource) {
       case "customers":
+      case "interiors":
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Full Name *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Full Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
                 onChange={handleChange}
-                placeholder="Enter customer name"
+                placeholder={normalizedResource === "interiors" ? "Enter interior designer name" : "Enter customer name"}
               />
               {errors.name && <p className="text-xs text-destructive font-semibold">{errors.name}</p>}
             </div>
@@ -446,8 +448,24 @@ export function MasterForm({
               </div>
             </div>
 
+            {normalizedResource === "interiors" && (
+              <div className="space-y-1">
+                <label className="text-sm font-semibold text-muted-foreground">Commission Fee Percentage (%)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  name="commissionFeePercentage"
+                  value={formData.commissionFeePercentage ?? ""}
+                  onChange={handleChange}
+                  placeholder="e.g. 10.00"
+                />
+              </div>
+            )}
+
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Billing Address</label>
+              <label className="text-sm font-semibold text-muted-foreground">Address</label>
               <textarea
                 name="address"
                 value={formData.address || ""}
@@ -464,7 +482,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Brand Name *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Brand Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -492,7 +510,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Username *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Username <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="username"
                 value={formData.username || ""}
@@ -503,7 +521,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Email Address *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Email Address <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 type="email"
                 name="email"
@@ -516,7 +534,7 @@ export function MasterForm({
 
             <div className="space-y-1">
               <label className="text-sm font-semibold text-muted-foreground">
-                Password {editing ? "(leave blank to keep current)" : "*"}
+                Password {editing ? "(leave blank to keep current)" : <span className="text-red-500 font-bold ml-0.5">*</span>}
               </label>
               <Input
                 type="password"
@@ -542,7 +560,7 @@ export function MasterForm({
               {/* Only show role selector if resource is generic 'users' */}
               {resource === "users" && (
                 <div ref={roleRef} className="space-y-1 relative">
-                  <label className="text-sm font-semibold text-muted-foreground">Role *</label>
+                  <label className="text-sm font-semibold text-muted-foreground">Role <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <Input
                     placeholder="Search and select role..."
                     value={roleSearch}
@@ -593,7 +611,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Task Title *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Task Title <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="title"
                 value={formData.title || ""}
@@ -604,7 +622,7 @@ export function MasterForm({
             </div>
 
             <div ref={projectRef} className="space-y-1 relative">
-              <label className="text-sm font-semibold text-muted-foreground">Project *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Project <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 placeholder="Search and select project... (Enter to search server)"
                 value={projectSearch}
@@ -715,7 +733,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Task Deadline *</label>
+              <label className="text-sm font-semibold text-muted-foreground">Task Deadline <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 type="date"
                 name="taskDate"
@@ -744,7 +762,7 @@ export function MasterForm({
           <>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-muted-foreground">Project Name *</label>
+                <label className="text-sm font-semibold text-muted-foreground">Project Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   name="projectName"
                   value={formData.projectName || ""}
@@ -755,7 +773,7 @@ export function MasterForm({
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-muted-foreground">Customer Name *</label>
+                <label className="text-sm font-semibold text-muted-foreground">Customer Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   name="customerName"
                   value={formData.customerName || ""}
@@ -768,7 +786,7 @@ export function MasterForm({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-muted-foreground">Phone Number *</label>
+                <label className="text-sm font-semibold text-muted-foreground">Phone Number <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   name="phonenumber"
                   value={formData.phonenumber || ""}
@@ -779,7 +797,7 @@ export function MasterForm({
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-muted-foreground">Follow-Up Date *</label>
+                <label className="text-sm font-medium text-muted-foreground">Follow-Up Date <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   type="date"
                   name="followUpDate"
@@ -791,7 +809,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Comments</label>
+              <label className="text-sm font-medium text-muted-foreground">Comments</label>
               <textarea
                 name="comments"
                 value={formData.comments || ""}
@@ -808,7 +826,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-slate-500">Product Name *</label>
+              <label className="text-sm font-semibold text-slate-500">Product Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -820,7 +838,7 @@ export function MasterForm({
 
             <div className="grid grid-cols-2 gap-4">
               <div ref={brandRef} className="space-y-1 relative">
-                <label className="text-sm font-semibold text-slate-500">Brand *</label>
+                <label className="text-sm font-semibold text-slate-500">Brand <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   placeholder="Search and select brand... (Enter to search server)"
                   value={brandSearch}
@@ -865,7 +883,7 @@ export function MasterForm({
               </div>
 
               <div ref={categoryRef} className="space-y-1 relative">
-                <label className="text-sm font-semibold text-slate-500">Category *</label>
+                <label className="text-sm font-semibold text-slate-500">Category <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   placeholder="Search and select category..."
                   value={categorySearch}
@@ -900,7 +918,7 @@ export function MasterForm({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) *</label>
+                <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   type="number"
                   step="0.01"
@@ -913,7 +931,7 @@ export function MasterForm({
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-slate-500">Pack Size *</label>
+                <label className="text-sm font-semibold text-slate-500">Pack Size <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <select
                   name="size"
                   value={formData.size || "1ltr"}
@@ -980,7 +998,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Color Name *</label>
+              <label className="text-sm font-medium text-muted-foreground">Color Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -991,7 +1009,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Shade Number</label>
+              <label className="text-sm font-medium text-muted-foreground">Shade Number</label>
               <Input
                 name="shade"
                 value={formData.shade || ""}
@@ -1006,7 +1024,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Labour Name *</label>
+              <label className="text-sm font-medium text-muted-foreground">Labour Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -1017,7 +1035,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Payment Per Day (₹) *</label>
+              <label className="text-sm font-medium text-muted-foreground">Payment Per Day (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 type="number"
                 name="paymentPerDay"
@@ -1029,7 +1047,21 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Phone Number</label>
+              <label className="text-sm font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Tuesday Payment Amount (₹)</span>
+                <span className="text-[11px] text-muted-foreground font-normal italic">(Optional)</span>
+              </label>
+              <Input
+                type="number"
+                name="tuesdayPaymentAmount"
+                value={formData.tuesdayPaymentAmount ?? ""}
+                onChange={handleChange}
+                placeholder="Enter Tuesday diary payment amount (e.g. 1000)"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
               <Input
                 name="phonenumber"
                 value={formData.phonenumber || ""}
@@ -1072,7 +1104,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Area Name *</label>
+              <label className="text-sm font-medium text-muted-foreground">Area Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -1088,7 +1120,7 @@ export function MasterForm({
         return (
           <>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Contractor Name *</label>
+              <label className="text-sm font-medium text-muted-foreground">Contractor Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
               <Input
                 name="name"
                 value={formData.name || ""}
@@ -1099,7 +1131,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Phone Number</label>
+              <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
               <Input
                 name="phonenumber"
                 value={formData.phonenumber || ""}
@@ -1109,7 +1141,7 @@ export function MasterForm({
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground">Email</label>
+              <label className="text-sm font-medium text-muted-foreground">Email</label>
               <Input
                 name="email"
                 value={formData.email || ""}

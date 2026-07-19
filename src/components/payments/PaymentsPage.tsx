@@ -1,858 +1,518 @@
 import { useState, useEffect, useMemo } from "react";
-import { useMasterData } from "@/hooks/use-master-data";
-import { apiRequest } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { useMasterData } from "../../hooks/use-master-data";
+import { apiRequest } from "../../lib/api";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { Badge } from "../ui/badge";
+import { useToast } from "../../hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import {
   Coins,
   Loader2,
   Trash2,
   Plus,
-  ArrowUpRight,
-  ArrowDownLeft,
   SlidersHorizontal,
   Search,
-  Pencil
+  Pencil,
+  IndianRupee,
+  Building,
+  CreditCard,
+  Calendar,
+  FileText,
 } from "lucide-react";
-import type { Project, Labour, LabourPayment, ProjectPayment } from "@/types/master";
-import { supabase } from "@/lib/realtime";
+import type { Project, ProjectPayment } from "../../types/master";
+import { supabase } from "../../lib/realtime";
+
+function fmt(n: number) {
+  return (Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
 
 export default function PaymentsPage() {
   const { data: projectsRaw } = useMasterData<Project>("projects");
-  const { data: laboursRaw } = useMasterData<Labour>("labours");
-
-  const [activeTab, setActiveTab] = useState<"project" | "labour">("project");
   const { toast } = useToast();
 
-  const projectsList = useMemo(() => Array.isArray(projectsRaw) ? projectsRaw : [], [projectsRaw]);
-  const laboursList = useMemo(() => Array.isArray(laboursRaw) ? laboursRaw : [], [laboursRaw]);
+  const projectsList = useMemo(() => (Array.isArray(projectsRaw) ? projectsRaw : []), [projectsRaw]);
 
-  // Lists state
-  const [projectPayments, setProjectPayments] = useState<ProjectPayment[]>([]);
-  const [labourPayments, setLabourPayments] = useState<LabourPayment[]>([]);
-  const [loadingProjectPayments, setLoadingProjectPayments] = useState(false);
-  const [loadingLabourPayments, setLoadingLabourPayments] = useState(false);
+  // Project payments list state
+  const [payments, setPayments] = useState<ProjectPayment[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Modal / Dialog state
+  // Dialog & Edit state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<{ id: string; type: "project" | "labour"; data: any } | null>(null);
+  const [editingItem, setEditingItem] = useState<ProjectPayment | null>(null);
 
-  // Forms state
-  const [projProjectId, setProjProjectId] = useState("");
-  const [projAmount, setProjAmount] = useState("");
-  const [projType, setProjType] = useState<"INCOMING" | "OUTGOING">("INCOMING");
-  const [projDate, setProjDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [projRemarks, setProjRemarks] = useState("");
-  const [submittingProj, setSubmittingProj] = useState(false);
+  // Form state
+  const [projectId, setProjectId] = useState("");
+  const [projectDisplay, setProjectDisplay] = useState("");
+  const [amount, setAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState("CASH");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const [labLabourId, setLabLabourId] = useState("");
-  const [labProjectId, setLabProjectId] = useState("");
-  const [labAmount, setLabAmount] = useState("");
-  const [labType, setLabType] = useState<"OUTGOING" | "INCOMING">("OUTGOING");
-  const [labDate, setLabDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [labRemarks, setLabRemarks] = useState("");
-  const [submittingLab, setSubmittingLab] = useState(false);
-
-  // Search/Filters state
+  // Filters state
   const [filterSearch, setFilterSearch] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("");
   const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
-  const [filterLabourId, setFilterLabourId] = useState("");
-  const [filterLabourDisplay, setFilterLabourDisplay] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+  const [filterMode, setFilterMode] = useState("");
 
-  // Form display text state (for SearchableSelect)
-  const [projProjectDisplay, setProjProjectDisplay] = useState("");
-  const [labLabourDisplay, setLabLabourDisplay] = useState("");
-  const [labProjectDisplay, setLabProjectDisplay] = useState("");
-
-  const fetchProjectPayments = async () => {
-    setLoadingProjectPayments(true);
+  const fetchPayments = async () => {
+    setLoading(true);
     try {
       const logs = await apiRequest.fetchAll<ProjectPayment>("project-payments");
-      setProjectPayments(Array.isArray(logs) ? logs : []);
+      setPayments(Array.isArray(logs) ? logs : []);
     } catch (err: any) {
       toast({
-        title: "Error fetching project payments",
-        description: err.message,
-        variant: "destructive"
+        title: "Fetch Error",
+        description: err.message || "Failed to load project payments.",
+        variant: "destructive",
       });
     } finally {
-      setLoadingProjectPayments(false);
+      setLoading(false);
     }
   };
 
-  const fetchLabourPayments = async () => {
-    setLoadingLabourPayments(true);
-    try {
-      const logs = await apiRequest.fetchAll<LabourPayment>("labour-payments");
-      setLabourPayments(Array.isArray(logs) ? logs : []);
-    } catch (err: any) {
-      toast({
-        title: "Error fetching labour payments",
-        description: err.message,
-        variant: "destructive"
-      });
-    } finally {
-      setLoadingLabourPayments(false);
-    }
-  };
-
-  // Real-time synchronization subscriptions
   useEffect(() => {
-    fetchProjectPayments();
-    fetchLabourPayments();
+    fetchPayments();
 
-    const projChannel = supabase
+    const channel = supabase
       .channel("db-project-payments-sync")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "project_payments" },
-        () => {
-          fetchProjectPayments();
-        }
-      )
-      .subscribe();
-
-    const labChannel = supabase
-      .channel("db-labour-payments-sync")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "labour_payments" },
-        () => {
-          fetchLabourPayments();
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_payments" }, () => {
+        fetchPayments();
+      })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(projChannel);
-      supabase.removeChannel(labChannel);
+      supabase.removeChannel(channel);
     };
   }, []);
 
-  const openAddModal = () => {
+  const openCreateModal = () => {
     setEditingItem(null);
-    // Reset forms
-    setProjProjectId("");
-    setProjAmount("");
-    setProjType("INCOMING");
-    setProjDate(new Date().toISOString().split("T")[0]);
-    setProjRemarks("");
-
-    setLabLabourId("");
-    setLabProjectId("");
-    setLabAmount("");
-    setLabType("OUTGOING");
-    setLabDate(new Date().toISOString().split("T")[0]);
-    setLabRemarks("");
-
+    setProjectId("");
+    setProjectDisplay("");
+    setAmount("");
+    setPaymentMode("CASH");
+    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setRemarks("");
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingItem(null);
+  const openEditModal = (payment: ProjectPayment) => {
+    setEditingItem(payment);
+    setProjectId(payment.projectId);
+    const matchedProject = projectsList.find((p) => p.id === payment.projectId);
+    setProjectDisplay(matchedProject ? matchedProject.name : payment.project?.name || "");
+    setAmount(String(payment.amount));
+    setPaymentMode(payment.paymentMode || "CASH");
+    setPaymentDate(payment.paymentDate ? new Date(payment.paymentDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+    setRemarks(payment.remarks || "");
+    setIsModalOpen(true);
   };
 
-  // Form handlers
-  const handleAddProjectPayment = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projProjectId) return;
-    const amount = Number(projAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: "Invalid amount",
-        description: "Please specify a positive payment amount.",
-        variant: "destructive"
-      });
+
+    if (!projectId) {
+      toast({ title: "Project Required", description: "Please select a project site.", variant: "destructive" });
       return;
     }
 
-    setSubmittingProj(true);
-    try {
-      const payload = {
-        projectId: projProjectId,
-        amount,
-        type: projType,
-        paymentDate: new Date(projDate).toISOString(),
-        remarks: projRemarks || null
-      };
-
-      if (editingItem) {
-        await apiRequest.delete("project-payments", editingItem.id);
-        await apiRequest.create<ProjectPayment>("project-payments", payload as any);
-        toast({
-          title: "Payment Updated",
-          description: "Project payment record has been successfully updated."
-        });
-      } else {
-        await apiRequest.create<ProjectPayment>("project-payments", payload as any);
-        toast({
-          title: "Payment Recorded",
-          description: `Successfully logged Project Transaction of ₹${amount.toLocaleString("en-IN")}.`
-        });
-      }
-      closeModal();
-      fetchProjectPayments();
-    } catch (err: any) {
-      toast({
-        title: "Record Payment Failed",
-        description: err.message,
-        variant: "destructive"
-      });
-    } finally {
-      setSubmittingProj(false);
-    }
-  };
-
-  const handleAddLabourPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!labLabourId) return;
-    const amount = Number(labAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: "Invalid amount",
-        description: "Please specify a positive payment amount.",
-        variant: "destructive"
-      });
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      toast({ title: "Invalid Amount", description: "Please enter a valid positive payment amount.", variant: "destructive" });
       return;
     }
 
-    setSubmittingLab(true);
+    setSubmitting(true);
     try {
       const payload = {
-        labourId: labLabourId,
-        projectId: labProjectId || null,
-        amount,
-        type: labType,
-        paymentDate: new Date(labDate).toISOString(),
-        remarks: labRemarks || null
+        projectId,
+        amount: numericAmount,
+        type: "INCOMING" as const,
+        paymentMode,
+        paymentDate: new Date(paymentDate).toISOString(),
+        remarks: remarks.trim() || null,
       };
 
       if (editingItem) {
-        await apiRequest.update("labour-payments", editingItem.id, payload as any);
-        toast({
-          title: "Payment Updated",
-          description: "Labour payment record has been successfully updated."
-        });
+        const updated = await apiRequest.update<ProjectPayment>("project-payments", editingItem.id, payload);
+        setPayments((prev) => prev.map((item) => (item.id === editingItem.id ? { ...item, ...updated } : item)));
+        toast({ title: "Payment Updated", description: "Project payment record updated successfully." });
       } else {
-        await apiRequest.create<LabourPayment>("labour-payments", payload as any);
-        toast({
-          title: "Payment Recorded",
-          description: `Successfully logged Labour Transaction of ₹${amount.toLocaleString("en-IN")}.`
-        });
+        const created = await apiRequest.create<ProjectPayment>("project-payments", payload);
+        const matchedProject = projectsList.find((p) => p.id === projectId);
+        const completeRecord = {
+          ...created,
+          project: matchedProject ? { name: matchedProject.name } : created.project,
+        };
+        setPayments((prev) => [completeRecord, ...prev]);
+        toast({ title: "Payment Recorded", description: `Recorded incoming payment of ₹${fmt(numericAmount)}.` });
       }
-      closeModal();
-      fetchLabourPayments();
+
+      setIsModalOpen(false);
     } catch (err: any) {
-      toast({
-        title: "Record Payment Failed",
-        description: err.message,
-        variant: "destructive"
-      });
+      toast({ title: "Save Failed", description: err.message || "Could not save payment.", variant: "destructive" });
     } finally {
-      setSubmittingLab(false);
+      setSubmitting(false);
     }
   };
 
-  const handleDeleteProjectPayment = async (id: string, amount: number) => {
-    if (!confirm(`Are you sure you want to delete this payment record of ₹${amount.toLocaleString("en-IN")}?`)) return;
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this payment record?")) return;
 
     try {
       await apiRequest.delete("project-payments", id);
-      toast({
-        title: "Payment deleted",
-        description: "Successfully removed project payment record."
-      });
-      fetchProjectPayments();
+      setPayments((prev) => prev.filter((item) => item.id !== id));
+      toast({ title: "Payment Deleted", description: "Project payment record deleted successfully." });
     } catch (err: any) {
-      toast({
-        title: "Delete failed",
-        description: err.message,
-        variant: "destructive"
-      });
+      toast({ title: "Delete Failed", description: err.message || "Could not delete payment.", variant: "destructive" });
     }
   };
 
-  const handleDeleteLabourPayment = async (id: string, amount: number) => {
-    if (!confirm(`Are you sure you want to delete this payment record of ₹${amount.toLocaleString("en-IN")}?`)) return;
-
-    try {
-      await apiRequest.delete("labour-payments", id);
-      toast({
-        title: "Payment deleted",
-        description: "Successfully removed labour payment record."
-      });
-      fetchLabourPayments();
-    } catch (err: any) {
-      toast({
-        title: "Delete failed",
-        description: err.message,
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Filtration logic
-  const filteredProjectPayments = useMemo(() => {
-    return projectPayments.filter((p) => {
+  // Filtered Payments
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
       if (filterProjectId && p.projectId !== filterProjectId) return false;
-      if (filterDate) {
-        const start = new Date(filterDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(filterDate);
-        end.setHours(23, 59, 59, 999);
-        const d = new Date(p.paymentDate);
-        if (d < start || d > end) return false;
-      }
+      if (filterMode && (p.paymentMode || "CASH") !== filterMode) return false;
       if (filterSearch.trim()) {
         const term = filterSearch.toLowerCase().trim();
-        const projectNameMatch = p.project?.name?.toLowerCase().includes(term);
-        const remarksMatch = p.remarks?.toLowerCase().includes(term);
-        if (!projectNameMatch && !remarksMatch) return false;
+        const projName = p.project?.name?.toLowerCase() || "";
+        const rem = p.remarks?.toLowerCase() || "";
+        if (!projName.includes(term) && !rem.includes(term)) return false;
       }
       return true;
     });
-  }, [projectPayments, filterProjectId, filterDate, filterSearch]);
+  }, [payments, filterProjectId, filterMode, filterSearch]);
 
-  const filteredLabourPayments = useMemo(() => {
-    return labourPayments.filter((p) => {
-      if (filterLabourId && p.labourId !== filterLabourId) return false;
-      if (filterProjectId && p.projectId !== filterProjectId) return false;
-      if (filterDate) {
-        const start = new Date(filterDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(filterDate);
-        end.setHours(23, 59, 59, 999);
-        const d = new Date(p.paymentDate);
-        if (d < start || d > end) return false;
-      }
-      if (filterSearch.trim()) {
-        const term = filterSearch.toLowerCase().trim();
-        const remarksMatch = p.remarks?.toLowerCase().includes(term);
-        if (!remarksMatch) return false;
-      }
-      return true;
-    });
-  }, [labourPayments, filterLabourId, filterProjectId, filterDate, filterSearch]);
+  // Statistics
+  const totalReceived = useMemo(() => {
+    return filteredPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [filteredPayments]);
 
-  const formatDate = (dateStr: any) => {
-    if (!dateStr) return "—";
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric"
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const formatPrice = (amount: number) => {
-    return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
-  };
+  // Filter toggle state
+  const [showFilterCard, setShowFilterCard] = useState(false);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* HEADER */}
-      <div className="flex flex-col gap-1.5 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
         <div>
-          <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Coins className="h-6 w-6 text-primary" />
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-              Regular Payments Ledger
-            </h2>
-          </div>
-          <p className="text-sm text-slate-500 font-medium mt-1">
-            Log client receipts and refunds on project sites, and manage payouts and recoveries for the labour crew.
-          </p>
+            Project Payments Received
+          </h1>
         </div>
-        <Button onClick={openAddModal} className="font-bold text-xs">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Log Transaction
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showFilterCard ? "default" : "outline"}
+            onClick={() => setShowFilterCard(!showFilterCard)}
+            className="font-medium flex items-center gap-1.5 shadow-sm"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filter
+            {(filterSearch || filterProjectId || filterMode) ? (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
+                !
+              </span>
+            ) : null}
+          </Button>
+
+          <Button onClick={openCreateModal} className="font-medium flex items-center gap-1.5 shadow-sm">
+            <Plus className="h-4 w-4" /> Add Incoming Payment
+          </Button>
+        </div>
       </div>
 
-      {/* FILTER BAR FOR BOTH TABLES */}
-      <Card className="border border-slate-200/60 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-        <CardHeader className="py-4 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center gap-2">
-          <SlidersHorizontal size={14} className="text-primary" />
-          <CardTitle className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
-            Ledger Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-5 flex flex-wrap gap-4 items-end">
-          <div className="space-y-1 w-full sm:w-56">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Search Remarks</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <Input
-                placeholder="Filter comments or remarks..."
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-                className="h-9 text-xs pl-8"
-              />
+      {/* KPI Stats Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="border border-border/80 shadow-sm bg-card">
+          <CardContent className="p-4 flex items-center gap-3.5">
+            <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <IndianRupee className="h-5 w-5" />
             </div>
-          </div>
-          <div className="space-y-1 w-full sm:w-48">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
-            <SearchableSelect
-              value={filterProjectId}
-              displayValue={filterProjectDisplay}
-              options={projectsList
-                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
-                .slice(0, 10)
-                .map((p) => ({ id: p.id, label: p.name }))}
-              placeholder="All Projects"
-              allLabel="All Projects"
-              onSearchChange={setFilterProjectDisplay}
-              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
-              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
-              inputHeight="h-9"
-              textSize="text-xs"
-            />
-          </div>
-          {activeTab === "labour" && (
-            <div className="space-y-1 w-full sm:w-48">
-              <label className="text-[10px] font-extrabold text-slate-400 uppercase">Labour Worker</label>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Total Revenue Collected</p>
+              <p className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 mt-0.5">
+                ₹{fmt(totalReceived)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border/80 shadow-sm bg-card">
+          <CardContent className="p-4 flex items-center gap-3.5">
+            <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
+              <Coins className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Payment Transactions</p>
+              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                {filteredPayments.length}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-border/80 shadow-sm bg-card">
+          <CardContent className="p-4 flex items-center gap-3.5">
+            <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
+              <Building className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Active Projects</p>
+              <p className="text-xl font-bold tracking-tight text-foreground mt-0.5">
+                {projectsList.length}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filter Controls */}
+      {showFilterCard && (
+        <Card className="border border-border/80 bg-card shadow-sm rounded-xl">
+          <CardHeader className="py-3 px-4 border-b border-border/60 flex flex-row items-center gap-2">
+            <SlidersHorizontal size={14} className="text-primary" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Filter Payment Ledger
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 flex flex-wrap gap-3 items-end">
+            <div className="space-y-1 w-full sm:w-64">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Search Project / Remarks</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Type to search..."
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  className="pl-9 h-8 text-xs bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1 w-full sm:w-56">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Project Site</label>
               <SearchableSelect
-                value={filterLabourId}
-                displayValue={filterLabourDisplay}
-                options={laboursList
-                  .filter((l) => !filterLabourDisplay || l.name.toLowerCase().includes(filterLabourDisplay.toLowerCase()))
+                value={filterProjectId}
+                displayValue={filterProjectDisplay}
+                options={projectsList
+                  .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
                   .slice(0, 10)
-                  .map((l) => ({ id: l.id, label: l.name }))}
-                placeholder="All Labours"
-                allLabel="All Labours"
-                onSearchChange={setFilterLabourDisplay}
-                onSelect={(id, label) => { setFilterLabourId(id); setFilterLabourDisplay(id ? label : ""); }}
-                onClear={() => { setFilterLabourId(""); setFilterLabourDisplay(""); }}
-                inputHeight="h-9"
+                  .map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="All Project Sites"
+                allLabel="All Project Sites"
+                onSearchChange={setFilterProjectDisplay}
+                onSelect={(id, label) => {
+                  setFilterProjectId(id);
+                  setFilterProjectDisplay(id ? label : "");
+                }}
+                onClear={() => {
+                  setFilterProjectId("");
+                  setFilterProjectDisplay("");
+                }}
+                inputHeight="h-8"
                 textSize="text-xs"
+                className="bg-background"
               />
             </div>
-          )}
-          <div className="space-y-1 w-full sm:w-40">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Log Date</label>
-            <Input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setFilterSearch("");
-              setFilterProjectId("");
-              setFilterLabourId("");
-              setFilterDate("");
-            }}
-            className="text-xs text-muted-foreground hover:text-foreground font-semibold h-9 ml-auto"
-          >
-            Clear Filters
-          </Button>
+
+            <div className="space-y-1 w-full sm:w-40">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Payment Mode</label>
+              <select
+                value={filterMode}
+                onChange={(e) => setFilterMode(e.target.value)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              >
+                <option value="">All Modes</option>
+                <option value="CASH">Cash</option>
+                <option value="ONLINE">Online / UPI</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CHEQUE">Cheque</option>
+              </select>
+            </div>
+
+            {(filterSearch || filterProjectId || filterMode) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setFilterSearch("");
+                  setFilterProjectId("");
+                  setFilterProjectDisplay("");
+                  setFilterMode("");
+                }}
+              >
+                Reset Filters
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment Ledger Table */}
+      <Card className="border border-border/80 shadow-sm rounded-xl overflow-hidden">
+        <CardContent className="p-0">
+          <Table className="text-xs">
+            <TableHeader className="bg-muted/40 uppercase text-[10px] font-bold tracking-wider">
+              <TableRow>
+                <TableHead className="py-2.5">Date</TableHead>
+                <TableHead className="py-2.5">Project Site</TableHead>
+                <TableHead className="py-2.5">Payment Mode</TableHead>
+                <TableHead className="py-2.5">Remarks / Details</TableHead>
+                <TableHead className="py-2.5 text-right">Amount Received</TableHead>
+                <TableHead className="py-2.5 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border/40">
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+                    Loading project payments...
+                  </TableCell>
+                </TableRow>
+              ) : filteredPayments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    No incoming project payments recorded.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredPayments.map((p) => (
+                  <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
+                    <TableCell className="font-medium text-muted-foreground">
+                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                    </TableCell>
+                    <TableCell className="font-semibold text-foreground">
+                      {p.project?.name || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] uppercase font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-700 border-emerald-500/20">
+                        {p.paymentMode || "CASH"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground max-w-xs truncate">
+                      {p.remarks || "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-emerald-600 dark:text-emerald-400">
+                      ₹{fmt(p.amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
+                          <Pencil size={13} />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}>
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-md bg-slate-100 dark:bg-zinc-900 rounded-xl p-1">
-          <TabsTrigger value="project" className="rounded-lg font-bold text-xs">
-            <ArrowUpRight className="h-3.5 w-3.5 mr-1.5 text-emerald-500" />
-            Project Receipts & Refunds
-          </TabsTrigger>
-          <TabsTrigger value="labour" className="rounded-lg font-bold text-xs">
-            <ArrowDownLeft className="h-3.5 w-3.5 mr-1.5 text-rose-500" />
-            Labour Wages & Recoveries
-          </TabsTrigger>
-        </TabsList>
-
-        {/* PROJECT RECEIPTS & REFUNDS */}
-        <TabsContent value="project" className="space-y-6">
-          <Card className="border border-slate-200 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-            <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
-              <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
-                Project Receipts Log
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {loadingProjectPayments ? (
-                <div className="flex flex-col items-center py-20">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                  <span className="text-xs font-medium text-muted-foreground">Loading transactions...</span>
-                </div>
-              ) : filteredProjectPayments.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground text-xs italic font-medium">
-                  No transactions match the specified filter parameters.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Project / Site</TableHead>
-                      <TableHead>Payment Date</TableHead>
-                      <TableHead>Remarks</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="w-24 text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProjectPayments.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
-                          {p.project?.name || "Unknown Site"}
-                        </TableCell>
-                        <TableCell className="font-medium text-muted-foreground text-xs">
-                          {formatDate(p.paymentDate)}
-                        </TableCell>
-                        <TableCell className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                          {p.remarks || "—"}
-                        </TableCell>
-                        <TableCell className={`text-right font-extrabold ${p.type === "OUTGOING" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                          {p.type === "OUTGOING" ? "-" : "+"}{formatPrice(Number(p.amount))}
-                        </TableCell>
-                        <TableCell className="text-center space-x-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingItem({ id: p.id, type: "project", data: p });
-                              setProjProjectId(p.projectId);
-                              setProjAmount(p.amount.toString());
-                              setProjType(p.type);
-                              setProjDate(p.paymentDate.split("T")[0]);
-                              setProjRemarks(p.remarks || "");
-                              setIsModalOpen(true);
-                            }}
-                            className="text-slate-400 hover:text-blue-600 p-2 rounded-lg transition-colors"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProjectPayment(p.id, Number(p.amount))}
-                            className="text-slate-400 hover:text-rose-600 p-2 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* LABOUR WAGES & RECOVERIES */}
-        <TabsContent value="labour" className="space-y-6">
-          <Card className="border border-slate-200 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-            <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
-              <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
-                Labour Payouts Log
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {loadingLabourPayments ? (
-                <div className="flex flex-col items-center py-20">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                  <span className="text-xs font-medium text-muted-foreground">Loading logs...</span>
-                </div>
-              ) : filteredLabourPayments.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground text-xs italic font-medium">
-                  No logs match the specified filter parameters.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Labour Crew</TableHead>
-                      <TableHead>Associated Site</TableHead>
-                      <TableHead>Payment Date</TableHead>
-                      <TableHead>Remarks</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="w-24 text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLabourPayments.map((p) => {
-                      const labourName = laboursList.find((l) => l.id === p.labourId)?.name || "Worker";
-                      const siteName = projectsList.find((pr) => pr.id === p.projectId)?.name || "General";
-                      return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
-                            {labourName}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-500 text-xs">
-                            {siteName}
-                          </TableCell>
-                          <TableCell className="font-medium text-muted-foreground text-xs">
-                            {formatDate(p.paymentDate)}
-                          </TableCell>
-                          <TableCell className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                            {p.remarks || "—"}
-                          </TableCell>
-                          <TableCell className={`text-right font-extrabold ${p.type === "INCOMING" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                            {p.type === "INCOMING" ? "+" : "-"}{formatPrice(Number(p.amount))}
-                          </TableCell>
-                          <TableCell className="text-center space-x-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingItem({ id: p.id, type: "labour", data: p });
-                                setLabLabourId(p.labourId);
-                                setLabProjectId(p.projectId || "");
-                                setLabAmount(p.amount.toString());
-                                setLabType(p.type);
-                                setLabDate(p.paymentDate.split("T")[0]);
-                                setLabRemarks(p.remarks || "");
-                                setIsModalOpen(true);
-                              }}
-                              className="text-slate-400 hover:text-blue-600 p-2 rounded-lg transition-colors"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteLabourPayment(p.id, Number(p.amount))}
-                              className="text-slate-400 hover:text-rose-600 p-2 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* DYNAMIC TRANSACTION POP-UP MODAL */}
+      {/* Record / Edit Payment Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {editingItem ? "Edit Transaction Entry" : "Log New Transaction"}
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <Coins className="h-5 w-5 text-primary" />
+              {editingItem ? "Edit Incoming Project Payment" : "Record Incoming Project Payment"}
             </DialogTitle>
           </DialogHeader>
 
-          {activeTab === "project" ? (
-            <form onSubmit={handleAddProjectPayment} className="space-y-4 pt-2">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Project Site *
-                </label>
-                <SearchableSelect
-                  value={projProjectId}
-                  displayValue={projProjectDisplay}
-                  options={projectsList
-                    .filter((p) => !projProjectDisplay || p.name.toLowerCase().includes(projProjectDisplay.toLowerCase()))
-                    .slice(0, 10)
-                    .map((p) => ({ id: p.id, label: p.name }))}
-                  placeholder="Select Project Site..."
-                  onSearchChange={setProjProjectDisplay}
-                  onSelect={(id, label) => { setProjProjectId(id); setProjProjectDisplay(label); }}
-                  onClear={() => { setProjProjectId(""); setProjProjectDisplay(""); }}
-                  required
-                />
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground">Select Project Site <span className="text-red-500 font-bold ml-0.5">*</span></label>
+              <SearchableSelect
+                value={projectId}
+                displayValue={projectDisplay}
+                options={projectsList
+                  .filter((p) => !projectDisplay || p.name.toLowerCase().includes(projectDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="Choose project site..."
+                onSearchChange={setProjectDisplay}
+                onSelect={(id, label) => {
+                  setProjectId(id);
+                  setProjectDisplay(label);
+                }}
+                onClear={() => {
+                  setProjectId("");
+                  setProjectDisplay("");
+                }}
+              />
+            </div>
 
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Transaction Type *
-                </label>
-                <select
-                  value={projType}
-                  onChange={(e) => setProjType(e.target.value as any)}
-                  required
-                  className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
-                >
-                  <option value="INCOMING">Incoming Payment (Client Receipt)</option>
-                  <option value="OUTGOING">Outgoing Payment (Client Refund)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Amount (₹) *
-                </label>
+                <label className="text-xs font-semibold text-muted-foreground">Amount Received (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   type="number"
-                  required
-                  min="1"
-                  placeholder="0.00"
-                  value={projAmount}
-                  onChange={(e) => setProjAmount(e.target.value)}
-                  className="font-semibold"
+                  step="0.01"
+                  min="0"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="e.g. 50000"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Payment Date *
-                </label>
-                <Input
-                  type="date"
-                  required
-                  value={projDate}
-                  onChange={(e) => setProjDate(e.target.value)}
-                  className="font-medium"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Remarks / Notes
-                </label>
-                <Input
-                  placeholder="e.g. Bank transfer, part payment"
-                  value={projRemarks}
-                  onChange={(e) => setProjRemarks(e.target.value)}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                <Button type="button" variant="ghost" onClick={closeModal}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submittingProj}>
-                  {submittingProj ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                      Saving...
-                    </>
-                  ) : (
-                    editingItem ? "Save Changes" : "Log Transaction"
-                  )}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleAddLabourPayment} className="space-y-4 pt-2">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Select Labour *
-                </label>
-                <SearchableSelect
-                  value={labLabourId}
-                  displayValue={labLabourDisplay}
-                  options={laboursList
-                    .filter((l) => !labLabourDisplay || l.name.toLowerCase().includes(labLabourDisplay.toLowerCase()))
-                    .slice(0, 10)
-                    .map((l) => ({ id: l.id, label: l.name }))}
-                  placeholder="Choose worker..."
-                  onSearchChange={setLabLabourDisplay}
-                  onSelect={(id, label) => { setLabLabourId(id); setLabLabourDisplay(label); }}
-                  onClear={() => { setLabLabourId(""); setLabLabourDisplay(""); }}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Associated Project (Optional)
-                </label>
-                <SearchableSelect
-                  value={labProjectId}
-                  displayValue={labProjectDisplay}
-                  options={projectsList
-                    .filter((p) => !labProjectDisplay || p.name.toLowerCase().includes(labProjectDisplay.toLowerCase()))
-                    .slice(0, 10)
-                    .map((p) => ({ id: p.id, label: p.name }))}
-                  placeholder="General (No specific site)"
-                  allLabel="General (No specific site)"
-                  onSearchChange={setLabProjectDisplay}
-                  onSelect={(id, label) => { setLabProjectId(id); setLabProjectDisplay(id ? label : ""); }}
-                  onClear={() => { setLabProjectId(""); setLabProjectDisplay(""); }}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Transaction Type *
-                </label>
+                <label className="text-xs font-semibold text-muted-foreground">Payment Mode <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <select
-                  value={labType}
-                  onChange={(e) => setLabType(e.target.value as any)}
-                  required
-                  className="w-full h-10 rounded-lg border border-slate-200 dark:border-zinc-800 bg-transparent px-3 text-sm font-semibold focus:outline-none"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
                 >
-                  <option value="OUTGOING">Outgoing Payment (Wage/Salary Payout)</option>
-                  <option value="INCOMING">Incoming Payment (Wage Recovery/Refund)</option>
+                  <option value="CASH">Cash</option>
+                  <option value="ONLINE">Online / UPI</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="CHEQUE">Cheque</option>
                 </select>
               </div>
+            </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Amount (₹) *
-                </label>
-                <Input
-                  type="number"
-                  required
-                  min="1"
-                  placeholder="0.00"
-                  value={labAmount}
-                  onChange={(e) => setLabAmount(e.target.value)}
-                  className="font-semibold"
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground">Payment Date <span className="text-red-500 font-bold ml-0.5">*</span></label>
+              <Input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+              />
+            </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Payment Date *
-                </label>
-                <Input
-                  type="date"
-                  required
-                  value={labDate}
-                  onChange={(e) => setLabDate(e.target.value)}
-                  className="font-medium"
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-muted-foreground">Remarks / Notes</label>
+              <textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Advance installment, Milestone payment, etc."
+                rows={2}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+              />
+            </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-                  Remarks / Notes
-                </label>
-                <Input
-                  placeholder="e.g. Weekly settlement, advance recovery"
-                  value={labRemarks}
-                  onChange={(e) => setLabRemarks(e.target.value)}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                <Button type="button" variant="ghost" onClick={closeModal}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submittingLab}>
-                  {submittingLab ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                      Saving...
-                    </>
-                  ) : (
-                    editingItem ? "Save Changes" : "Log Transaction"
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                {editingItem ? "Update Payment" : "Save Payment"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

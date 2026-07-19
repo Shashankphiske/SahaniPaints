@@ -91,10 +91,22 @@ export interface ProjectProduct {
   product?: Product;
 }
 
+export interface Interior {
+  id: string;
+  name: string;
+  email?: string | null;
+  phonenumber?: string | null;
+  alternatePhonenumber?: string | null;
+  address?: string | null;
+  commissionFeePercentage?: number | null;
+  createdAt: Date;
+}
+
 export interface Project {
   id: string;
   name: string;
   customerId: string | null;
+  interiorId?: string | null;
   totalAmount: number | null;
   paid: number | null;
   discount: number | null;
@@ -111,6 +123,11 @@ export interface Project {
     phonenumber: string | null;
     email: string | null;
     address: string | null;
+  } | null;
+  interior?: {
+    id: string;
+    name: string;
+    commissionFeePercentage?: number | null;
   } | null;
   creator: {
     username: string;
@@ -193,6 +210,7 @@ export interface Labour {
   id: string;
   name: string;
   paymentPerDay: number | any;
+  tuesdayPaymentAmount?: number | any;
   phonenumber: string | null;
   type: "WEEKLY" | "MONTHLY";
   createdAt: Date;
@@ -227,9 +245,13 @@ export interface LabourPayment {
   projectId?: string | null;
   amount: number;
   type: "INCOMING" | "OUTGOING";
+  paymentMode?: string | null;
   paymentDate: string;
   remarks?: string | null;
   createdAt: string;
+  labour?: {
+    name: string;
+  };
   project?: {
     name: string;
   };
@@ -239,6 +261,7 @@ export interface LabourPaymentData {
   labourId: string;
   projectId?: string | null;
   amount: number;
+  paymentMode?: string | null;
   paymentDate?: string;
   remarks?: string | null;
 }
@@ -265,6 +288,7 @@ export interface ProjectPayment {
   projectId: string;
   amount: number;
   type: "INCOMING" | "OUTGOING";
+  paymentMode?: string | null;
   paymentDate: string;
   remarks?: string | null;
   createdAt: string;
@@ -280,7 +304,7 @@ export interface Contractor {
   email?: string | null;
   address?: string | null;
   type: "WEEKLY" | "MONTHLY";
-  createdAt: string;
+  createdAt: string | Date | any;
 }
 
 export interface ContractorPayment {
@@ -289,6 +313,7 @@ export interface ContractorPayment {
   projectId?: string | null;
   amount: number;
   type: "INCOMING" | "OUTGOING";
+  paymentMode?: string | null;
   paymentDate: string;
   remarks?: string | null;
   createdAt: string;

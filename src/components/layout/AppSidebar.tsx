@@ -66,9 +66,9 @@ const mainItems = [
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Labour Attendance", url: "/labour-attendance", icon: ClipboardCheck },
   { title: "Material Logs", url: "/material-usage", icon: ClipboardList },
-  { title: "Regular Payments", url: "/payments", icon: Coins },
-  { title: "Contractor Payments", url: "/contractor-payments", icon: Briefcase },
-  { title: "Weekly Diary", url: "/weekly-diary", icon: BookOpen },
+  { title: "Project Payments", url: "/payments", icon: Coins },
+  { title: "Crew & Vendor Payouts", url: "/contractor-payments", icon: Briefcase },
+  { title: "Weekly Payment Diary", url: "/weekly-diary", icon: BookOpen },
 ];
 
 const mastersItems = [
@@ -98,6 +98,9 @@ export function AppSidebar() {
 
   const filterByAccess = <T extends { url: string }>(items: T[]) =>
     items.filter((i) => {
+      if ((i.url === "/payments" || i.url === "/contractor-payments") && user?.role !== "ADMIN") {
+        return false;
+      }
       const key = getAccessKeyForPath(i.url);
       return !key || hasAccess(key);
     });

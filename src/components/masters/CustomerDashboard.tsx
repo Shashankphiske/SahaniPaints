@@ -9,12 +9,25 @@ import type { ColumnDef } from "./DataTable";
 const fmt = (n: number) =>
   `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-const Stat = ({ title, value }: { title: string; value: string }) => (
-  <div className="border border-border p-4 rounded-xl bg-card shadow-sm-soft">
-    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
-    <p className="font-display font-bold text-2xl mt-1 text-foreground">{value}</p>
-  </div>
-);
+const Stat = ({ title, value, variant }: { title: string; value: string; variant?: "total" | "paid" | "due" }) => {
+  const styles = {
+    total: "bg-blue-50/80 dark:bg-blue-950/40 border-blue-200/60 dark:border-blue-800/40 text-blue-900 dark:text-blue-200",
+    paid: "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200",
+    due: "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40 text-rose-900 dark:text-rose-200",
+  };
+
+  return (
+    <div className={`border p-4 rounded-xl shadow-sm-soft ${variant ? styles[variant] : "border-border bg-card"}`}>
+      <p className={`text-xs font-bold uppercase tracking-wider ${
+        variant === "total" ? "text-blue-700 dark:text-blue-300" :
+        variant === "paid" ? "text-emerald-700 dark:text-emerald-300" :
+        variant === "due" ? "text-rose-700 dark:text-rose-300" :
+        "text-muted-foreground"
+      }`}>{title}</p>
+      <p className="font-display font-extrabold text-2xl mt-1">{value}</p>
+    </div>
+  );
+};
 
 export default function CustomerDashboard({
   customer,
@@ -147,9 +160,9 @@ export default function CustomerDashboard({
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Stat title="Total Projects" value={String(projects.length)} />
-            <Stat title="Total Value" value={fmt(stats.total)} />
-            <Stat title="Received" value={fmt(stats.received)} />
-            <Stat title="Due Balance" value={fmt(stats.due)} />
+            <Stat title="Total Value" value={fmt(stats.total)} variant="total" />
+            <Stat title="Received" value={fmt(stats.received)} variant="paid" />
+            <Stat title="Due Balance" value={fmt(stats.due)} variant="due" />
           </div>
 
           {/* Projects List */}

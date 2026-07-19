@@ -1,42 +1,32 @@
 import { useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
-import type { User, Project } from "../../types/master";
-import { X } from "lucide-react";
-import { MasterForm } from "./MasterForm";
+import type { Interior, Project } from "../../types/master";
+import { X, Award, Briefcase, IndianRupee, Percent } from "lucide-react";
 import { DataTable } from "./DataTable";
 import type { ColumnDef } from "./DataTable";
+import { Card, CardContent } from "../ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
 const fmt = (n: number) =>
   `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-const Stat = ({ title, value }: { title: string; value: string | number }) => (
-  <div className="border border-border p-4 rounded-xl bg-card shadow-sm-soft">
-    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
-    <p className="font-display font-bold text-2xl mt-1 text-foreground">{value}</p>
-  </div>
-);
-
 const STATUS_STYLES: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400",
-  ACTIVE: "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400",
-  COMPLETED: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400",
-  DEFAULTER: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400",
-  CANCELLED: "bg-slate-100 text-slate-600 dark:bg-slate-900/20 dark:text-slate-455",
+  PENDING: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
+  ACTIVE: "bg-blue-500/10 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+  COMPLETED: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
+  DEFAULTER: "bg-rose-500/10 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300",
 };
 
-export default function InteriorDashboard({
-  interior,
-  onBack,
-  handleSave,
-}: {
-  interior: User;
-  onBack: () => void;
-  handleSave: (data: any) => void;
-}) {
+interface InteriorDashboardProps {
+  interior: Interior;
+  onClose: () => void;
+}
+
+export default function InteriorDashboard({ interior, onClose }: InteriorDashboardProps) {
   const { data: projectData, isLoading } = useMasterData<Project>(
     "projects",
     true,
-    { creatorId: interior.id }
+    { interiorId: interior.id }
   );
 
   const projects = useMemo(
@@ -52,8 +42,11 @@ export default function InteriorDashboard({
     const completed = projects.filter((p) => p.status === "COMPLETED").length;
     const active = projects.filter((p) => p.status === "ACTIVE").length;
 
-    return { totalValue, completed, active };
-  }, [projects]);
+    const commissionRate = Number(interior.commissionFeePercentage) || 0;
+    const earnedCommission = (totalValue * commissionRate) / 100;
+
+    return { totalValue, completed, active, commissionRate, earnedCommission };
+  }, [projects, interior]);
 
   const columns = useMemo<ColumnDef<Project>[]>(
     () => [
@@ -72,8 +65,8 @@ export default function InteriorDashboard({
         header: "Status",
         render: (p) => (
           <span
-            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase ${
-              STATUS_STYLES[p.status] ?? "bg-slate-100 text-slate-600"
+            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+              STATUS_STYLES[p.status] ?? "bg-muted text-muted-foreground"
             }`}
           >
             {p.status}
@@ -82,7 +75,7 @@ export default function InteriorDashboard({
       },
       {
         key: "totalAmount",
-        header: "Amount",
+        header: "Value",
         render: (p) => fmt(Number(p.totalAmount) || 0),
       },
       {
@@ -90,7 +83,7 @@ export default function InteriorDashboard({
         header: "Date",
         render: (p) =>
           p.projectDate
-            ? new Date(p.projectDate).toLocaleDateString("en-IN", {
+            ? new Date(p.projectDate).toLocaleDateString("en-GB", {
                 day: "2-digit",
                 month: "short",
                 year: "numeric",
@@ -102,49 +95,86 @@ export default function InteriorDashboard({
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">{interior.username}</h1>
-          <p className="text-sm text-muted-foreground">{interior.email} • Interior Designer</p>
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/60">
+          <div>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary" />
+              {interior.name}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {interior.email || "No email"} • {interior.phonenumber || "No phone"}
+            </p>
+          </div>
+        </DialogHeader>
+
+        {/* Stats Cards Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-2">
+          <Card className="border border-border/80 shadow-sm bg-card">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Briefcase className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground">Projects</p>
+                <p className="text-lg font-bold text-foreground">{projects.length}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/80 shadow-sm bg-card">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <IndianRupee className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground">Contract Volume</p>
+                <p className="text-lg font-bold text-foreground">{fmt(stats.totalValue)}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/80 shadow-sm bg-card">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Percent className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground">Commission Rate</p>
+                <p className="text-lg font-bold text-foreground">{stats.commissionRate}%</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/80 shadow-sm bg-card">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                <IndianRupee className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-muted-foreground">Commission Earned</p>
+                <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmt(stats.earnedCommission)}</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <button
-          onClick={onBack}
-          className="p-2 rounded-full hover:bg-muted border border-border text-muted-foreground transition duration-200"
-        >
-          <X size={18} />
-        </button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat title="Total Projects" value={projects.length} />
-        <Stat title="Total Value" value={fmt(stats.totalValue)} />
-        <Stat title="Active" value={stats.active} />
-        <Stat title="Completed" value={stats.completed} />
-      </div>
-
-      {/* Projects list */}
-      <div className="bg-card rounded-xl border border-border p-5 shadow-sm-soft space-y-4">
-        <h2 className="text-lg font-bold font-display text-foreground">Projects Ledger</h2>
-        <DataTable
-          columns={columns}
-          data={projects}
-          isLoading={isLoading}
-        />
-      </div>
-
-      {/* Edit form */}
-      <div className="bg-card rounded-xl border border-border p-5 shadow-sm-soft space-y-4">
-        <h2 className="text-lg font-bold font-display text-foreground">Interior Designer Details</h2>
-        <MasterForm
-          resource="interiors"
-          initialData={interior}
-          editing={true}
-          onSubmit={handleSave}
-          onCancel={onBack}
-        />
-      </div>
-    </div>
+        {/* Assigned Projects Ledger */}
+        <div className="space-y-2 mt-2">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-primary" />
+            Assigned Projects Ledger
+          </h3>
+          <div className="border border-border/60 rounded-lg overflow-hidden">
+            <DataTable
+              columns={columns}
+              data={projects}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

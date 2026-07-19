@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useMasterData } from "../hooks/use-master-data";
+import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
 import type { Project, Customer, Product, LabourAttendance, LabourPayment } from "../types/master";
 import { Button } from "../components/ui/button";
@@ -32,7 +33,10 @@ import {
   ClipboardCheck,
   DollarSign,
   PackageCheck,
-  ChevronDown
+  ChevronDown,
+  LayoutGrid,
+  List,
+  SlidersHorizontal
 } from "lucide-react";
 import { generateQuotationPDF } from "../utils/quotationPdfGenerator";
 import TasksPage from "./TasksPage";
@@ -100,8 +104,10 @@ export default function ProjectsPage() {
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
 
   // Search & Filter listing state
+  const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [startDateFilter, setStartDateFilter] = useState("");
@@ -184,31 +190,44 @@ export default function ProjectsPage() {
   };
 
   return (
-    <>
-      <div className="space-y-6">
-        {/* Header Section */}
-        {!isCreating && !viewingProject && (
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 font-display flex items-center gap-2">
-                <FolderOpen className="h-7 w-7 text-primary" />
-                Paints Projects
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Manage painting contracts, materials, crew, and finances.
-              </p>
-            </div>
-            <Button onClick={() => setIsCreating(true)} className="font-bold flex items-center gap-1.5 shadow-sm">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Bar */}
+      {!isCreating && !viewingProject && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 font-display flex items-center gap-2">
+              <FolderOpen className="h-7 w-7 text-primary" />
+              Paints Projects
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              onClick={() => setShowFilters(!showFilters)}
+              className="font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {(searchQuery || statusFilter || startDateFilter || endDateFilter) ? (
+                <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
+                  !
+                </span>
+              ) : null}
+            </Button>
+
+            <Button onClick={() => setIsCreating(true)} className="font-medium flex items-center gap-1.5 shadow-sm">
               <Plus className="h-4.5 w-4.5" />
               Add Project
             </Button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* List View */}
-        {!isCreating && !viewingProject && (
-          <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md">
-            <CardHeader className="p-5 pb-3">
+      {/* List View */}
+      {!isCreating && !viewingProject && (
+        <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md">
+          {showFilters && (
+            <CardHeader className="p-5 pb-3 border-b border-border/60">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                 <div className="relative w-full md:w-80">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -241,7 +260,7 @@ export default function ProjectsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="flex h-10 w-full md:w-48 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex h-10 w-full md:w-44 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="">All Statuses</option>
                     <option value="PENDING">Pending</option>
@@ -254,7 +273,33 @@ export default function ProjectsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+          )}
+
+          <div className="px-5 pt-3 flex justify-end">
+            <div className="flex items-center border border-border/80 rounded-lg p-0.5 bg-muted/40">
+              <Button
+                type="button"
+                variant={viewMode === "cards" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs font-bold"
+                onClick={() => setViewMode("cards")}
+                title="Grid Cards View"
+              >
+                <LayoutGrid className="h-3.5 w-3.5 mr-1" /> Cards
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs font-bold"
+                onClick={() => setViewMode("table")}
+                title="Table List View"
+              >
+                <List className="h-3.5 w-3.5 mr-1" /> Table
+              </Button>
+            </div>
+          </div>
+            <CardContent className="p-4 pt-2">
               {projectsData.isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20">
                   <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
@@ -265,6 +310,103 @@ export default function ProjectsPage() {
                   <FolderOpen className="h-12 w-12 mx-auto text-slate-300" />
                   <h3 className="font-bold text-slate-700 dark:text-slate-300">No Projects Found</h3>
                   <p className="text-sm max-w-sm mx-auto">Create a new painting contract to start managing material selection and attendance ledger.</p>
+                </div>
+              ) : viewMode === "cards" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredProjects.map((project) => {
+                    const total = Number(project.totalAmount || project.agreedPrice || 0);
+                    const paid = Number(project.paid || 0);
+                    const due = Math.max(0, total - paid);
+
+                    return (
+                      <Card
+                        key={project.id}
+                        onClick={() => setViewingProject(project)}
+                        className="group relative overflow-hidden cursor-pointer border border-border/80 bg-card hover:bg-slate-50/60 dark:hover:bg-zinc-900/60 hover:border-primary/50 hover:shadow-md transition-all duration-200 flex flex-col justify-between rounded-xl"
+                      >
+                        <CardContent className="p-4 space-y-3 flex flex-col justify-between h-full">
+                          {/* Title & Status */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1 flex-1" title={project.name}>
+                                {project.name}
+                              </h4>
+                              <Badge
+                                variant="outline"
+                                className={`${STATUS_STYLES[project.status] || "bg-muted text-muted-foreground"} text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md border shrink-0`}
+                              >
+                                {project.status}
+                              </Badge>
+                            </div>
+
+                            {/* Customer & Date */}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground gap-2 pt-0.5">
+                              <span className="truncate text-[11px] font-medium" title={project.customer?.name}>
+                                👤 {project.customer?.name || "No Customer"}
+                              </span>
+                              <span className="text-[11px] font-mono shrink-0">
+                                📅 {formatDate(project.projectDate)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 3-Column Financial Pill with Simple Light Colors */}
+                          <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
+                            <div className="flex flex-col p-1.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
+                              <span className="text-[9px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate mt-0.5">
+                                ₹{fmt(total)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col p-1.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
+                              <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
+                              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate mt-0.5">
+                                ₹{fmt(paid)}
+                              </span>
+                            </div>
+                            <div className={`flex flex-col p-1.5 rounded-lg border ${
+                              due > 0
+                                ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
+                                : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
+                            }`}>
+                              <span className={`text-[9px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                              <span className={`text-xs font-bold truncate mt-0.5 ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
+                                ₹{fmt(due)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                            <span className="text-[11px] font-bold text-primary group-hover:underline">
+                              View Project →
+                            </span>
+
+                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                                onClick={() => downloadQuotationPDFHelper(project, products)}
+                                title="Download Quotation PDF"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteProject(project.id)}
+                                title="Delete Project"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -394,9 +536,8 @@ export default function ProjectsPage() {
           />
         )}
       </div>
-    </>
-  );
-}
+    );
+  }
 
 /* ──────────────────────────────────────────────────────── */
 /* ── CREATE PROJECT FORM COMPONENT ─────────────────────── */
@@ -579,7 +720,6 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
         </Button>
         <div>
           <h2 className="text-lg font-bold font-display text-slate-800 dark:text-slate-200">New Painting Project</h2>
-          <p className="text-xs text-muted-foreground">Add project details and select products.</p>
         </div>
       </div>
 
@@ -595,7 +735,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
               <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1 md:col-span-2">
                   <label className="text-xs font-medium text-muted-foreground block">
-                    Project / Site Name
+                    Project / Site Name <span className="text-red-500 font-bold ml-0.5">*</span>
                   </label>
                   <div className="relative">
                     <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -611,7 +751,7 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground block">Customer *</label>
+                    <label className="text-xs font-medium text-muted-foreground block">Customer <span className="text-red-500 font-bold ml-0.5">*</span></label>
                     <Button
                       type="button"
                       size="icon"
@@ -1092,6 +1232,7 @@ interface OverviewEditTabProps {
 }
 
 function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, onSearchCustomers }: OverviewEditTabProps) {
+  const { user } = useAuth();
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
   const [customerDisplay, setCustomerDisplay] = useState(
@@ -1158,7 +1299,49 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
 
   return (
     <div className="space-y-8">
-      {/* General Details */}
+      {/* 1. Customer Payment Section */}
+      {user?.role === "ADMIN" && (
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+          <CustomerPaymentsTab fullProject={fullProject} onSuccess={onSuccess} />
+        </div>
+      )}
+
+      {/* 2. Labour Payment Section */}
+      {user?.role === "ADMIN" && (
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+          <LabourPaymentsTab fullProject={fullProject} />
+        </div>
+      )}
+
+      {/* 3. Tasks Section */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks</h3>
+        </div>
+        <TasksPage projectId={fullProject.id} />
+      </div>
+
+      {/* 4. Labour Attendance Section */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+        <LabourCrewTab attendance={fullProject.attendance || []} />
+      </div>
+
+      {/* 5. Material Used Section */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+        <MaterialUsedTab
+          projectId={fullProject.id}
+          projectProducts={fullProject.projectProducts || []}
+          materialLogs={fullProject.materialLogs || []}
+          onSuccess={onSuccess}
+        />
+      </div>
+
+      {/* 6. Measurements Section */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+        <MeasurementsTab projectProducts={fullProject.projectProducts || []} />
+      </div>
+
+      {/* 7. General Details (others remaining) */}
       <form onSubmit={handleUpdate} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
           <div className="space-y-1 md:col-span-2">
@@ -1222,11 +1405,11 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
               <option value="COMPLETED">Completed</option>
               <option value="DEFAULTER">Defaulter</option>
             </select>
+          </div>
           <div className="flex justify-end pt-2 col-span-1 md:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
             <Button type="submit" disabled={saving} size="sm" className="font-bold">
               {saving ? "Saving Details..." : "Save Details"}
             </Button>
-          </div>
           </div>
         </div>
       </form>
@@ -1265,41 +1448,6 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
           />
         </DialogContent>
       </Dialog>
-
-
-      {/* Material Used Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <MaterialUsedTab
-          projectId={fullProject.id}
-          projectProducts={fullProject.projectProducts || []}
-          materialLogs={fullProject.materialLogs || []}
-          onSuccess={onSuccess}
-        />
-      </div>
-
-      {/* Measurements Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <MeasurementsTab projectProducts={fullProject.projectProducts || []} />
-      </div>
-
-      {/* Labour Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <LabourCrewTab attendance={fullProject.attendance || []} />
-      </div>
-
-      {/* Tasks Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks</h3>
-          <p className="text-xs text-muted-foreground">Manage and track project checklist items.</p>
-        </div>
-        <TasksPage projectId={fullProject.id} />
-      </div>
-
-      {/* Payments Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <PaymentsTab fullProject={fullProject} onSuccess={onSuccess} />
-      </div>
     </div>
   );
 }
@@ -1726,7 +1874,6 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, onSuccess }
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Material Usage</h3>
-          <p className="text-xs text-muted-foreground">Logged material paint quantities delivered on project site.</p>
         </div>
         <Button asChild size="sm" className="font-bold">
           <Link to="/material-usage">
@@ -1816,7 +1963,6 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Measurements</h3>
-        <p className="text-xs text-muted-foreground">View product application area sizes.</p>
       </div>
 
       <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm max-w-2xl">
@@ -1898,7 +2044,6 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Labour Attendance</h3>
-        <p className="text-xs text-muted-foreground">View crew attendance logs and wages.</p>
       </div>
 
       {aggregatedLabour.length === 0 ? (
@@ -1971,14 +2116,14 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
 }
 
 /* ──────────────────────────────────────────────────────── */
-/* ── TAB CONTENT: PAYMENTS (CUSTOMER & LABOUR) ──────────── */
+/* ── TAB CONTENT: CUSTOMER PAYMENTS ────────────────────── */
 /* ──────────────────────────────────────────────────────── */
-interface PaymentsTabProps {
+interface CustomerPaymentsTabProps {
   fullProject: any;
   onSuccess: () => void;
 }
 
-function PaymentsTab({ fullProject, onSuccess }: PaymentsTabProps) {
+function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProps) {
   const [paidVal, setPaidVal] = useState<number>(Number(fullProject.paid || 0));
   const [savingPaid, setSavingPaid] = useState(false);
 
@@ -2011,98 +2156,101 @@ function PaymentsTab({ fullProject, onSuccess }: PaymentsTabProps) {
   const dueBalance = Math.max(0, Number(fullProject.agreedPrice || fullProject.totalAmount) - Number(fullProject.paid || 0));
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Customer Payment Ledger */}
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm p-5 space-y-4">
-          <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-3">
-            <div className="flex items-center gap-2 text-primary">
-              <DollarSign className="h-5 w-5" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Customer Payments
-              </h3>
-            </div>
-            <p className="text-xs text-muted-foreground">Track and update customer payment receipts.</p>
-          </div>
-
-          <div className="space-y-3.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Agreed Contract Price:</span>
-              <span className="font-bold">₹{fmt(fullProject.agreedPrice || fullProject.totalAmount)}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500">Received Paid Amount:</span>
-              <div className="flex gap-2 items-center">
-                <div className="relative w-36">
-                  <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <Input
-                    type="number"
-                    min="0"
-                    value={paidVal}
-                    onChange={(e) => setPaidVal(Number(e.target.value))}
-                    className="h-8 pl-7 pr-2 font-bold py-0 text-right w-full"
-                  />
-                </div>
-                <Button
-                  onClick={handleSavePaidAmount}
-                  disabled={savingPaid}
-                  size="sm"
-                  className="h-8 font-bold text-xs"
-                >
-                  {savingPaid ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </div>
-            <div className="border-t border-slate-100 dark:border-zinc-900 pt-3 flex justify-between items-baseline">
-              <span className="font-bold text-slate-500">Due Outstanding Balance:</span>
-              <span className={`text-xl font-extrabold ${dueBalance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                ₹{fmt(dueBalance)}
-              </span>
-            </div>
-          </div>
-        </Card>
-
-        {/* Labour payments registry */}
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm p-5 space-y-4">
-          <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-3">
-            <div className="flex items-center gap-2 text-primary">
-              <Hammer className="h-5 w-5" />
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Labour Payments
-              </h3>
-            </div>
-            <p className="text-xs text-muted-foreground">Record payments paid to crew members.</p>
-          </div>
-
-          {(fullProject.labourPayments || []).length === 0 ? (
-            <p className="text-xs text-muted-foreground italic text-center py-6">No payments registered to labours for this site.</p>
-          ) : (
-            <div className="overflow-y-auto max-h-48">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="p-2">Worker Name</TableHead>
-                    <TableHead className="p-2">Date</TableHead>
-                    <TableHead className="p-2 text-right">Amount Paid</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(fullProject.labourPayments || []).map((p: any) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="p-2 font-semibold text-xs">{p.labour?.name}</TableCell>
-                      <TableCell className="p-2 text-[10px] text-muted-foreground">
-                        {formatDate(p.paymentDate)}
-                      </TableCell>
-                      <TableCell className="p-2 text-right text-xs font-bold">₹{fmt(p.amount)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </Card>
+    <Card className="border-0 shadow-none p-0 space-y-4 bg-transparent">
+      <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-2">
+        <div className="flex items-center gap-2 text-primary">
+          <DollarSign className="h-5 w-5" />
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Customer Payments
+          </h3>
+        </div>
       </div>
-    </div>
+
+      <div className="space-y-3.5 text-sm">
+        <div className="flex justify-between">
+          <span className="text-slate-500">Agreed Contract Price:</span>
+          <span className="font-bold">₹{fmt(fullProject.agreedPrice || fullProject.totalAmount)}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-slate-500">Received Paid Amount:</span>
+          <div className="flex gap-2 items-center">
+            <div className="relative w-36">
+              <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Input
+                type="number"
+                min="0"
+                value={paidVal}
+                onChange={(e) => setPaidVal(Number(e.target.value))}
+                className="h-8 pl-7 pr-2 font-bold py-0 text-right w-full"
+              />
+            </div>
+            <Button
+              onClick={handleSavePaidAmount}
+              disabled={savingPaid}
+              size="sm"
+              className="h-8 font-bold text-xs"
+            >
+              {savingPaid ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </div>
+        <div className="border-t border-slate-100 dark:border-zinc-900 pt-3 flex justify-between items-baseline">
+          <span className="font-bold text-slate-500">Due Outstanding Balance:</span>
+          <span className={`text-xl font-extrabold ${dueBalance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            ₹{fmt(dueBalance)}
+          </span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ──────────────────────────────────────────────────────── */
+/* ── TAB CONTENT: LABOUR PAYMENTS ───────────────────────── */
+/* ──────────────────────────────────────────────────────── */
+interface LabourPaymentsTabProps {
+  fullProject: any;
+}
+
+function LabourPaymentsTab({ fullProject }: LabourPaymentsTabProps) {
+  return (
+    <Card className="border-0 shadow-none p-0 space-y-4 bg-transparent">
+      <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-2">
+        <div className="flex items-center gap-2 text-primary">
+          <Hammer className="h-5 w-5" />
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Labour Payments
+          </h3>
+        </div>
+      </div>
+
+      {(fullProject.labourPayments || []).length === 0 ? (
+        <p className="text-xs text-muted-foreground italic text-center py-6">No payments registered to labours for this site.</p>
+      ) : (
+        <div className="overflow-y-auto max-h-48">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="p-2">Worker Name</TableHead>
+                <TableHead className="p-2">Date</TableHead>
+                <TableHead className="p-2 text-right">Amount Paid</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(fullProject.labourPayments || []).map((p: any) => (
+                <TableRow key={p.id}>
+                  <TableCell className="p-2 font-semibold text-xs">{p.labour?.name}</TableCell>
+                  <TableCell className="p-2 text-[10px] text-muted-foreground">
+                    {formatDate(p.paymentDate)}
+                  </TableCell>
+                  <TableCell className="p-2 text-right text-xs font-bold">₹{fmt(p.amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -2169,7 +2317,6 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Profit & Loss</h3>
-        <p className="text-xs text-muted-foreground">Compare agreed price with actual material costs and labour wages.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

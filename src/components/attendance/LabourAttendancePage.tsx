@@ -144,7 +144,44 @@ export default function LabourAttendancePage() {
     }
   };
 
-  // Queue Labour locally before saving
+  // Helper: Get occupied shifts for a labour on a specific date across all site attendance records
+  const getOccupiedShifts = (labourId: string, dateStr: string) => {
+    const startOfDay = new Date(dateStr);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(dateStr);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    let dayOccupied = false;
+    let nightOccupied = false;
+    let daySiteName = "";
+    let nightSiteName = "";
+
+    attendanceList.forEach((a) => {
+      if (a.labourId !== labourId) return;
+      const aDate = new Date(a.date);
+      if (isNaN(aDate.getTime()) || aDate < startOfDay || aDate > endOfDay) return;
+
+      const siteName = a.project?.name || "another site";
+      const shiftType = a.workDayType || (Number(a.workDayValue) > 1.0 ? "BOTH" : "DAY");
+
+      if (shiftType === "DAY") {
+        dayOccupied = true;
+        daySiteName = siteName;
+      } else if (shiftType === "NIGHT") {
+        nightOccupied = true;
+        nightSiteName = siteName;
+      } else if (shiftType === "BOTH" || shiftType === "DAY_AND_NIGHT") {
+        dayOccupied = true;
+        nightOccupied = true;
+        daySiteName = siteName;
+        nightSiteName = siteName;
+      }
+    });
+
+    return { dayOccupied, nightOccupied, daySiteName, nightSiteName };
+  };
+
+  // Queue Labour locally before saving with shift conflict validation
   const handleQueueLabour = (labour: Labour) => {
     if (!selectedProject) {
       toast({
@@ -166,33 +203,37 @@ export default function LabourAttendancePage() {
       return;
     }
 
-    // Check if duplicate on same date & project in existing attendance
-    const startOfDay = new Date(currentDate);
-    startOfDay.setHours(0,0,0,0);
-    const endOfDay = new Date(currentDate);
-    endOfDay.setHours(23,59,59,999);
+    const { dayOccupied, nightOccupied, daySiteName, nightSiteName } = getOccupiedShifts(labour.id, currentDate);
 
-    const isDuplicate = attendanceList.some((a) => {
-      const aDate = new Date(a.date);
-      return (
-        a.projectId === selectedProject.id &&
-        a.labourId === labour.id &&
-        aDate >= startOfDay &&
-        aDate <= endOfDay
-      );
-    });
-
-    if (isDuplicate) {
+    // If both DAY and NIGHT are occupied across sites
+    if (dayOccupied && nightOccupied) {
+      const siteInfo = daySiteName === nightSiteName ? `at ${daySiteName}` : `at ${daySiteName} (Day) & ${nightSiteName} (Night)`;
       toast({
-        title: "Labourer already present",
-        description: `"${labour.name}" is already marked present for today.`,
+        title: "Labourer fully occupied",
+        description: `"${labour.name}" is already marked for both Day and Night shifts ${siteInfo} on this date.`,
         variant: "destructive",
       });
       setLabourOpen(false);
       return;
     }
 
-    setTempSelectedLabours((prev) => [...prev, { labour, shift: "DAY" }]);
+    // Determine default shift based on availability
+    let initialShift: "DAY" | "NIGHT" | "BOTH" = "DAY";
+    if (dayOccupied) {
+      initialShift = "NIGHT";
+      toast({
+        title: "Assigned to Night Shift",
+        description: `"${labour.name}" is already working Day shift at ${daySiteName}. Automatically assigned to Night shift.`,
+      });
+    } else if (nightOccupied) {
+      initialShift = "DAY";
+      toast({
+        title: "Assigned to Day Shift",
+        description: `"${labour.name}" is already working Night shift at ${nightSiteName}. Automatically assigned to Day shift.`,
+      });
+    }
+
+    setTempSelectedLabours((prev) => [...prev, { labour, shift: initialShift }]);
     setLabourOpen(false);
     setLabourSearch("");
   };
@@ -201,9 +242,32 @@ export default function LabourAttendancePage() {
     setTempSelectedLabours((prev) => prev.filter((item) => item.labour.id !== labourId));
   };
 
-  const handleUpdateQueueShift = (labourId: string, shift: "DAY" | "NIGHT" | "BOTH") => {
+  const handleUpdateQueueShift = (labourId: string, requestedShift: "DAY" | "NIGHT" | "BOTH") => {
+    const targetItem = tempSelectedLabours.find((item) => item.labour.id === labourId);
+    if (!targetItem) return;
+
+    const { dayOccupied, nightOccupied, daySiteName, nightSiteName } = getOccupiedShifts(labourId, currentDate);
+
+    if ((requestedShift === "DAY" || requestedShift === "BOTH") && dayOccupied) {
+      toast({
+        title: "Day Shift Conflict",
+        description: `"${targetItem.labour.name}" is already working Day shift at ${daySiteName} on this date. You can only assign Night shift.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if ((requestedShift === "NIGHT" || requestedShift === "BOTH") && nightOccupied) {
+      toast({
+        title: "Night Shift Conflict",
+        description: `"${targetItem.labour.name}" is already working Night shift at ${nightSiteName} on this date. You can only assign Day shift.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setTempSelectedLabours((prev) =>
-      prev.map((item) => (item.labour.id === labourId ? { ...item, shift } : item))
+      prev.map((item) => (item.labour.id === labourId ? { ...item, shift: requestedShift } : item))
     );
   };
 
@@ -342,12 +406,20 @@ export default function LabourAttendancePage() {
         .map((a) => a.labourId)
     );
 
-    const labourersToCopy = pastRecords.filter((r) => !targetLabourIds.has(r.labourId));
+    const labourersToCopy = pastRecords.filter((r) => {
+      if (targetLabourIds.has(r.labourId)) return false;
+      const { dayOccupied, nightOccupied } = getOccupiedShifts(r.labourId, currentDate);
+      const shift = r.workDayType || "DAY";
+      if (shift === "DAY" && dayOccupied) return false;
+      if (shift === "NIGHT" && nightOccupied) return false;
+      if ((shift === "BOTH" || shift === "DAY_AND_NIGHT") && (dayOccupied || nightOccupied)) return false;
+      return true;
+    });
 
     if (labourersToCopy.length === 0) {
       toast({
-        title: "Names already copied",
-        description: "All labourers from that date are already marked present for the target date.",
+        title: "No eligible labourers to copy",
+        description: "All labourers from that date are either already marked on this site or occupied on another site for that shift.",
       });
       return;
     }
@@ -475,310 +547,338 @@ export default function LabourAttendancePage() {
     return { todaysGroups: todays, historyGroups: history };
   }, [groupedAttendance, todayDateStr]);
 
+  // Toggle cards state
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [showFilterCard, setShowFilterCard] = useState(false);
+
   return (
     <div className="space-y-8 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
       {/* Page Header */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-zinc-800/60 pb-4">
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 font-display flex items-center gap-2.5">
-          <ClipboardCheck className="h-8 w-8 text-primary shrink-0 animate-pulse" />
+          <ClipboardCheck className="h-8 w-8 text-primary shrink-0" />
           Labour Attendance Ledger
         </h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Register daily site attendance checklists, copy rosters from past dates, and inspect work crew histories.
-        </p>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showFilterCard ? "default" : "outline"}
+            onClick={() => setShowFilterCard(!showFilterCard)}
+            className="font-medium flex items-center gap-1.5 shadow-sm"
+          >
+            <Filter className="h-4 w-4" />
+            Filters
+            {(filterSearch || filterDate || filterProjectId) ? (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
+                !
+              </span>
+            ) : null}
+          </Button>
+
+          <Button
+            variant={showAddCard ? "default" : "outline"}
+            onClick={() => setShowAddCard(!showAddCard)}
+            className="font-medium flex items-center gap-1.5 shadow-sm"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Attendance
+          </Button>
+        </div>
       </div>
 
       {/* Main Form Entry Card */}
-      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md rounded-2xl overflow-visible">
-        <CardHeader className="p-6 border-b border-slate-100 dark:border-zinc-900 pb-4">
-          <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-            <Calendar className="h-4 w-4 text-primary" />
-            Mark Today's Attendance
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Mark individual workers as present or replicate from a past date.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 overflow-visible">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start overflow-visible">
-            {/* Left form entry columns */}
-            <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-visible">
-              {/* Date & Site selection */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Attendance Date
-                </label>
-                <Input
-                  type="date"
-                  value={currentDate}
-                  onChange={(e) => setCurrentDate(e.target.value)}
-                />
-              </div>
-
-              {/* Site Selection Input Box */}
-              <div ref={projectRef} className="space-y-1 relative overflow-visible">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Select Project Site *
-                </label>
-                <div className="relative">
-                  <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      {showAddCard && (
+        <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md rounded-2xl overflow-visible">
+          <CardHeader className="p-6 border-b border-slate-100 dark:border-zinc-900 pb-4">
+            <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <Calendar className="h-4 w-4 text-primary" />
+              Mark Today's Attendance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 overflow-visible">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start overflow-visible">
+              {/* Left form entry columns */}
+              <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-visible">
+                {/* Date & Site selection */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Attendance Date
+                  </label>
                   <Input
-                    className="pl-9 pr-8"
-                    placeholder="Type project name... (Enter to search server)"
-                    value={projectSearch}
-                    onFocus={() => setProjectOpen(true)}
-                    onChange={(e) => {
-                      setProjectSearch(e.target.value);
-                      setProjectOpen(true);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        searchProjectsFromServer(projectSearch);
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setProjectOpen(!projectOpen)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {projectOpen && (
-                  <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                    {projectSearching && (
-                      <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
-                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                        Searching server...
-                      </div>
-                    )}
-                    {filteredProjects.map((p) => (
-                      <div
-                        key={p.id}
-                        className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
-                        onMouseDown={() => {
-                          setSelectedProject(p);
-                          setProjectSearch(p.name);
-                          setProjectOpen(false);
-                        }}
-                      >
-                        {p.name}
-                      </div>
-                    ))}
-                    {!projectSearching && filteredProjects.length === 0 && (
-                      <div className="px-4 py-2 text-xs text-muted-foreground">
-                        No matches. Press Enter to search server.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Add Labour Dropdown Input Box */}
-              <div ref={labourRef} className="space-y-1 md:col-span-2 relative overflow-visible">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Add Present Labour *
-                </label>
-                <div className="relative">
-                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    className="pl-9 pr-8"
-                    placeholder="Search and select labour name..."
-                    value={labourSearch}
-                    disabled={!selectedProject}
-                    onFocus={() => setLabourOpen(true)}
-                    onChange={(e) => {
-                      setLabourSearch(e.target.value);
-                      setLabourOpen(true);
-                    }}
+                    type="date"
+                    value={currentDate}
+                    onChange={(e) => setCurrentDate(e.target.value)}
                   />
                 </div>
 
-                {labourOpen && selectedProject && (
-                  <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                    {filteredLabours.map((l) => (
-                      <div
-                        key={l.id}
-                        className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
-                        onMouseDown={() => handleQueueLabour(l)}
-                      >
-                        <span>{l.name}</span>
-                        <span className="text-[10px] text-muted-foreground font-mono font-bold">
-                          ₹{l.paymentPerDay}/day
-                        </span>
-                      </div>
-                    ))}
-                    {filteredLabours.length === 0 && (
-                      <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                        No matches found.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Queued Labours List and Submit Button */}
-              {tempSelectedLabours.length > 0 && (
-                <div className="md:col-span-2 space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
-                      Ready to Add ({tempSelectedLabours.length})
-                    </span>
-                    <Button
+                {/* Site Selection Input Box */}
+                <div ref={projectRef} className="space-y-1 relative overflow-visible">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Select Project Site *
+                  </label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      className="pl-9 pr-8"
+                      placeholder="Type project name... (Enter to search server)"
+                      value={projectSearch}
+                      onFocus={() => setProjectOpen(true)}
+                      onChange={(e) => {
+                        setProjectSearch(e.target.value);
+                        setProjectOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchProjectsFromServer(projectSearch);
+                        }
+                      }}
+                    />
+                    <button
                       type="button"
-                      size="sm"
-                      onClick={handleSaveAttendance}
-                      disabled={submittingAttendance}
-                      className="font-bold text-xs shadow-md"
+                      onClick={() => setProjectOpen(!projectOpen)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                     >
-                      {submittingAttendance ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                          Marking...
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                          Mark Attendance
-                        </>
-                      )}
-                    </Button>
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
                   </div>
-                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {tempSelectedLabours.map(({ labour: l, shift }) => {
-                      const baseRate = Number(l.paymentPerDay || 0);
-                      const multiplier = shift === "DAY" ? 1.0 : shift === "NIGHT" ? 0.5 : 1.5;
-                      const calculatedWage = baseRate * multiplier;
-                      
-                      return (
+
+                  {projectOpen && (
+                    <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                      {projectSearching && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                          Searching server...
+                        </div>
+                      )}
+                      {filteredProjects.map((p) => (
+                        <div
+                          key={p.id}
+                          className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
+                          onMouseDown={() => {
+                            setSelectedProject(p);
+                            setProjectSearch(p.name);
+                            setProjectOpen(false);
+                          }}
+                        >
+                          {p.name}
+                        </div>
+                      ))}
+                      {!projectSearching && filteredProjects.length === 0 && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground">
+                          No matches. Press Enter to search server.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add Labour Dropdown Input Box */}
+                <div ref={labourRef} className="space-y-1 md:col-span-2 relative overflow-visible">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Add Present Labour *
+                  </label>
+                  <div className="relative">
+                    <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      className="pl-9 pr-8"
+                      placeholder="Search and select labour name..."
+                      value={labourSearch}
+                      disabled={!selectedProject}
+                      onFocus={() => setLabourOpen(true)}
+                      onChange={(e) => {
+                        setLabourSearch(e.target.value);
+                        setLabourOpen(true);
+                      }}
+                    />
+                  </div>
+
+                  {labourOpen && selectedProject && (
+                    <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                      {filteredLabours.map((l) => (
                         <div
                           key={l.id}
-                          className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm"
+                          className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
+                          onMouseDown={() => handleQueueLabour(l)}
                         >
-                          <div className="space-y-0.5">
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
-                            <p className="text-[10px] text-slate-400 font-semibold">
-                              Base: ₹{baseRate}/day · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <select
-                              value={shift}
-                              onChange={(e) => handleUpdateQueueShift(l.id, e.target.value as any)}
-                              className="h-8 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-2 py-0.5 text-xs font-bold text-slate-700 dark:text-zinc-350 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                            >
-                              <option value="DAY">Day (1.0x)</option>
-                              <option value="NIGHT">Night (0.5x)</option>
-                              <option value="BOTH">Both (1.5x)</option>
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFromQueue(l.id)}
-                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-905 transition-colors"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
+                          <span>{l.name}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono font-bold">
+                            ₹{l.paymentPerDay}/day
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      ))}
+                      {filteredLabours.length === 0 && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground italic">
+                          No matches found.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Copy roster columns */}
-            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-200/50 dark:border-zinc-800/50 space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
-                  Copy Names From Date
-                </label>
-                <Input
-                  type="date"
-                  value={copyFromDate}
-                  onChange={(e) => setCopyFromDate(e.target.value)}
-                  disabled={!selectedProject}
-                />
+                {/* Queued Labours List and Submit Button */}
+                {tempSelectedLabours.length > 0 && (
+                  <div className="md:col-span-2 space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                        Ready to Add ({tempSelectedLabours.length})
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSaveAttendance}
+                        disabled={submittingAttendance}
+                        className="font-bold text-xs shadow-md"
+                      >
+                        {submittingAttendance ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                            Marking...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                            Mark Attendance
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {tempSelectedLabours.map(({ labour: l, shift }) => {
+                        const baseRate = Number(l.paymentPerDay || 0);
+                        const multiplier = shift === "DAY" ? 1.0 : shift === "NIGHT" ? 0.5 : 1.5;
+                        const calculatedWage = baseRate * multiplier;
+                        const { dayOccupied, nightOccupied, daySiteName, nightSiteName } = getOccupiedShifts(l.id, currentDate);
+                        
+                        return (
+                          <div
+                            key={l.id}
+                            className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm"
+                          >
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
+                              <p className="text-[10px] text-slate-400 font-semibold">
+                                Base: ₹{baseRate}/day · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <select
+                                value={shift}
+                                onChange={(e) => handleUpdateQueueShift(l.id, e.target.value as any)}
+                                className="h-8 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-2 py-0.5 text-xs font-bold text-slate-700 dark:text-zinc-350 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              >
+                                <option value="DAY" disabled={dayOccupied}>Day (1.0x) {dayOccupied ? `• At ${daySiteName}` : ""}</option>
+                                <option value="NIGHT" disabled={nightOccupied}>Night (0.5x) {nightOccupied ? `• At ${nightSiteName}` : ""}</option>
+                                <option value="BOTH" disabled={dayOccupied || nightOccupied}>Both (1.5x) {(dayOccupied || nightOccupied) ? "• Conflict" : ""}</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFromQueue(l.id)}
+                                className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-905 transition-colors"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full font-bold text-xs bg-white hover:bg-slate-100 h-9"
-                onClick={handleCopyNames}
-                disabled={!selectedProject || !copyFromDate}
-              >
-                <Copy className="h-4 w-4 mr-1.5" />
-                Copy Attendance List
-              </Button>
+              {/* Copy roster columns */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-200/50 dark:border-zinc-800/50 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
+                    Copy Names From Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={copyFromDate}
+                    onChange={(e) => setCopyFromDate(e.target.value)}
+                    disabled={!selectedProject}
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full font-bold text-xs bg-white hover:bg-slate-100 h-9"
+                  onClick={handleCopyNames}
+                  disabled={!selectedProject || !copyFromDate}
+                >
+                  <Copy className="h-4 w-4 mr-1.5" />
+                  Copy Attendance List
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Global Filter Cards */}
-      <Card className="border border-slate-200/60 dark:border-zinc-800/60 shadow-sm rounded-xl">
-        <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-end">
-          <div className="flex-1 space-y-1.5">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-              <Search className="h-3 w-3" />
-              Search Labour
-            </span>
-            <Input
-              placeholder="Search present workers by name..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-            />
-          </div>
+      {showFilterCard && (
+        <Card className="border border-slate-200/60 dark:border-zinc-800/60 shadow-sm rounded-xl">
+          <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                <Search className="h-3 w-3" />
+                Search Labour
+              </span>
+              <Input
+                placeholder="Search present workers by name..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+              />
+            </div>
 
-          <div className="w-full md:w-56 space-y-1.5">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-              <Calendar className="h-3 w-3" />
-              Filter by Date
-            </span>
-            <Input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-            />
-          </div>
+            <div className="w-full md:w-56 space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                <Calendar className="h-3 w-3" />
+                Filter by Date
+              </span>
+              <Input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              />
+            </div>
 
-          <div className="w-full md:w-64 space-y-1.5">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-              <Building className="h-3 w-3" />
-              Filter by Site
-            </span>
-            <SearchableSelect
-              value={filterProjectId}
-              displayValue={filterProjectDisplay}
-              options={(projectsData ?? [])
-                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
-                .slice(0, 10)
-                .map((p) => ({ id: p.id, label: p.name }))}
-              placeholder="All Project Sites"
-              allLabel="All Project Sites"
-              onSearchChange={setFilterProjectDisplay}
-              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
-              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
-            />
-          </div>
+            <div className="w-full md:w-64 space-y-1.5">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                <Building className="h-3 w-3" />
+                Filter by Site
+              </span>
+              <SearchableSelect
+                value={filterProjectId}
+                displayValue={filterProjectDisplay}
+                options={(projectsData ?? [])
+                  .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="All Project Sites"
+                allLabel="All Project Sites"
+                onSearchChange={setFilterProjectDisplay}
+                onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+                onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+              />
+            </div>
 
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setFilterSearch("");
-              setFilterDate("");
-              setFilterProjectId("");
-            }}
-            className="text-xs font-bold h-10 px-4 hover:bg-slate-100"
-          >
-            Clear Filters
-          </Button>
-        </CardContent>
-      </Card>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setFilterSearch("");
+                setFilterDate("");
+                setFilterProjectId("");
+              }}
+              className="text-xs font-bold h-10 px-4 hover:bg-slate-100"
+            >
+              Clear Filters
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Grouped Attendance Cards lists */}
       <div className="space-y-6">

@@ -48,6 +48,12 @@ const Protected = ({ children }: { children: React.ReactNode }) => (
   </ProtectedRoute>
 );
 
+const AdminProtected = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute roles={["ADMIN"]}>
+    <DashboardLayout>{children}</DashboardLayout>
+  </ProtectedRoute>
+);
+
 function NotFound() {
   return <Navigate to="/" replace />;
 }
@@ -82,8 +88,8 @@ export default function App() {
               <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
               <Route path="/labour-attendance" element={<Protected><LabourAttendancePage /></Protected>} />
               <Route path="/material-usage" element={<Protected><MaterialLogsPage /></Protected>} />
-              <Route path="/payments" element={<Protected><PaymentsPage /></Protected>} />
-              <Route path="/contractor-payments" element={<Protected><ContractorPaymentsPage /></Protected>} />
+              <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />
+              <Route path="/contractor-payments" element={<AdminProtected><ContractorPaymentsPage /></AdminProtected>} />
               <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
               <Route
                 path="/settings"

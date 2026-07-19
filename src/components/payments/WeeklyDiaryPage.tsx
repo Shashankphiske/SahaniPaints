@@ -19,9 +19,13 @@ import {
   History,
   ChevronDown,
   ChevronUp,
+  ArrowUpRight,
+  Filter,
 } from "lucide-react";
 import type { Labour, Contractor, LabourPayment, ContractorPayment } from "@/types/master";
 import { supabase } from "@/lib/realtime";
+import LabourDashboard from "@/components/masters/LabourDashboard";
+import ContractorDashboard from "@/components/masters/ContractorDashboard";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -68,6 +72,7 @@ interface LabourRow {
   type: "WEEKLY" | "MONTHLY";
   phonenumber: string | null;
   amount: string;
+  received?: boolean;
 }
 
 interface ContractorRow {
@@ -76,6 +81,7 @@ interface ContractorRow {
   type: "WEEKLY" | "MONTHLY";
   phonenumber?: string | null;
   amount: string;
+  received?: boolean;
 }
 
 // ─── Diary record types (for history view) ──────────────────────────────────
@@ -115,44 +121,87 @@ export default function WeeklyDiaryPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const [showOnlyWeekly, setShowOnlyWeekly] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<"WEEKLY" | "MONTHLY" | "BOTH">("BOTH");
 
   // ── History / saved records ──────────────────────────────────────────────
   const [diaryHistory, setDiaryHistory] = useState<DiaryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
-  // ── Populate entry rows from master lists ────────────────────────────────
+  // ── Populate entry rows from master lists (preserving user edits) ────────────────
   useEffect(() => {
     setSubmitted(false);
 
-    const filteredLabours = showOnlyWeekly
+    const filteredLabours = typeFilter === "WEEKLY"
       ? allLabours.filter((l) => l.type === "WEEKLY")
+      : typeFilter === "MONTHLY"
+      ? allLabours.filter((l) => l.type === "MONTHLY")
       : allLabours;
-    const filteredContractors = showOnlyWeekly
+
+    const filteredContractors = typeFilter === "WEEKLY"
       ? allContractors.filter((c) => c.type === "WEEKLY")
+      : typeFilter === "MONTHLY"
+      ? allContractors.filter((c) => c.type === "MONTHLY")
       : allContractors;
 
-    setLabourRows(
-      filteredLabours.map((l) => ({
-        labourId: l.id,
-        name: l.name,
-        paymentPerDay: Number(l.paymentPerDay),
-        type: l.type,
-        phonenumber: l.phonenumber,
-        amount: String(Number(l.paymentPerDay)),
-      }))
-    );
-    setContractorRows(
-      filteredContractors.map((c) => ({
-        contractorId: c.id,
-        name: c.name,
-        type: c.type,
-        phonenumber: c.phonenumber,
-        amount: "",
-      }))
-    );
-  }, [allLabours, allContractors, showOnlyWeekly]);
+    setLabourRows((prevRows) => {
+      const prevMap = new Map(prevRows.map((r) => [r.labourId, r]));
+
+      return filteredLabours.map((l) => {
+        const tuesdayVal = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0
+          ? Number(l.tuesdayPaymentAmount)
+          : l.paymentPerDay != null && Number(l.paymentPerDay) > 0
+          ? Number(l.paymentPerDay)
+          : 0;
+
+        const existing = prevMap.get(l.id);
+        if (existing) {
+          return {
+            ...existing,
+            name: l.name,
+            paymentPerDay: tuesdayVal,
+            type: l.type,
+            phonenumber: l.phonenumber,
+          };
+        }
+
+        return {
+          labourId: l.id,
+          name: l.name,
+          paymentPerDay: tuesdayVal,
+          type: l.type,
+          phonenumber: l.phonenumber,
+          amount: String(tuesdayVal),
+          received: false,
+        };
+      });
+    });
+
+    setContractorRows((prevRows) => {
+      const prevMap = new Map(prevRows.map((r) => [r.contractorId, r]));
+
+      return filteredContractors.map((c) => {
+        const existing = prevMap.get(c.id);
+        if (existing) {
+          return {
+            ...existing,
+            name: c.name,
+            type: c.type,
+            phonenumber: c.phonenumber,
+          };
+        }
+
+        return {
+          contractorId: c.id,
+          name: c.name,
+          type: c.type,
+          phonenumber: c.phonenumber,
+          amount: "",
+          received: false,
+        };
+      });
+    });
+  }, [allLabours, allContractors, typeFilter]);
 
   // ── Fetch saved diary history ────────────────────────────────────────────
   // KEY: uses Promise.allSettled so a 404 on contractor-payments (empty table)
@@ -267,13 +316,28 @@ export default function WeeklyDiaryPage() {
       setLabourRows(
         allLabours.filter((l) => prevLabourIds.has(l.id)).map((l) => {
           const prev = filteredLP.find((p) => p.labourId === l.id);
-          return { labourId: l.id, name: l.name, paymentPerDay: Number(l.paymentPerDay), type: l.type, phonenumber: l.phonenumber, amount: prev ? String(Number(prev.amount)) : String(Number(l.paymentPerDay)) };
+          return {
+            labourId: l.id,
+            name: l.name,
+            paymentPerDay: Number(l.paymentPerDay),
+            type: l.type,
+            phonenumber: l.phonenumber,
+            amount: prev ? String(Number(prev.amount)) : String(Number(l.paymentPerDay)),
+            received: false,
+          };
         })
       );
       setContractorRows(
         allContractors.filter((c) => prevContractorIds.has(c.id)).map((c) => {
           const prev = filteredCP.find((p) => p.contractorId === c.id);
-          return { contractorId: c.id, name: c.name, type: c.type, phonenumber: c.phonenumber, amount: prev ? String(Number(prev.amount)) : "" };
+          return {
+            contractorId: c.id,
+            name: c.name,
+            type: c.type,
+            phonenumber: c.phonenumber,
+            amount: prev ? String(Number(prev.amount)) : "",
+            received: false,
+          };
         })
       );
 
@@ -285,26 +349,98 @@ export default function WeeklyDiaryPage() {
     }
   };
 
+  const availableLaboursToAdd = useMemo(() => {
+    const currentIds = new Set(labourRows.map((r) => r.labourId));
+    return allLabours.filter((l) => !currentIds.has(l.id));
+  }, [allLabours, labourRows]);
+
+  const availableContractorsToAdd = useMemo(() => {
+    const currentIds = new Set(contractorRows.map((r) => r.contractorId));
+    return allContractors.filter((c) => !currentIds.has(c.id));
+  }, [allContractors, contractorRows]);
+
+  const addLabourRow = (labourId: string) => {
+    const l = allLabours.find((x) => x.id === labourId);
+    if (!l) return;
+    const tuesdayVal = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0
+      ? Number(l.tuesdayPaymentAmount)
+      : l.paymentPerDay != null && Number(l.paymentPerDay) > 0
+      ? Number(l.paymentPerDay)
+      : 0;
+
+    setLabourRows((prev) => [
+      ...prev,
+      {
+        labourId: l.id,
+        name: l.name,
+        paymentPerDay: tuesdayVal,
+        type: l.type,
+        phonenumber: l.phonenumber,
+        amount: String(tuesdayVal),
+        received: false,
+      },
+    ]);
+  };
+
+  const addContractorRow = (contractorId: string) => {
+    const c = allContractors.find((x) => x.id === contractorId);
+    if (!c) return;
+
+    setContractorRows((prev) => [
+      ...prev,
+      {
+        contractorId: c.id,
+        name: c.name,
+        type: c.type,
+        phonenumber: c.phonenumber,
+        amount: "",
+        received: false,
+      },
+    ]);
+  };
+
   const removeLabourRow     = (id: string) => setLabourRows((p) => p.filter((r) => r.labourId !== id));
   const removeContractorRow = (id: string) => setContractorRows((p) => p.filter((r) => r.contractorId !== id));
   const updateLabourAmount     = (id: string, v: string) => setLabourRows((p) => p.map((r) => r.labourId === id ? { ...r, amount: v } : r));
   const updateContractorAmount = (id: string, v: string) => setContractorRows((p) => p.map((r) => r.contractorId === id ? { ...r, amount: v } : r));
+  const toggleLabourReceived     = (id: string) => setLabourRows((p) => p.map((r) => r.labourId === id ? { ...r, received: !r.received } : r));
+  const toggleContractorReceived = (id: string) => setContractorRows((p) => p.map((r) => r.contractorId === id ? { ...r, received: !r.received } : r));
 
   // ── Submit all ───────────────────────────────────────────────────────────
   const handleSubmitAll = async () => {
-    const invalid = [...labourRows, ...contractorRows].find(
+    const activeLabourRows = labourRows.filter((r) => Boolean(r.received));
+    const activeContractorRows = contractorRows.filter((r) => Boolean(r.received));
+
+    const invalid = [...activeLabourRows, ...activeContractorRows].find(
       (r) => !r.amount || isNaN(Number(r.amount)) || Number(r.amount) <= 0
     );
     if (invalid) {
-      toast({ title: "Invalid amounts", description: "Please enter a valid positive amount for every row.", variant: "destructive" });
+      toast({ title: "Invalid amounts", description: "Please enter a valid positive amount for all received rows.", variant: "destructive" });
+      return;
+    }
+
+    if (activeLabourRows.length === 0 && activeContractorRows.length === 0) {
+      toast({ title: "No received payments", description: "No payment rows are marked as Received.", variant: "destructive" });
       return;
     }
 
     setSubmitting(true);
     try {
       const paymentDateISO = new Date(selectedDate).toISOString();
-      const labourPayloads = labourRows.map((r) => ({ labourId: r.labourId, amount: Number(r.amount), type: "OUTGOING", paymentDate: paymentDateISO, remarks: `Weekly diary — ${selectedDate}` }));
-      const contractorPayloads = contractorRows.map((r) => ({ contractorId: r.contractorId, amount: Number(r.amount), type: "OUTGOING", paymentDate: paymentDateISO, remarks: `Weekly diary — ${selectedDate}` }));
+      const labourPayloads = activeLabourRows.map((r) => ({
+        labourId: r.labourId,
+        amount: Number(r.amount),
+        type: "OUTGOING",
+        paymentDate: paymentDateISO,
+        remarks: `Weekly diary — ${selectedDate}`,
+      }));
+      const contractorPayloads = activeContractorRows.map((r) => ({
+        contractorId: r.contractorId,
+        amount: Number(r.amount),
+        type: "OUTGOING",
+        paymentDate: paymentDateISO,
+        remarks: `Weekly diary — ${selectedDate}`,
+      }));
 
       await Promise.all([
         labourPayloads.length > 0 ? apiRequest.bulkCreate("labour-payments", labourPayloads) : Promise.resolve(),
@@ -313,6 +449,7 @@ export default function WeeklyDiaryPage() {
 
       toast({ title: "Diary submitted!", description: `Created ${labourPayloads.length} labour + ${contractorPayloads.length} contractor records for ${selectedDate}.` });
       setSubmitted(true);
+      fetchHistory();
     } catch (err: any) {
       toast({ title: "Submission failed", description: err.message, variant: "destructive" });
     } finally {
@@ -320,9 +457,43 @@ export default function WeeklyDiaryPage() {
     }
   };
 
-  const totalLabour     = labourRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const totalContractor = contractorRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const [selectedLabour, setSelectedLabour] = useState<Labour | null>(null);
+  const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null);
+
+  const totalLabour     = labourRows.filter((r) => Boolean(r.received)).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const totalContractor = contractorRows.filter((r) => Boolean(r.received)).reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const grandTotal      = totalLabour + totalContractor;
+
+  if (selectedLabour) {
+    return (
+      <LabourDashboard
+        labour={selectedLabour}
+        onBack={() => setSelectedLabour(null)}
+        handleSave={async (formData) => {
+          await apiRequest.update("labours", selectedLabour.id, formData);
+          setSelectedLabour((prev) => (prev ? { ...prev, ...formData } : null));
+          toast({ title: "Labour updated successfully" });
+        }}
+      />
+    );
+  }
+
+  if (selectedContractor) {
+    return (
+      <ContractorDashboard
+        contractor={selectedContractor}
+        onBack={() => setSelectedContractor(null)}
+        handleSave={async (formData) => {
+          await apiRequest.update("contractors", selectedContractor.id, formData);
+          setSelectedContractor((prev) => (prev ? { ...prev, ...formData } : null));
+          toast({ title: "Contractor updated successfully" });
+        }}
+      />
+    );
+  }
+
+  // Filter toggle state
+  const [showFilters, setShowFilters] = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -337,21 +508,27 @@ export default function WeeklyDiaryPage() {
               Weekly Payment Diary
             </h2>
           </div>
-          <p className="text-sm text-slate-500 font-medium mt-1">
-            Batch-log Tuesday wage payments for all weekly labours and contractors.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="font-medium text-xs gap-1.5"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filters
+          </Button>
           <div className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2">
             <CalendarDays className="h-4 w-4 text-primary shrink-0" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => { setSelectedDate(e.target.value); setSubmitted(false); }}
-              className="bg-transparent text-sm font-semibold text-slate-800 dark:text-slate-100 focus:outline-none"
+              className="bg-transparent text-sm font-medium text-slate-800 dark:text-slate-100 focus:outline-none"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={handleCopyPrevious} disabled={copying} className="font-bold text-xs gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleCopyPrevious} disabled={copying} className="font-medium text-xs gap-1.5">
             {copying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
             Copy from Last Tuesday
           </Button>
@@ -359,17 +536,31 @@ export default function WeeklyDiaryPage() {
       </div>
 
       {/* ── TYPE FILTER ────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Show:</span>
-        <div className="flex items-center gap-2 bg-slate-100 dark:bg-zinc-900 border dark:border-zinc-800 p-1 rounded-xl w-fit">
-          {[{ label: "Weekly Only", val: true }, { label: "All Types", val: false }].map(({ label, val }) => (
-            <button key={label} type="button" onClick={() => setShowOnlyWeekly(val)}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${showOnlyWeekly === val ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}>
-              {label}
-            </button>
-          ))}
+      {showFilters && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Show:</span>
+          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-900 border dark:border-zinc-800 p-1 rounded-xl w-fit">
+            {[
+              { label: "Weekly", val: "WEEKLY" },
+              { label: "Monthly", val: "MONTHLY" },
+              { label: "Both", val: "BOTH" },
+            ].map(({ label, val }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setTypeFilter(val as "WEEKLY" | "MONTHLY" | "BOTH")}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  typeFilter === val
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── SUCCESS BANNER ─────────────────────────────────────────────── */}
       {submitted && (
@@ -384,36 +575,87 @@ export default function WeeklyDiaryPage() {
 
       {/* ── LABOUR SECTION ─────────────────────────────────────────────── */}
       <Card className="border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-        <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10 flex flex-row items-center gap-2 py-3">
-          <Users className="h-4 w-4 text-amber-500" />
-          <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
-            Labour Wages — {labourRows.length} workers
-          </CardTitle>
+        <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-amber-500" />
+            <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
+              Labour Wages — {labourRows.length} workers
+            </CardTitle>
+          </div>
+          {availableLaboursToAdd.length > 0 && (
+            <div className="w-full sm:w-64">
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) addLabourRow(e.target.value);
+                }}
+                className="h-8 px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary w-full shadow-sm"
+              >
+                <option value="" disabled>+ Search & add labour...</option>
+                {availableLaboursToAdd.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                ))}
+              </select>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {labourRows.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 px-5 text-xs text-muted-foreground italic font-medium">
-              <AlertCircle className="h-4 w-4" />No {showOnlyWeekly ? "weekly " : ""}labour records found.
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-8 px-5">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground italic font-medium">
+                <AlertCircle className="h-4 w-4" />No {typeFilter !== "BOTH" ? typeFilter.toLowerCase() + " " : ""}labour records in list.
+              </div>
+              {availableLaboursToAdd.length > 0 && (
+                <div className="w-full sm:w-64">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) addLabourRow(e.target.value);
+                    }}
+                    className="h-8 px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary w-full shadow-sm"
+                  >
+                    <option value="" disabled>+ Search & add labour...</option>
+                    {availableLaboursToAdd.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-zinc-800">
-                    {["Name", "Type", "Phone", "Daily Rate", "Amount (₹)", ""].map((h) => (
+                    {["Name", "Type", "Phone", "Daily Rate", "Amount (₹)", "Payment Received?", ""].map((h) => (
                       <th key={h} className="text-left px-4 py-2.5 text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {labourRows.map((row) => (
-                    <tr key={row.labourId} className="border-b border-slate-50 dark:border-zinc-900 hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                    <tr key={row.labourId} className={`border-b border-slate-50 dark:border-zinc-900 transition-colors ${!row.received ? "opacity-60 bg-slate-50/40 dark:bg-zinc-900/20" : "hover:bg-slate-50/50 dark:hover:bg-zinc-900/30"}`}>
                       <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                       <td className="px-4 py-2.5">{typeBadge(row.type)}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 font-medium">{row.phonenumber || "—"}</td>
                       <td className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400">{formatPrice(row.paymentPerDay)}/day</td>
                       <td className="px-4 py-2.5">
                         <Input type="number" min="1" value={row.amount} onChange={(e) => updateLabourAmount(row.labourId, e.target.value)} className="h-8 text-xs font-semibold w-32" placeholder="0.00" />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleLabourReceived(row.labourId)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            row.received
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 shadow-sm"
+                              : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-slate-400 border border-slate-200 dark:border-zinc-700"
+                          }`}
+                          title={row.received ? "Click to mark payment as not received" : "Click to mark payment as received"}
+                        >
+                          <CheckCircle2 className={`h-3.5 w-3.5 ${row.received ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 opacity-60"}`} />
+                          <span>{row.received ? "Received" : "Not Received"}</span>
+                        </button>
                       </td>
                       <td className="px-2 py-2.5 text-right">
                         <button type="button" onClick={() => removeLabourRow(row.labourId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
@@ -426,9 +668,9 @@ export default function WeeklyDiaryPage() {
                 {labourRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50/80 dark:bg-zinc-900/30">
-                      <td colSpan={4} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Labour Subtotal</td>
+                      <td colSpan={4} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Labour Subtotal (Received)</td>
                       <td className="px-4 py-2.5 text-sm font-extrabold text-amber-600 dark:text-amber-400">{formatPrice(totalLabour)}</td>
-                      <td />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 )}
@@ -440,35 +682,86 @@ export default function WeeklyDiaryPage() {
 
       {/* ── CONTRACTOR SECTION ─────────────────────────────────────────── */}
       <Card className="border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-        <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10 flex flex-row items-center gap-2 py-3">
-          <Briefcase className="h-4 w-4 text-indigo-500" />
-          <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
-            Contractor Payouts — {contractorRows.length} contractors
-          </CardTitle>
+        <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-indigo-500" />
+            <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
+              Contractor Payouts — {contractorRows.length} contractors
+            </CardTitle>
+          </div>
+          {availableContractorsToAdd.length > 0 && (
+            <div className="w-full sm:w-64">
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) addContractorRow(e.target.value);
+                }}
+                className="h-8 px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary w-full shadow-sm"
+              >
+                <option value="" disabled>+ Search & add contractor...</option>
+                {availableContractorsToAdd.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                ))}
+              </select>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {contractorRows.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 px-5 text-xs text-muted-foreground italic font-medium">
-              <AlertCircle className="h-4 w-4" />No {showOnlyWeekly ? "weekly " : ""}contractor records found.
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-8 px-5">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground italic font-medium">
+                <AlertCircle className="h-4 w-4" />No {typeFilter !== "BOTH" ? typeFilter.toLowerCase() + " " : ""}contractor records in list.
+              </div>
+              {availableContractorsToAdd.length > 0 && (
+                <div className="w-full sm:w-64">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) addContractorRow(e.target.value);
+                    }}
+                    className="h-8 px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary w-full shadow-sm"
+                  >
+                    <option value="" disabled>+ Search & add contractor...</option>
+                    {availableContractorsToAdd.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-zinc-800">
-                    {["Name", "Type", "Phone", "Amount (₹)", ""].map((h) => (
+                    {["Name", "Type", "Phone", "Amount (₹)", "Payment Received?", ""].map((h) => (
                       <th key={h} className="text-left px-4 py-2.5 text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {contractorRows.map((row) => (
-                    <tr key={row.contractorId} className="border-b border-slate-50 dark:border-zinc-900 hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                    <tr key={row.contractorId} className={`border-b border-slate-50 dark:border-zinc-900 transition-colors ${!row.received ? "opacity-60 bg-slate-50/40 dark:bg-zinc-900/20" : "hover:bg-slate-50/50 dark:hover:bg-zinc-900/30"}`}>
                       <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                       <td className="px-4 py-2.5">{typeBadge(row.type)}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 font-medium">{row.phonenumber || "—"}</td>
                       <td className="px-4 py-2.5">
                         <Input type="number" min="1" value={row.amount} onChange={(e) => updateContractorAmount(row.contractorId, e.target.value)} className="h-8 text-xs font-semibold w-32" placeholder="Enter amount" />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleContractorReceived(row.contractorId)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                            row.received
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 shadow-sm"
+                              : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-slate-400 border border-slate-200 dark:border-zinc-700"
+                          }`}
+                          title={row.received ? "Click to mark payment as not received" : "Click to mark payment as received"}
+                        >
+                          <CheckCircle2 className={`h-3.5 w-3.5 ${row.received ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 opacity-60"}`} />
+                          <span>{row.received ? "Received" : "Not Received"}</span>
+                        </button>
                       </td>
                       <td className="px-2 py-2.5 text-right">
                         <button type="button" onClick={() => removeContractorRow(row.contractorId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
@@ -481,9 +774,9 @@ export default function WeeklyDiaryPage() {
                 {contractorRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50/80 dark:bg-zinc-900/30">
-                      <td colSpan={3} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Contractor Subtotal</td>
+                      <td colSpan={3} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Contractor Subtotal (Received)</td>
                       <td className="px-4 py-2.5 text-sm font-extrabold text-indigo-600 dark:text-indigo-400">{formatPrice(totalContractor)}</td>
-                      <td />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 )}
@@ -589,7 +882,28 @@ export default function WeeklyDiaryPage() {
                                 const ltype = (labour?.type || "WEEKLY") as "WEEKLY" | "MONTHLY";
                                 return (
                                 <tr key={p.id} className="border-b border-slate-50 dark:border-zinc-900/50">
-                                  <td className="px-5 py-2 font-semibold text-slate-800 dark:text-slate-200 text-sm">{name}</td>
+                                  <td className="px-5 py-2 font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedLabour(
+                                          labour || {
+                                            id: p.labourId,
+                                            name: name,
+                                            paymentPerDay: 0,
+                                            phonenumber: null,
+                                            type: ltype,
+                                            createdAt: new Date(),
+                                          }
+                                        );
+                                      }}
+                                      className="font-bold text-primary hover:underline hover:text-primary/80 transition-colors text-left flex items-center gap-1 group cursor-pointer text-sm"
+                                      title={`Click to open ${name}'s dashboard`}
+                                    >
+                                      <span>{name}</span>
+                                      <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+                                    </button>
+                                  </td>
                                   <td className="px-4 py-2">{typeBadge(ltype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-amber-600 dark:text-amber-400 text-sm">{formatPrice(Number(p.amount))}</td>
                                 </tr>
@@ -628,7 +942,29 @@ export default function WeeklyDiaryPage() {
                                 const ctype = (contractor?.type || "WEEKLY") as "WEEKLY" | "MONTHLY";
                                 return (
                                 <tr key={p.id} className="border-b border-slate-50 dark:border-zinc-900/50">
-                                  <td className="px-5 py-2 font-semibold text-slate-800 dark:text-slate-200 text-sm">{name}</td>
+                                  <td className="px-5 py-2 font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedContractor(
+                                          contractor || {
+                                            id: p.contractorId,
+                                            name: name,
+                                            phonenumber: null,
+                                            email: null,
+                                            address: null,
+                                            type: ctype,
+                                            createdAt: new Date().toISOString(),
+                                          }
+                                        );
+                                      }}
+                                      className="font-bold text-primary hover:underline hover:text-primary/80 transition-colors text-left flex items-center gap-1 group cursor-pointer text-sm"
+                                      title={`Click to open ${name}'s dashboard`}
+                                    >
+                                      <span>{name}</span>
+                                      <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+                                    </button>
+                                  </td>
                                   <td className="px-4 py-2">{typeBadge(ctype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">{formatPrice(Number(p.amount))}</td>
                                 </tr>

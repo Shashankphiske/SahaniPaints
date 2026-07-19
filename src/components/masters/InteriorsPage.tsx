@@ -3,7 +3,7 @@ import { MasterPageLayout } from "./MasterPageLayout";
 import { DataTable } from "./DataTable";
 import type { ColumnDef } from "./DataTable";
 import { useMasterData } from "../../hooks/use-master-data";
-import type { User } from "../../types/master";
+import type { Interior } from "../../types/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
 import InteriorDashboard from "./InteriorDashboard";
@@ -25,15 +25,23 @@ const formatDate = (dateStr: any) => {
   }
 };
 
-const columns: ColumnDef<User>[] = [
-  { key: "username", header: "Name" },
-  { key: "email", header: "Email" },
-  { key: "phonenumber", header: "Phone", render: (u) => u.phonenumber ?? "—" },
-  { key: "address", header: "Address", render: (u) => u.address ?? "—" },
+const columns: ColumnDef<Interior>[] = [
+  { key: "name", header: "Name" },
+  { key: "email", header: "Email", render: (i) => i.email ?? "—" },
+  { key: "phonenumber", header: "Phone", render: (i) => i.phonenumber ?? "—" },
+  { key: "address", header: "Address", render: (i) => i.address ?? "—" },
+  {
+    key: "commissionFeePercentage",
+    header: "Commission Rate",
+    render: (i) =>
+      i.commissionFeePercentage != null
+        ? `${Number(i.commissionFeePercentage).toFixed(2)}%`
+        : "—",
+  },
   {
     key: "createdAt",
     header: "Created At",
-    render: (u) => formatDate(u.createdAt),
+    render: (i) => formatDate(i.createdAt),
   },
 ];
 
@@ -50,40 +58,36 @@ export default function InteriorsPage() {
     triggerSearch,
     forceServerSearch,
     isServerSearching,
-  } = useMasterData<User>("users", true, undefined, true);
+  } = useMasterData<Interior>("interiors", true, undefined, true);
 
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<User | null>(null);
-  const [dashboardItem, setDashboardItem] = useState<User | null>(null);
+  const [editingItem, setEditingItem] = useState<Interior | null>(null);
+  const [dashboardItem, setDashboardItem] = useState<Interior | null>(null);
 
-  // Filter role "INTERIOR" and search term
   const filtered = useMemo(() => {
     const items = Array.isArray(data) ? data : [];
-    const roleFiltered = items.filter((u) => u.role === "INTERIOR");
-
-    if (!search) return roleFiltered;
+    if (!search) return items;
     const term = search.toLowerCase();
 
-    return roleFiltered.filter(
-      (u) =>
-        u.username?.toLowerCase().includes(term) ||
-        u.email?.toLowerCase().includes(term) ||
-        String(u.phonenumber ?? "").includes(term) ||
-        u.address?.toLowerCase().includes(term)
+    return items.filter(
+      (i) =>
+        i.name?.toLowerCase().includes(term) ||
+        i.email?.toLowerCase().includes(term) ||
+        String(i.phonenumber ?? "").includes(term) ||
+        i.address?.toLowerCase().includes(term)
     );
   }, [data, search]);
 
   const handleSearch = (term: string) => {
     setSearch(term);
     const items = Array.isArray(data) ? data : [];
-    const roleFiltered = items.filter((u) => u.role === "INTERIOR");
-    const localHits = roleFiltered.filter(
-      (u) =>
-        u.username?.toLowerCase().includes(term.toLowerCase()) ||
-        u.email?.toLowerCase().includes(term.toLowerCase()) ||
-        String(u.phonenumber ?? "").includes(term) ||
-        u.address?.toLowerCase().includes(term.toLowerCase())
+    const localHits = items.filter(
+      (i) =>
+        i.name?.toLowerCase().includes(term.toLowerCase()) ||
+        i.email?.toLowerCase().includes(term.toLowerCase()) ||
+        String(i.phonenumber ?? "").includes(term) ||
+        i.address?.toLowerCase().includes(term.toLowerCase())
     );
     triggerSearch(term, localHits);
   };
@@ -93,105 +97,100 @@ export default function InteriorsPage() {
     forceServerSearch(term);
   };
 
-  const handleSave = (formData: Partial<User>) => {
-    const dataWithRole = { ...formData, role: "INTERIOR" as const };
+  const handleSave = (formData: Partial<Interior>) => {
     if (editingItem) {
-      update({ id: editingItem.id, data: dataWithRole });
+      update({ id: editingItem.id, data: formData });
     } else {
-      create(dataWithRole);
+      create(formData);
     }
-    closeModal();
-  };
-
-  const closeModal = () => {
     setIsModalOpen(false);
     setEditingItem(null);
   };
 
-  const handleDashboardSave = (formData: Partial<User>) => {
-    if (!dashboardItem) return;
-    update({
-      id: dashboardItem.id,
-      data: { ...formData, role: "INTERIOR" as const },
-    });
-    setDashboardItem(null);
+  const handleEdit = (item: Interior) => {
+    setEditingItem(item);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (item: Interior) => {
+    if (
+      window.confirm(`Are you sure you want to delete "${item.name}"?`)
+    ) {
+      remove(item.id);
+    }
   };
 
   return (
-    <>
-      {!dashboardItem && (
-        <MasterPageLayout
-          title="Interior Designers"
-          resource="users"
-          importExtraData={{ role: "INTERIOR" }}
-          searchPlaceholder="Search interior designers by username or email..."
-          onSearch={handleSearch}
-          onSearchSubmit={handleSearchSubmit}
-          onAdd={() => setIsModalOpen(true)}
-        >
-          <DataTable
-            columns={columns}
-            data={filtered}
-            isLoading={isLoading || isServerSearching}
-            onRowClick={(item) => setDashboardItem(item)}
-            onEdit={(item) => {
-              setEditingItem(item);
-              setIsModalOpen(true);
-            }}
-            onDelete={(item) => {
-              if (window.confirm("Delete this interior designer?")) {
-                remove(item.id);
-              }
-            }}
-          />
+    <MasterPageLayout
+      title="Interior Designers"
+      resource="interiors"
+      searchPlaceholder="Search interior designers by name, phone or email..."
+      onSearch={handleSearch}
+      onSearchSubmit={handleSearchSubmit}
+      onAdd={() => {
+        setEditingItem(null);
+        setIsModalOpen(true);
+      }}
+    >
+      <DataTable
+        data={filtered}
+        columns={columns}
+        isLoading={isLoading}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onRowClick={(item) => setDashboardItem(item)}
+      />
 
-          {hasNextPage && (
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-              >
-                {isFetchingNextPage ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <>
-                    <ChevronDown className="h-5 w-5 animate-bounce" />
-                    <span className="text-xs font-semibold">Load more</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-        </MasterPageLayout>
+      {hasNextPage && (
+        <div className="flex justify-center mt-4 pb-6">
+          <button
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors border border-primary/20 disabled:opacity-50"
+          >
+            {isFetchingNextPage ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading more...
+              </>
+            ) : (
+              <>
+                Load More
+                <ChevronDown className="w-3.5 h-3.5" />
+              </>
+            )}
+          </button>
+        </div>
       )}
 
-      {/* Dashboard details overlay */}
-      {dashboardItem && (
-        <InteriorDashboard
-          interior={dashboardItem}
-          onBack={() => setDashboardItem(null)}
-          handleSave={handleDashboardSave}
-        />
-      )}
-
-      <Dialog open={isModalOpen} onOpenChange={closeModal}>
-        <DialogContent className="max-w-lg">
+      {/* Create / Edit Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingItem ? "Edit Interior" : "Add New Interior"}
+              {editingItem ? "Edit Interior Designer" : "Add Interior Designer"}
             </DialogTitle>
           </DialogHeader>
-
           <MasterForm
             resource="interiors"
-            initialData={editingItem ?? undefined}
+            initialData={editingItem || undefined}
             editing={!!editingItem}
             onSubmit={handleSave}
-            onCancel={closeModal}
+            onCancel={() => {
+              setIsModalOpen(false);
+              setEditingItem(null);
+            }}
           />
         </DialogContent>
       </Dialog>
-    </>
+
+      {/* Designer Dashboard View */}
+      {dashboardItem && (
+        <InteriorDashboard
+          interior={dashboardItem as any}
+          onClose={() => setDashboardItem(null)}
+        />
+      )}
+    </MasterPageLayout>
   );
 }

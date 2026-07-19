@@ -68,12 +68,12 @@ export function TaskSection() {
   };
 
   return (
-    <div className="space-y-4 border rounded-xl border-border bg-card p-5 shadow-sm-soft">
+    <div className="space-y-3.5 border rounded-xl border-border/80 bg-card p-4 shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold font-display text-foreground select-none">Active Tasks</h3>
-        <Button size="sm" onClick={openCreate} className="flex items-center gap-1">
-          <Plus className="h-4 w-4" /> Add Task
+      <div className="flex items-center justify-between pb-1 border-b border-border/40">
+        <h3 className="text-base font-bold text-foreground tracking-tight select-none">Active Tasks</h3>
+        <Button size="sm" onClick={openCreate} className="h-8 text-xs flex items-center gap-1">
+          <Plus className="h-3.5 w-3.5" /> Add Task
         </Button>
       </div>
 

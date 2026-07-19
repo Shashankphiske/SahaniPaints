@@ -454,8 +454,25 @@ export function MasterPageLayout({
             </>
           )}
 
+          {filters.length > 0 && (
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              size="sm"
+              onClick={handleFilterToggle}
+              className="flex items-center gap-1.5"
+            >
+              <Filter className="h-4 w-4" />
+              <span>Filters</span>
+              {Object.keys(activeFilters).length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-accent text-accent-foreground rounded-full">
+                  {Object.keys(activeFilters).length}
+                </span>
+              )}
+            </Button>
+          )}
+
           {onAdd && (
-            <Button onClick={onAdd} size="sm" className="flex items-center gap-1.5">
+            <Button onClick={onAdd} size="sm" className="flex items-center gap-1.5 font-medium">
               <Plus className="h-4 w-4" />
               <span>Add New</span>
             </Button>
@@ -486,23 +503,8 @@ export function MasterPageLayout({
           </div>
 
           <div className="flex gap-2 w-full md:w-auto shrink-0 justify-end">
-            {filters.length > 0 && (
-              <Button
-                variant={showFilters ? "default" : "outline"}
-                onClick={handleFilterToggle}
-                className="flex items-center gap-1.5 w-full md:w-auto"
-              >
-                <Filter className="h-4 w-4" />
-                <span>Filters</span>
-                {Object.keys(activeFilters).length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold bg-accent text-accent-foreground rounded-full">
-                    {Object.keys(activeFilters).length}
-                  </span>
-                )}
-              </Button>
-            )}
             {onSearchSubmit && (
-              <Button onClick={() => onSearchSubmit(searchQuery)} className="w-full md:w-auto">
+              <Button onClick={() => onSearchSubmit(searchQuery)} className="w-full md:w-auto font-medium">
                 Search
               </Button>
             )}
@@ -515,7 +517,7 @@ export function MasterPageLayout({
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {filters.map((filter) => (
                 <div key={filter.key} className="space-y-1">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {filter.label}
                   </label>
                   {filter.type === "select" ? (

@@ -39,6 +39,11 @@ const columns: ColumnDef<Labour>[] = [
     render: (l) => formatCurrency(l.paymentPerDay),
   },
   {
+    key: "tuesdayPaymentAmount",
+    header: "Tuesday Payment",
+    render: (l) => l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0 ? `₹${Number(l.tuesdayPaymentAmount).toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "—",
+  },
+  {
     key: "type",
     header: "Type",
     render: (l) => {

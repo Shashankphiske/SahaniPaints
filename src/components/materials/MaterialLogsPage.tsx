@@ -60,7 +60,7 @@ export default function MaterialLogsPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [fullSelectedProject, setFullSelectedProject] = useState<Project | null>(null);
   const [fetchingProject, setFetchingProject] = useState(false);
-  const [copyFromDate, setCopyFromDate] = useState("");
+
   
   // Temporary queue states before submitting
   const [tempSelectedMaterials, setTempSelectedMaterials] = useState<QueuedMaterial[]>([]);
@@ -93,6 +93,7 @@ export default function MaterialLogsPage() {
   // Product search dropdown states
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
+  const [productSearching, setProductSearching] = useState(false);
   const [localProductsList, setLocalProductsList] = useState<Product[]>([]);
   const productRef = useRef<HTMLDivElement>(null);
 
@@ -178,6 +179,20 @@ export default function MaterialLogsPage() {
       console.error(err);
     } finally {
       setProjectSearching(false);
+    }
+  };
+
+  // Search products on server
+  const searchProductsFromServer = async (query: string) => {
+    if (!query.trim()) return;
+    setProductSearching(true);
+    try {
+      const res = await apiRequest.fetchAll<Product>("products", { search: query });
+      setLocalProductsList(res);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setProductSearching(false);
     }
   };
 
@@ -323,96 +338,7 @@ export default function MaterialLogsPage() {
     }
   };
 
-  // Copy logs from past date
-  const handleCopyLogs = async () => {
-    if (!selectedProject || !copyFromDate) return;
 
-    // Filter past date records from logsList
-    const startOfCopy = new Date(copyFromDate);
-    startOfCopy.setHours(0, 0, 0, 0);
-    const endOfCopy = new Date(copyFromDate);
-    endOfCopy.setHours(23, 59, 59, 999);
-
-    const pastRecords = logsList.filter((log) => {
-      const d = new Date(log.date);
-      return log.projectId === selectedProject.id && d >= startOfCopy && d <= endOfCopy;
-    });
-
-    if (pastRecords.length === 0) {
-      toast({
-        title: "No source logs",
-        description: `No material logs found for "${formatDate(copyFromDate)}".`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Filter out products already logged on the target date
-    const startOfTarget = new Date(currentDate);
-    startOfTarget.setHours(0, 0, 0, 0);
-    const endOfTarget = new Date(currentDate);
-    endOfTarget.setHours(23, 59, 59, 999);
-
-    const targetProductIds = new Set(
-      logsList
-        .filter((log) => {
-          const d = new Date(log.date);
-          return log.projectId === selectedProject.id && d >= startOfTarget && d <= endOfTarget;
-        })
-        .map((log) => log.productId)
-    );
-
-    const materialsToCopy = pastRecords.filter((r) => !targetProductIds.has(r.productId));
-
-    if (materialsToCopy.length === 0) {
-      toast({
-        title: "Logs already exist",
-        description: "All products from that date are already logged for the target date.",
-      });
-      return;
-    }
-
-    try {
-      const payload = materialsToCopy.map((r) => ({
-        date: new Date(currentDate).toISOString(),
-        projectId: selectedProject.id,
-        productId: r.productId,
-        quantity: Number(r.quantity),
-      }));
-
-      const results = await apiRequest.bulkCreate<ProjectMaterialLog>("project-material-logs", payload as any);
-
-      // Update local state
-      const formattedResults = results.map((res, i) => {
-        const originalInput = payload[i];
-        const matchingProduct = productsList.find((p) => p.id === originalInput.productId);
-        return {
-          ...originalInput,
-          ...res,
-          project: { name: selectedProject.name },
-          product: matchingProduct
-            ? {
-                name: matchingProduct.name,
-                price: Number(matchingProduct.price),
-                size: matchingProduct.size,
-              }
-            : undefined,
-        };
-      });
-
-      setLogsList((prev) => [...formattedResults, ...prev]);
-      toast({
-        title: "Materials copied",
-        description: `Successfully copied ${formattedResults.length} material logs.`,
-      });
-    } catch (err: any) {
-      toast({
-        title: "Copy operation failed",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Filter projects local list
   const filteredProjects = useMemo(() => {
@@ -421,22 +347,17 @@ export default function MaterialLogsPage() {
     return localProjectsList.filter((p) => p.name?.toLowerCase().includes(term));
   }, [localProjectsList, projectSearch]);
 
-  // Get list of products allocated to selected project
-  const allocatedProductsList = useMemo(() => {
-    if (!fullSelectedProject) return [];
-    return (fullSelectedProject.projectProducts || []).map((pp: any) => ({
-      ...pp.product,
-      allocatedArea: Number(pp.area),
-      unit: pp.unit
-    })).filter((p: any) => p != null && p.id);
-  }, [fullSelectedProject]);
-
-  // Filter products local list
+  // Filter products across full catalog (all products)
   const filteredProducts = useMemo(() => {
+    const catalog = localProductsList.length > 0 ? localProductsList : productsList;
     const term = productSearch.toLowerCase().trim();
-    if (!term) return allocatedProductsList;
-    return allocatedProductsList.filter((p) => p.name?.toLowerCase().includes(term));
-  }, [allocatedProductsList, productSearch]);
+    if (!term) return catalog.slice(0, 30);
+    return catalog.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(term) ||
+        p.category?.toLowerCase().includes(term)
+    );
+  }, [productsList, localProductsList, productSearch]);
 
   // Apply UI Filters for Listings
   const filteredLogs = useMemo(() => {
@@ -509,25 +430,50 @@ export default function MaterialLogsPage() {
     }
   };
 
+  // Toggle card states
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [showFilterCard, setShowFilterCard] = useState(false);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       {/* PAGE HEADER */}
-      <div className="flex flex-col gap-1.5 border-b pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
         <div className="flex items-center gap-2">
           <ClipboardList className="h-6 w-6 text-primary" />
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
             Material Usage Logs
           </h2>
         </div>
-        <p className="text-sm text-slate-500 font-medium">
-          Log actual materials and paint quantities delivered/consumed on project sites.
-        </p>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showFilterCard ? "default" : "outline"}
+            onClick={() => setShowFilterCard(!showFilterCard)}
+            className="font-medium flex items-center gap-1.5 shadow-sm"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filters
+            {(filterSearch || filterDate || filterProjectId) ? (
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
+                !
+              </span>
+            ) : null}
+          </Button>
+
+          <Button
+            variant={showAddCard ? "default" : "outline"}
+            onClick={() => setShowAddCard(!showAddCard)}
+            className="font-medium flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Log Material Usage
+          </Button>
+        </div>
       </div>
 
-      {/* ACTIONS GRID: LOG DATA + COPY LISTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ADD DAILY LOGS CARD */}
-        <Card className="lg:col-span-2 border border-slate-200/80 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl overflow-visible">
+      {/* ADD DAILY LOGS CARD */}
+      {showAddCard && (
+        <Card className="border border-slate-200/80 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl overflow-visible">
           <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
             <CardTitle className="text-sm font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300 flex items-center gap-2">
               <Package className="h-4 w-4 text-primary animate-pulse" />
@@ -563,7 +509,7 @@ export default function MaterialLogsPage() {
                 <div className="relative">
                   <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    className="pl-9 pr-8"
+                    className="pl-9 pr-8 font-medium"
                     placeholder="Type project name... (Enter to search server)"
                     value={projectSearch}
                     onFocus={() => setProjectOpen(true)}
@@ -601,10 +547,10 @@ export default function MaterialLogsPage() {
                         className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
                         onMouseDown={() => {
                           setSelectedProject(p);
+                          fetchFullProjectDetails(p.id);
                           setProjectSearch(p.name);
                           setProjectOpen(false);
                           setTempSelectedMaterials([]);
-                          fetchFullProjectDetails(p.id);
                         }}
                       >
                         {p.name}
@@ -618,62 +564,83 @@ export default function MaterialLogsPage() {
                   </div>
                 )}
               </div>
-
-              {/* Add Material Dropdown */}
-              <div ref={productRef} className="space-y-1 md:col-span-2 relative overflow-visible">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Select Paint Product *
-                </label>
-                <div className="relative">
-                  <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    className="pl-9 pr-8"
-                    placeholder="Search and select product name..."
-                    value={productSearch}
-                    disabled={!selectedProject}
-                    onFocus={() => setProductOpen(true)}
-                    onChange={(e) => {
-                      setProductSearch(e.target.value);
-                      setProductOpen(true);
-                    }}
-                  />
-                </div>
-
-                {productOpen && selectedProject && (
-                  <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                    {filteredProducts.map((p) => (
-                      <div
-                        key={p.id}
-                        className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
-                        onMouseDown={() => handleQueueProduct(p)}
-                      >
-                        <div className="flex flex-col text-left">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">{p.name}</span>
-                          <span className="text-[10px] text-slate-400 font-semibold">
-                            Allocated: {p.allocatedArea} {p.unit}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono font-bold">
-                          {p.category}
-                        </span>
-                      </div>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                      <div className="px-4 py-2.5 text-xs text-rose-500 font-semibold italic text-left">
-                        No products are currently scoped/allocated to this project site. Go to Projects and add products first.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
 
-            {/* Queued Materials Staging List */}
+            {/* Product search box */}
+            <div ref={productRef} className="space-y-1 relative overflow-visible">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Search & Add Product *
+              </label>
+              <div className="relative">
+                <PackagePlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  className="pl-9 pr-8"
+                  placeholder="Type product name or brand to select..."
+                  value={productSearch}
+                  disabled={!selectedProject}
+                  onFocus={() => setProductOpen(true)}
+                  onChange={(e) => {
+                    setProductSearch(e.target.value);
+                    setProductOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      searchProductsFromServer(productSearch);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setProductOpen(!productOpen)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+
+              {productOpen && selectedProject && (
+                <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-56 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                  {productSearching && (
+                    <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      Searching server...
+                    </div>
+                  )}
+                  {filteredProducts.map((prod) => (
+                    <div
+                      key={prod.id}
+                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
+                      onMouseDown={() => handleQueueProduct(prod)}
+                    >
+                      <div>
+                        <span>{prod.name}</span>
+                        {prod.category && (
+                          <span className="text-[10px] text-muted-foreground ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-zinc-800 rounded font-normal">
+                            {prod.category}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {prod.size || "1ltr"}
+                      </span>
+                    </div>
+                  ))}
+                  {!productSearching && filteredProducts.length === 0 && (
+                    <div className="px-4 py-2 text-xs text-muted-foreground italic">
+                      No matching products found.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* QUEUED PRODUCTS LIST */}
             {tempSelectedMaterials.length > 0 && (
-              <div className="md:col-span-2 space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span className="text-xs font-extrabold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
-                    Ready to Log ({tempSelectedMaterials.length})
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
+                    Selected Items to Log ({tempSelectedMaterials.length})
                   </span>
                   <Button
                     type="button"
@@ -685,46 +652,54 @@ export default function MaterialLogsPage() {
                     {submittingLogs ? (
                       <>
                         <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                        Logging...
+                        Saving Logs...
                       </>
                     ) : (
                       <>
                         <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
-                        Save Logs
+                        Confirm & Save Log Entry
                       </>
                     )}
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                <div className="space-y-2.5">
                   {tempSelectedMaterials.map(({ product: p, quantity, allocatedArea, unit }) => {
-                    const coverageSqFtL = p.coverageSqFt != null ? Number(p.coverageSqFt) : 0;
-                    const coverageRnFtL = p.coverageRnFt != null ? Number(p.coverageRnFt) : 0;
-                    const packSizeL = getProductSizeInLitres(p.size);
-                    const actualCoverage = unit === "sq.ft" ? (quantity * packSizeL) * coverageSqFtL : (quantity * packSizeL) * coverageRnFtL;
-                    const isExceeding = actualCoverage > allocatedArea;
+                    const litresPerPack = getProductSizeInLitres(p.size);
+                    const totalLitresLogged = quantity * litresPerPack;
+                    const coveragePerLitre = Number(p.coverageSqFt || p.coverageRnFt || 0);
+                    const actualCoverage = totalLitresLogged * coveragePerLitre;
+                    const isExceeding = allocatedArea > 0 && actualCoverage > allocatedArea;
 
                     return (
                       <div
                         key={p.id}
-                        className="flex flex-col p-4 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3"
+                        className="p-3.5 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-2"
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5 max-w-[75%] text-left">
-                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{p.name}</p>
-                            <p className="text-[10px] text-slate-400 font-semibold">
-                              Allocated: <span className="font-bold text-slate-650 dark:text-slate-350">{allocatedArea} {unit}</span>
-                            </p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{p.name}</span>
+                            <Badge variant="outline" className="text-[10px] font-semibold">
+                              {p.size || "1ltr"}
+                            </Badge>
                           </div>
                           <button
                             type="button"
                             onClick={() => handleRemoveFromQueue(p.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors"
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded transition-colors"
                           >
                             <X className="h-4 w-4" />
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between border-t pt-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pt-1">
+                          <div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Allocated Target</p>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              {allocatedArea > 0 ? `${allocatedArea} ${unit}` : "No Allocation Set"}
+                            </p>
+                          </div>
+
                           <div className="flex items-center gap-1.5">
                             <Input
                               type="number"
@@ -734,27 +709,15 @@ export default function MaterialLogsPage() {
                               onChange={(e) => handleUpdateQueueQuantity(p.id, Number(e.target.value))}
                               className="h-8 w-20 text-xs font-bold text-center px-1"
                             />
-                            <span className="text-[10px] font-bold text-slate-400">Litres</span>
+                            <span className="text-[10px] font-bold text-slate-400">Packs</span>
                           </div>
 
                           <div className="text-right">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Coverage</p>
-                            <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Calculated Coverage</p>
+                            <p className={`text-xs font-extrabold ${isExceeding ? "text-rose-600" : "text-emerald-600"}`}>
                               {actualCoverage.toFixed(2)} {unit}
                             </p>
                           </div>
-                        </div>
-
-                        <div className="flex justify-end pt-0.5">
-                          {isExceeding ? (
-                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 text-[10px] py-0">
-                              Exceeding by {(actualCoverage - allocatedArea).toFixed(2)} {unit}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 text-[10px] py-0">
-                              Within Limit ({(allocatedArea - actualCoverage).toFixed(2)} {unit} remaining)
-                            </Badge>
-                          )}
                         </div>
                       </div>
                     );
@@ -764,108 +727,69 @@ export default function MaterialLogsPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* COPY PAST DATE LOGS CARD */}
-        <Card className="border border-slate-200/80 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl flex flex-col justify-between">
-          <div>
-            <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
-              <CardTitle className="text-sm font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300 flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                Copy Roster Logs
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 space-y-4">
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Quickly copy a project's product list and quantities from a previous work day to today's staging queue.
-              </p>
-              
-              <div className="space-y-4 pt-2">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
-                    Copy Logs From Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={copyFromDate}
-                    onChange={(e) => setCopyFromDate(e.target.value)}
-                    disabled={!selectedProject}
-                  />
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full font-bold text-xs bg-white hover:bg-slate-100 h-9"
-                  onClick={handleCopyLogs}
-                  disabled={!selectedProject || !copyFromDate}
-                >
-                  Replicate Logs
-                </Button>
-              </div>
-            </CardContent>
-          </div>
-        </Card>
-      </div>
+      )}
 
       {/* FILTER CONTROLS FOR TABLE LISTINGS */}
-      <Card className="border border-slate-200/60 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
-        <CardHeader className="py-4 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center gap-2">
-          <SlidersHorizontal size={14} className="text-primary" />
-          <CardTitle className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
-            Filter Ledger Records
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-5 flex flex-wrap gap-4 items-end">
-          <div className="space-y-1 w-full sm:w-56">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Search Product</label>
-            <Input
-              placeholder="Filter by product name..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-          <div className="space-y-1 w-full sm:w-48">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
-            <SearchableSelect
-              value={filterProjectId}
-              displayValue={filterProjectDisplay}
-              options={projectsList
-                .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
-                .slice(0, 10)
-                .map((p) => ({ id: p.id, label: p.name }))}
-              placeholder="All Projects"
-              allLabel="All Projects"
-              onSearchChange={setFilterProjectDisplay}
-              onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
-              onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
-              inputHeight="h-9"
-              textSize="text-xs"
-            />
-          </div>
-          <div className="space-y-1 w-full sm:w-40">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase">Log Date</label>
-            <Input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="h-9 text-xs"
-            />
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setFilterSearch("");
-              setFilterProjectId("");
-              setFilterDate("");
-            }}
-            className="text-xs text-muted-foreground hover:text-foreground font-semibold h-9 ml-auto"
-          >
-            Clear Filters
-          </Button>
-        </CardContent>
-      </Card>
+      {showFilterCard && (
+        <Card className="border border-slate-200/60 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl">
+          <CardHeader className="py-4 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center gap-2">
+            <SlidersHorizontal size={14} className="text-primary" />
+            <CardTitle className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
+              Filter Ledger Records
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 flex flex-wrap gap-4 items-end">
+            <div className="space-y-1 w-full sm:w-56">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase">Search Product</label>
+              <Input
+                placeholder="Filter by product name..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1 w-full sm:w-48">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase">Project Site</label>
+              <SearchableSelect
+                value={filterProjectId}
+                displayValue={filterProjectDisplay}
+                options={projectsList
+                  .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                  .slice(0, 10)
+                  .map((p) => ({ id: p.id, label: p.name }))}
+                placeholder="All Projects"
+                allLabel="All Projects"
+                onSearchChange={setFilterProjectDisplay}
+                onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+                onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+                inputHeight="h-9"
+                textSize="text-xs"
+              />
+            </div>
+            <div className="space-y-1 w-full sm:w-40">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase">Log Date</label>
+              <Input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterSearch("");
+                setFilterProjectId("");
+                setFilterDate("");
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground font-semibold h-9 ml-auto"
+            >
+              Clear Filters
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* GROUPED LEDGER LOGS AND TIMELINE */}
       <div className="space-y-6">
