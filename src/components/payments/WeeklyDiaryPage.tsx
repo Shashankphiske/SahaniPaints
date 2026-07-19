@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { Labour, Contractor, LabourPayment, ContractorPayment } from "@/types/master";
 import { supabase } from "@/lib/realtime";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import LabourDashboard from "@/components/masters/LabourDashboard";
 import ContractorDashboard from "@/components/masters/ContractorDashboard";
 
@@ -495,6 +496,61 @@ export default function WeeklyDiaryPage() {
   // Filter toggle state
   const [showFilters, setShowFilters] = useState(false);
 
+  // Deletion state
+  const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<DiaryEntry | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  const handleDeleteSinglePayment = async (
+    resource: "labour-payments" | "contractor-payments",
+    id: string,
+    name: string
+  ) => {
+    try {
+      await apiRequest.delete(resource, id);
+      toast({
+        title: "Payment Deleted",
+        description: `Successfully deleted payment record for ${name}.`,
+      });
+      fetchHistory();
+    } catch (err: any) {
+      toast({
+        title: "Delete Failed",
+        description: err.message || "Failed to delete payment record.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteAllForDate = async () => {
+    if (!confirmDeleteEntry) return;
+    setDeletingAll(true);
+    try {
+      const labourPromises = confirmDeleteEntry.labourPayments.map((p) =>
+        apiRequest.delete("labour-payments", p.id)
+      );
+      const contractorPromises = confirmDeleteEntry.contractorPayments.map((p) =>
+        apiRequest.delete("contractor-payments", p.id)
+      );
+
+      await Promise.all([...labourPromises, ...contractorPromises]);
+
+      toast({
+        title: "All Payments Deleted",
+        description: `Deleted all payment records for ${formatDateLabel(confirmDeleteEntry.date)}.`,
+      });
+      setConfirmDeleteEntry(null);
+      fetchHistory();
+    } catch (err: any) {
+      toast({
+        title: "Delete Failed",
+        description: err.message || "Failed to delete payment records.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -824,38 +880,60 @@ export default function WeeklyDiaryPage() {
               return (
                 <Card key={entry.date} className="border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 rounded-2xl shadow-sm overflow-hidden">
                   {/* Accordion header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleDateExpand(entry.date)}
-                    className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 shrink-0">
-                      <CalendarDays className="h-4 w-4 text-primary" />
-                      <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">{formatDateLabel(entry.date)}</span>
-                    </div>
+                  <div className="w-full flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-slate-50/60 dark:hover:bg-zinc-900/40 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => toggleDateExpand(entry.date)}
+                      className="flex-1 flex items-center gap-4 text-left"
+                    >
+                      <div className="flex items-center gap-2 shrink-0">
+                        <CalendarDays className="h-4 w-4 text-primary" />
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">{formatDateLabel(entry.date)}</span>
+                      </div>
 
-                    <div className="flex items-center gap-4 ml-auto text-xs font-semibold text-slate-500">
-                      {entry.labourPayments.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Users className="h-3.5 w-3.5 text-amber-500" />
-                          {entry.labourPayments.length} labours · {formatPrice(entry.totalLabour)}
+                      <div className="flex items-center gap-4 ml-auto text-xs font-semibold text-slate-500">
+                        {entry.labourPayments.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3.5 w-3.5 text-amber-500" />
+                            {entry.labourPayments.length} labours · {formatPrice(entry.totalLabour)}
+                          </span>
+                        )}
+                        {entry.contractorPayments.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="h-3.5 w-3.5 text-indigo-500" />
+                            {entry.contractorPayments.length} contractors · {formatPrice(entry.totalContractor)}
+                          </span>
+                        )}
+                        <span className="font-extrabold text-slate-800 dark:text-slate-100">
+                          Total: {formatPrice(entry.grandTotal)}
                         </span>
-                      )}
-                      {entry.contractorPayments.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Briefcase className="h-3.5 w-3.5 text-indigo-500" />
-                          {entry.contractorPayments.length} contractors · {formatPrice(entry.totalContractor)}
-                        </span>
-                      )}
-                      <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                        Total: {formatPrice(entry.grandTotal)}
-                      </span>
-                    </div>
+                      </div>
+                    </button>
 
-                    {isOpen
-                      ? <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" />
-                      : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
-                  </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteEntry(entry);
+                        }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        title={`Delete all payment records for ${formatDateLabel(entry.date)}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleDateExpand(entry.date)}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      >
+                        {isOpen
+                          ? <ChevronUp className="h-4 w-4 shrink-0" />
+                          : <ChevronDown className="h-4 w-4 shrink-0" />}
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Expanded detail */}
                   {isOpen && (
@@ -873,6 +951,7 @@ export default function WeeklyDiaryPage() {
                                 <th className="text-left px-5 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Name</th>
                                 <th className="text-left px-4 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Type</th>
                                 <th className="text-right px-5 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Amount</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase text-slate-400 tracking-wider"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -906,6 +985,16 @@ export default function WeeklyDiaryPage() {
                                   </td>
                                   <td className="px-4 py-2">{typeBadge(ltype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-amber-600 dark:text-amber-400 text-sm">{formatPrice(Number(p.amount))}</td>
+                                  <td className="px-3 py-2 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSinglePayment("labour-payments", p.id, name)}
+                                      className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
+                                      title={`Delete payment for ${name}`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </td>
                                 </tr>
                                 );
                               })}
@@ -914,6 +1003,7 @@ export default function WeeklyDiaryPage() {
                               <tr className="bg-amber-50/40 dark:bg-amber-950/10">
                                 <td colSpan={2} className="px-5 py-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Labour Subtotal</td>
                                 <td className="px-5 py-2 text-right font-extrabold text-amber-700 dark:text-amber-300">{formatPrice(entry.totalLabour)}</td>
+                                <td />
                               </tr>
                             </tfoot>
                           </table>
@@ -933,6 +1023,7 @@ export default function WeeklyDiaryPage() {
                                 <th className="text-left px-5 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Name</th>
                                 <th className="text-left px-4 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Type</th>
                                 <th className="text-right px-5 py-2 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Amount</th>
+                                <th className="px-3 py-2 text-right text-[10px] font-extrabold uppercase text-slate-400 tracking-wider"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -967,6 +1058,16 @@ export default function WeeklyDiaryPage() {
                                   </td>
                                   <td className="px-4 py-2">{typeBadge(ctype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">{formatPrice(Number(p.amount))}</td>
+                                  <td className="px-3 py-2 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSinglePayment("contractor-payments", p.id, name)}
+                                      className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
+                                      title={`Delete payment for ${name}`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </td>
                                 </tr>
                                 );
                               })}
@@ -975,6 +1076,7 @@ export default function WeeklyDiaryPage() {
                               <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
                                 <td colSpan={2} className="px-5 py-2 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Contractor Subtotal</td>
                                 <td className="px-5 py-2 text-right font-extrabold text-indigo-700 dark:text-indigo-300">{formatPrice(entry.totalContractor)}</td>
+                                <td />
                               </tr>
                             </tfoot>
                           </table>
@@ -994,6 +1096,70 @@ export default function WeeklyDiaryPage() {
           </div>
         )}
       </div>
+
+      {/* ── DELETE ALL CONFIRMATION DIALOG ──────────────────────────────── */}
+      <Dialog open={!!confirmDeleteEntry} onOpenChange={(open) => !open && setConfirmDeleteEntry(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-rose-600" />
+              Confirm Delete All Payments
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground mt-2">
+              Are you sure you want to delete all payment records for{" "}
+              <span className="font-bold text-foreground">
+                {confirmDeleteEntry ? formatDateLabel(confirmDeleteEntry.date) : ""}
+              </span>
+              ?
+              <br />
+              This will remove{" "}
+              <span className="font-semibold text-rose-600 dark:text-rose-400">
+                {confirmDeleteEntry?.labourPayments.length || 0} labour records
+              </span>{" "}
+              and{" "}
+              <span className="font-semibold text-rose-600 dark:text-rose-400">
+                {confirmDeleteEntry?.contractorPayments.length || 0} contractor records
+              </span>{" "}
+              totaling{" "}
+              <span className="font-bold text-foreground">
+                {confirmDeleteEntry ? formatPrice(confirmDeleteEntry.grandTotal) : "₹0"}
+              </span>
+              . This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDeleteEntry(null)}
+              disabled={deletingAll}
+              className="font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteAllForDate}
+              disabled={deletingAll}
+              className="font-medium gap-1.5"
+            >
+              {deletingAll ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete All Payments
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
