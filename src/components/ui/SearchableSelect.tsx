@@ -98,6 +98,7 @@ export function SearchableSelect({
     <div ref={wrapperRef} className={`relative ${className}`}>
       <div className="relative">
         <Input
+          showClear={false}
           value={displayValue}
           onChange={handleInputChange}
           onFocus={() => setOpen(true)}
