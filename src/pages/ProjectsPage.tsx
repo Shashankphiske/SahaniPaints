@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMasterData } from "../hooks/use-master-data";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
-import type { Project, Customer, Product, LabourAttendance, LabourPayment } from "../types/master";
+import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog } from "../types/master";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -1321,6 +1321,15 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
         <TasksPage projectId={fullProject.id} />
       </div>
 
+      {/* Contractor Work Ledger Section */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+        <ContractorWorkLedgerTab
+          projectId={fullProject.id}
+          contractorWorkLogs={fullProject.contractorWorkLogs || []}
+          onSuccess={onSuccess}
+        />
+      </div>
+
       {/* 4. Labour Attendance Section */}
       <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
         <LabourCrewTab attendance={fullProject.attendance || []} />
@@ -2309,7 +2318,16 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
     return Object.values(map).reduce((sum, item) => sum + item.daysValueSum * item.paymentPerDay, 0);
   }, [fullProject.attendance]);
 
-  const totalCost = productCost + labourCost;
+  // Compute Contractor Cost from work logs
+  const contractorCost = useMemo(() => {
+    const contractorWorkLogs = fullProject.contractorWorkLogs ?? [];
+    return contractorWorkLogs.reduce((sum: number, log: any) => {
+      const rate = Number(log.contractor?.pricePerSqFt ?? 0);
+      return sum + Number(log.sqFt || 0) * rate;
+    }, 0);
+  }, [fullProject.contractorWorkLogs]);
+
+  const totalCost = productCost + labourCost + contractorCost;
   const profitLoss = agreedPrice - totalCost;
   const isProfit = profitLoss >= 0;
 
@@ -2345,6 +2363,10 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
               <span>Labour Wages:</span>
               <span className="font-bold">₹{fmt(labourCost)}</span>
             </div>
+            <div className="flex justify-between">
+              <span>Contractor Charges:</span>
+              <span className="font-bold">₹{fmt(contractorCost)}</span>
+            </div>
           </div>
         </Card>
 
@@ -2359,6 +2381,234 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
           <p className="text-[10px] text-muted-foreground mt-1">
             {isProfit ? "Representing project net positive margin." : "Contract current operational deficit."}
           </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────── */
+/* ── TAB CONTENT: CONTRACTOR WORK LEDGER ────────────────── */
+/* ──────────────────────────────────────────────────────── */
+interface ContractorWorkLedgerTabProps {
+  projectId: string;
+  contractorWorkLogs: ContractorWorkLog[];
+  onSuccess: () => void;
+}
+
+function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: ContractorWorkLedgerTabProps) {
+  const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
+  const allContractors = useMemo(() => Array.isArray(contractorsRaw) ? contractorsRaw : [], [contractorsRaw]);
+
+  // Form states
+  const [selectedContractorId, setSelectedContractorId] = useState("");
+  const [contractorSearch, setContractorSearch] = useState("");
+  const [sqFt, setSqFt] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const matchedContractor = allContractors.find(c => c.id === selectedContractorId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedContractorId) {
+      toast({
+        title: "Required field",
+        description: "Please choose a contractor.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const valSqFt = Number(sqFt);
+    if (isNaN(valSqFt) || valSqFt <= 0) {
+      toast({
+        title: "Invalid Sq.Ft value",
+        description: "Please enter a valid positive number for sq.ft.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await apiRequest.create("contractor-work-logs", {
+        projectId,
+        contractorId: selectedContractorId,
+        sqFt: valSqFt,
+        date: new Date(date).toISOString(),
+        remarks: remarks || null,
+      });
+
+      toast({
+        title: "Work log recorded",
+        description: `Logged ${valSqFt} sq.ft of work.`,
+      });
+
+      setSqFt("");
+      setRemarks("");
+      onSuccess(); // reload project details
+    } catch (err: any) {
+      toast({
+        title: "Failed to record work log",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    if (window.confirm("Are you sure you want to remove this contractor work log?")) {
+      try {
+        await apiRequest.delete("contractor-work-logs", logId);
+        toast({
+          title: "Work log removed",
+          description: "Contractor work logs updated successfully.",
+        });
+        onSuccess();
+      } catch (err: any) {
+        toast({
+          title: "Delete failed",
+          description: err.message,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between border-b pb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Contractor Work Ledger</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Log and track contractor work done in sq.ft.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Form panel */}
+        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm space-y-4">
+          <h4 className="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Log Work Done</h4>
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Choose Contractor *</label>
+              <SearchableSelect
+                value={selectedContractorId}
+                displayValue={matchedContractor?.name || ""}
+                options={allContractors
+                  .filter((c) => !contractorSearch || c.name.toLowerCase().includes(contractorSearch.toLowerCase()))
+                  .slice(0, 10)
+                  .map((c) => ({ id: c.id, label: c.name }))}
+                placeholder="Search contractor..."
+                onSearchChange={setContractorSearch}
+                onSelect={(id) => {
+                  setSelectedContractorId(id);
+                }}
+                onClear={() => {
+                  setSelectedContractorId("");
+                  setContractorSearch("");
+                }}
+              />
+              {matchedContractor && (
+                <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                  Rate: {matchedContractor.pricePerSqFt ? `₹${Number(matchedContractor.pricePerSqFt).toFixed(2)} / sq.ft` : "No price specified"}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Work Done (Sq.Ft) *</label>
+              <Input
+                type="number"
+                step="0.01"
+                required
+                min="0.01"
+                placeholder="0.00"
+                value={sqFt}
+                onChange={(e) => setSqFt(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Log Date *</label>
+              <Input
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase">Remarks / Notes</label>
+              <Input
+                placeholder="e.g. Completed base coat bedroom"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
+            </div>
+
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? "Saving Log..." : "Log Work"}
+            </Button>
+          </form>
+        </Card>
+
+        {/* Logs Table */}
+        <Card className="lg:col-span-2 border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
+          {contractorWorkLogs.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground italic text-sm">
+              No contractor work logs recorded yet for this project.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Contractor Name</TableHead>
+                  <TableHead>Work (Sq.Ft)</TableHead>
+                  <TableHead>Rate / Sq.Ft</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead className="text-center w-12">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contractorWorkLogs.map((log) => {
+                  const rate = Number(log.contractor?.pricePerSqFt ?? 0);
+                  const subtotal = Number(log.sqFt || 0) * rate;
+                  return (
+                    <TableRow key={log.id}>
+                      <TableCell className="font-semibold text-xs text-slate-600 dark:text-slate-400">
+                        {new Date(log.date).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-bold">{log.contractor?.name || "Unknown"}</div>
+                        {log.remarks && <p className="text-[10px] text-slate-400">{log.remarks}</p>}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{Number(log.sqFt).toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>
+                      <TableCell className="font-bold text-right">₹{fmt(subtotal)}</TableCell>
+                      <TableCell className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLog(log.id)}
+                          className="text-slate-400 hover:text-rose-600 p-2.5 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </Card>
       </div>
     </div>

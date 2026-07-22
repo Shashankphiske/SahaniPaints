@@ -41,6 +41,8 @@ export default function ContractorDashboard({
   // Fetch all payments logged for this contractor
   const [paymentsList, setPaymentsList] = useState<ContractorPayment[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [workLogsList, setWorkLogsList] = useState<any[]>([]);
+  const [workLogsLoading, setWorkLogsLoading] = useState(false);
 
   // Fetch all projects for the dropdown selection
   const { data: projectsRaw } = useMasterData<Project>("projects", true);
@@ -73,8 +75,25 @@ export default function ContractorDashboard({
     }
   };
 
+  const fetchWorkLogs = async () => {
+    setWorkLogsLoading(true);
+    try {
+      const logs = await apiRequest.fetchAll<any>("contractor-work-logs", { contractorId: contractor.id });
+      setWorkLogsList(Array.isArray(logs) ? logs : []);
+    } catch (err: any) {
+      toast({
+        title: "Error fetching work logs",
+        description: err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setWorkLogsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPayments();
+    fetchWorkLogs();
 
     const channel = supabase
       .channel(`db-contractor-payments-${contractor.id}`)
@@ -87,8 +106,20 @@ export default function ContractorDashboard({
       )
       .subscribe();
 
+    const channelLogs = supabase
+      .channel(`db-contractor-work-logs-${contractor.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contractor_work_logs", filter: `contractor_id=eq.${contractor.id}` },
+        () => {
+          fetchWorkLogs();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(channelLogs);
     };
   }, [contractor.id]);
 
@@ -98,6 +129,19 @@ export default function ContractorDashboard({
       return p.type === "INCOMING" ? sum - amt : sum + amt;
     }, 0);
   }, [paymentsList]);
+
+  const totalSqFt = useMemo(() => {
+    return workLogsList.reduce((sum, log) => sum + Number(log.sqFt || 0), 0);
+  }, [workLogsList]);
+
+  const totalEarned = useMemo(() => {
+    return workLogsList.reduce((sum, log) => {
+      const rate = Number(log.contractor?.pricePerSqFt ?? contractor.pricePerSqFt ?? 0);
+      return sum + Number(log.sqFt || 0) * rate;
+    }, 0);
+  }, [workLogsList, contractor.pricePerSqFt]);
+
+  const balanceDue = totalEarned - totalPaid;
 
   const formatPrice = (amount: number) => {
     return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -255,9 +299,11 @@ export default function ContractorDashboard({
       {/* TABS CONTENT */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <StatCard title="Total Payments Logged" value={formatPrice(totalPaid)} icon={Coins} className="text-emerald-600 dark:text-emerald-400" />
-            <StatCard title="Total Associated Projects" value={Array.from(new Set(paymentsList.map(p => p.projectId).filter(Boolean))).length} icon={Briefcase} />
+            <StatCard title="Total Work Done" value={`${totalSqFt.toLocaleString("en-IN", { maximumFractionDigits: 2 })} sq.ft`} icon={Briefcase} />
+            <StatCard title="Total Earned" value={formatPrice(totalEarned)} icon={Coins} className="text-blue-600 dark:text-blue-400" />
+            <StatCard title="Balance Due" value={formatPrice(balanceDue)} icon={Coins} className={balanceDue >= 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -279,6 +325,12 @@ export default function ContractorDashboard({
                 <div>
                   <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Address</p>
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{contractor.address ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Price per Sq.Ft</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    {contractor.pricePerSqFt ? `₹${Number(contractor.pricePerSqFt).toFixed(2)} / sq.ft` : "Not Specified"}
+                  </p>
                 </div>
               </div>
             </div>

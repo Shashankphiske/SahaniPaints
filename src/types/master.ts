@@ -139,6 +139,7 @@ export interface Project {
   materialLogs?: any[];
   projectPayments?: any[];
   contractorPayments?: any[];
+  contractorWorkLogs?: ContractorWorkLog[];
 }
 
 export interface ProjectData {
@@ -304,6 +305,7 @@ export interface Contractor {
   email?: string | null;
   address?: string | null;
   type: "WEEKLY" | "MONTHLY";
+  pricePerSqFt?: number | null;
   createdAt: string | Date | any;
 }
 
@@ -319,6 +321,23 @@ export interface ContractorPayment {
   createdAt: string;
   contractor?: {
     name: string;
+  };
+  project?: {
+    name: string;
+  };
+}
+
+export interface ContractorWorkLog {
+  id: string;
+  date: string;
+  projectId: string;
+  contractorId: string;
+  sqFt: number;
+  remarks?: string | null;
+  createdAt: string;
+  contractor?: {
+    name: string;
+    pricePerSqFt?: number | null;
   };
   project?: {
     name: string;

@@ -39,6 +39,7 @@ const getProductSizeInLitres = (sizeStr?: string): number => {
 };
 
 interface QueuedMaterial {
+  queueId: string;
   product: Product;
   quantity: number;
   allocatedArea: number;
@@ -207,46 +208,10 @@ export default function MaterialLogsPage() {
       return;
     }
 
-    // Check if already queued
-    if (tempSelectedMaterials.some((item) => item.product.id === product.id)) {
-      toast({
-        title: "Product already queued",
-        description: `"${product.name}" is already in the list to be added.`,
-        variant: "destructive",
-      });
-      setProductOpen(false);
-      return;
-    }
-
-    // Check if duplicate on same date & project in existing logs
-    const startOfDay = new Date(currentDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(currentDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const isDuplicate = logsList.some((log) => {
-      const logDate = new Date(log.date);
-      return (
-        log.projectId === selectedProject.id &&
-        log.productId === product.id &&
-        logDate >= startOfDay &&
-        logDate <= endOfDay
-      );
-    });
-
-    if (isDuplicate) {
-      toast({
-        title: "Product already logged",
-        description: `"${product.name}" is already logged for this project on today's date.`,
-        variant: "destructive",
-      });
-      setProductOpen(false);
-      return;
-    }
-
     setTempSelectedMaterials((prev) => [
       ...prev,
       {
+        queueId: Math.random().toString(36).substring(2, 9),
         product,
         quantity: 1.0,
         allocatedArea: product.allocatedArea || 0,
@@ -257,13 +222,13 @@ export default function MaterialLogsPage() {
     setProductSearch("");
   };
 
-  const handleRemoveFromQueue = (productId: string) => {
-    setTempSelectedMaterials((prev) => prev.filter((item) => item.product.id !== productId));
+  const handleRemoveFromQueue = (queueId: string) => {
+    setTempSelectedMaterials((prev) => prev.filter((item) => item.queueId !== queueId));
   };
 
-  const handleUpdateQueueQuantity = (productId: string, quantity: number) => {
+  const handleUpdateQueueQuantity = (queueId: string, quantity: number) => {
     setTempSelectedMaterials((prev) =>
-      prev.map((item) => (item.product.id === productId ? { ...item, quantity } : item))
+      prev.map((item) => (item.queueId === queueId ? { ...item, quantity } : item))
     );
   };
 
@@ -664,7 +629,7 @@ export default function MaterialLogsPage() {
                 </div>
 
                 <div className="space-y-2.5">
-                  {tempSelectedMaterials.map(({ product: p, quantity, allocatedArea, unit }) => {
+                  {tempSelectedMaterials.map(({ queueId, product: p, quantity, allocatedArea, unit }) => {
                     const litresPerPack = getProductSizeInLitres(p.size);
                     const totalLitresLogged = quantity * litresPerPack;
                     const coveragePerLitre = Number(p.coverageSqFt || p.coverageRnFt || 0);
@@ -673,7 +638,7 @@ export default function MaterialLogsPage() {
 
                     return (
                       <div
-                        key={p.id}
+                        key={queueId}
                         className="p-3.5 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-2"
                       >
                         <div className="flex items-center justify-between">
@@ -685,7 +650,7 @@ export default function MaterialLogsPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleRemoveFromQueue(p.id)}
+                            onClick={() => handleRemoveFromQueue(queueId)}
                             className="text-slate-400 hover:text-rose-600 p-1 rounded transition-colors"
                           >
                             <X className="h-4 w-4" />
@@ -706,7 +671,7 @@ export default function MaterialLogsPage() {
                               min="0.01"
                               step="0.01"
                               value={quantity}
-                              onChange={(e) => handleUpdateQueueQuantity(p.id, Number(e.target.value))}
+                              onChange={(e) => handleUpdateQueueQuantity(queueId, Number(e.target.value))}
                               className="h-8 w-20 text-xs font-bold text-center px-1"
                             />
                             <span className="text-[10px] font-bold text-slate-400">Packs</span>

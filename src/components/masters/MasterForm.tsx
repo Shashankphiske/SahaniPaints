@@ -41,7 +41,7 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   colors: ["name", "shade"],
   labours: ["name", "paymentPerDay", "phonenumber", "type"],
   areas: ["name"],
-  contractors: ["name", "phonenumber", "email", "address", "type"]
+  contractors: ["name", "phonenumber", "email", "address", "type", "pricePerSqFt"]
 };
 
 function useClickOutside(ref: React.RefObject<HTMLDivElement>, cb: () => void) {
@@ -374,6 +374,14 @@ export function MasterForm({
       payload.hasToken = !!payload.hasToken;
       if (!payload.size) {
         payload.size = "1ltr";
+      }
+    }
+    
+    if (normalizedResource === "contractors") {
+      if (payload.pricePerSqFt !== undefined && payload.pricePerSqFt !== null && payload.pricePerSqFt !== "") {
+        payload.pricePerSqFt = Number(payload.pricePerSqFt);
+      } else {
+        payload.pricePerSqFt = null;
       }
     }
     
@@ -1157,6 +1165,20 @@ export function MasterForm({
                 value={formData.address || ""}
                 onChange={handleChange}
                 placeholder="Enter address"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Price per Sq.Ft (₹)</span>
+                <span className="text-[11px] text-muted-foreground font-normal italic">(Optional)</span>
+              </label>
+              <Input
+                type="number"
+                name="pricePerSqFt"
+                value={formData.pricePerSqFt ?? ""}
+                onChange={handleChange}
+                placeholder="Enter price per sq.ft (e.g. 15)"
               />
             </div>
 
