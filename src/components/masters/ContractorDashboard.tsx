@@ -36,7 +36,7 @@ export default function ContractorDashboard({
   onBack: () => void;
   handleSave: (data: any) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "payments" | "edit">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "payments" | "work-logs" | "edit">("overview");
 
   // Fetch all payments logged for this contractor
   const [paymentsList, setPaymentsList] = useState<ContractorPayment[]>([]);
@@ -283,6 +283,16 @@ export default function ContractorDashboard({
           }`}
         >
           Payment History
+        </button>
+        <button
+          onClick={() => setActiveTab("work-logs")}
+          className={`pb-2.5 text-sm font-bold border-b-2 transition-all duration-150 -mb-[2px] ${
+            activeTab === "work-logs"
+              ? "border-primary text-primary"
+              : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+          }`}
+        >
+          Work Logs Ledger
         </button>
         <button
           onClick={() => setActiveTab("edit")}
@@ -558,6 +568,58 @@ export default function ContractorDashboard({
             </DialogContent>
           </Dialog>
         </div>
+      )}
+
+      {activeTab === "work-logs" && (
+        <Card className="border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
+            <CardTitle className="text-xs font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300">
+              Work Logs History Ledger
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {workLogsLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+              </div>
+            ) : workLogsList.length === 0 ? (
+              <p className="text-sm text-slate-400 italic py-10 text-center">No work logs recorded yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Project / Site</TableHead>
+                    <TableHead>Work Done (Sq.Ft)</TableHead>
+                    <TableHead>Rate / Sq.Ft</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead>Remarks</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {workLogsList.map((log) => {
+                    const rate = Number(log.contractor?.pricePerSqFt ?? contractor.pricePerSqFt ?? 0);
+                    const subtotal = Number(log.sqFt || 0) * rate;
+                    return (
+                      <TableRow key={log.id}>
+                        <TableCell className="font-semibold text-xs text-slate-600 dark:text-slate-400">
+                          {formatDate(log.date)}
+                        </TableCell>
+                        <TableCell className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          {log.project?.name || "Unknown Project"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{Number(log.sqFt).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs">₹{rate.toFixed(2)}</TableCell>
+                        <TableCell className="font-bold text-right text-xs">₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-slate-500 text-[11px]">{log.remarks || "—"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {activeTab === "edit" && (
