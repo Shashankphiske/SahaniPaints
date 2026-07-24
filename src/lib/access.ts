@@ -18,6 +18,7 @@ export const ROUTE_ACCESS_MAP: Record<string, string> = {
   "/material-usage": "dashboard",
   "/payments": "dashboard",
   "/contractor-payments": "dashboard",
+  "/reports": "dashboard",
 };
 
 export function getAccessKeyForPath(path: string): string | undefined {

@@ -14,6 +14,7 @@ import Index from "./pages/Index";
 import TasksPage from "./pages/TasksPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import ReportsPage from "./pages/ReportsPage";
 
 import CustomersPage from "./components/masters/CustomersPage";
 import BrandsPage from "./components/masters/BrandsPage";
@@ -96,6 +97,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <SettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute>
+                    <ReportsPage />
                   </ProtectedRoute>
                 }
               />

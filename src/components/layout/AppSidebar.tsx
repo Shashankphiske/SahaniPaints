@@ -19,7 +19,8 @@ import {
   MapPin,
   Coins,
   Briefcase,
-  BookOpen
+  BookOpen,
+  BarChart3
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "../NavLink";
@@ -69,6 +70,7 @@ const mainItems = [
   { title: "Project Payments", url: "/payments", icon: Coins },
   { title: "Crew & Vendor Payouts", url: "/contractor-payments", icon: Briefcase },
   { title: "Weekly Payment Diary", url: "/weekly-diary", icon: BookOpen },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
 const mastersItems = [
