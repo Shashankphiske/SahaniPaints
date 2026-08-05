@@ -826,26 +826,22 @@ export default function LabourAttendancePage() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-md">
-                <table className="w-full text-left border-collapse">
+              <div className="w-full overflow-x-auto no-scrollbar bg-card border border-border rounded-xl shadow-sm-soft">
+                <table className="w-full min-w-max text-sm">
                   <thead>
-                    <tr className="bg-slate-50/80 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
-                      <th className="px-6 py-4">Date</th>
-                      <th className="px-6 py-4">Project Site</th>
-                      <th className="px-6 py-4 text-center">Labours Present</th>
-                      <th className="px-6 py-4 text-right">Daily Labor Cost</th>
-                      <th className="px-6 py-4 text-center">Actions</th>
+                    <tr className="border-b bg-muted/50 transition-colors">
+                      <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Date</th>
+                      <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Project Site</th>
+                      <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Labours Present</th>
+                      <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Daily Labor Cost</th>
+                      <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {groupedAttendance.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-20 text-center text-slate-500 font-semibold">
-                          <ClipboardCheck className="h-12 w-12 text-slate-300 dark:text-zinc-700 mx-auto mb-3 opacity-40" />
-                          No Attendance Sheets Found
-                          <p className="text-xs font-normal text-slate-400 mt-1">
-                            Click "Mark New Attendance" to get started or adjust filter parameters.
-                          </p>
+                        <td colSpan={5} className="h-24 text-center text-muted-foreground align-middle">
+                          No results found.
                         </td>
                       </tr>
                     ) : (
@@ -854,31 +850,28 @@ export default function LabourAttendancePage() {
                         return (
                           <tr
                             key={`${g.date}_${g.projectId}`}
+                            className="border-b transition-colors hover:bg-muted/30 cursor-pointer"
                             onClick={() => handleOpenDetail(g)}
-                            className="border-b border-slate-100 dark:border-zinc-900 hover:bg-slate-50/50 dark:hover:bg-zinc-900/10 cursor-pointer transition-colors"
                           >
-                            <td className="px-6 py-4 font-mono font-bold text-xs text-slate-500 dark:text-zinc-400">
+                            <td className="p-4 align-middle">
                               {formatDate(g.date)}
                             </td>
-                            <td className="px-6 py-4 font-extrabold text-slate-800 dark:text-slate-200">
+                            <td className="p-4 align-middle">
                               {g.projectName}
                             </td>
-                            <td className="px-6 py-4 text-center">
-                              <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 font-extrabold text-xs px-2.5 py-0.5 rounded-full border border-slate-200/20">
+                            <td className="p-4 align-middle text-center">
+                              <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 font-semibold text-xs px-2.5 py-0.5 rounded-full border border-slate-200/20">
                                 {g.records.length} Present
                               </Badge>
                             </td>
-                            <td className="px-6 py-4 text-right font-mono font-extrabold text-slate-900 dark:text-slate-100">
+                            <td className="p-4 align-middle text-right font-mono font-bold">
                               ₹{totalCost.toLocaleString("en-IN")}
                             </td>
-                            <td className="px-6 py-4 text-center">
+                            <td className="p-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenDetail(g);
-                                }}
+                                onClick={() => handleOpenDetail(g)}
                                 className="font-bold text-xs text-primary hover:text-primary hover:bg-primary/5 rounded-lg"
                               >
                                 View & Mark
@@ -1100,14 +1093,14 @@ export default function LabourAttendancePage() {
                       <p className="text-xs opacity-70">Use the left panel to search and add labourers.</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
+                    <div className="w-full overflow-x-auto no-scrollbar">
+                      <table className="w-full min-w-max text-sm">
                         <thead>
-                          <tr className="bg-slate-50 dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-900 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
-                            <th className="px-5 py-3">Worker Name</th>
-                            <th className="px-5 py-3 text-center">Shift</th>
-                            <th className="px-5 py-3 text-right">Base / Daily Wage</th>
-                            <th className="px-5 py-3 text-center">Actions</th>
+                          <tr className="border-b bg-muted/50 transition-colors">
+                            <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Worker Name</th>
+                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Shift</th>
+                            <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Base / Daily Wage</th>
+                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1121,20 +1114,20 @@ export default function LabourAttendancePage() {
                               : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
 
                             return (
-                              <tr key={r.id} className="border-b border-slate-100 dark:border-zinc-900 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-900/10">
-                                <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-200">
+                              <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
+                                <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
                                   {r.labour?.name}
                                 </td>
-                                <td className="px-5 py-4 text-center">
+                                <td className="p-4 align-middle text-center">
                                   <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${shiftColor}`}>
                                     {shiftLabel} ({val}x)
                                   </span>
                                 </td>
-                                <td className="px-5 py-4 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                <td className="p-4 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-200">
                                   <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
                                   <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
                                 </td>
-                                <td className="px-5 py-4 text-center">
+                                <td className="p-4 align-middle text-center">
                                   <button
                                     onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
                                     className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
