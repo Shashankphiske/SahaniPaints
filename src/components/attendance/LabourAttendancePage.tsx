@@ -22,6 +22,7 @@ import {
   Loader2,
   ChevronDown,
   Filter,
+  ArrowLeft,
 } from "lucide-react";
 
 // Format date helper: "dd MMM yyyy"
@@ -320,7 +321,10 @@ export default function LabourAttendancePage() {
     }
 
     if (successCount > 0) {
-      setAttendanceList((prev) => [...newRecords, ...prev]);
+      setAttendanceList((prev) => {
+        const filteredPrev = prev.filter((r) => !newRecords.some((nr) => nr.id === r.id));
+        return [...newRecords, ...filteredPrev];
+      });
       toast({
         title: "Attendance marked",
         description: `Successfully added ${successCount} worker(s) to today's site.`,
@@ -455,7 +459,10 @@ export default function LabourAttendancePage() {
         };
       });
 
-      setAttendanceList((prev) => [...formattedResults, ...prev]);
+      setAttendanceList((prev) => {
+        const filteredPrev = prev.filter((r) => !formattedResults.some((fr) => fr.id === r.id));
+        return [...formattedResults, ...filteredPrev];
+      });
       toast({
         title: "Attendance copied",
         description: `Successfully copied ${formattedResults.length} labourers' attendance.`,
@@ -551,253 +558,515 @@ export default function LabourAttendancePage() {
   const [showAddCard, setShowAddCard] = useState(false);
   const [showFilterCard, setShowFilterCard] = useState(false);
 
+  const [selectedDetailGroup, setSelectedDetailGroup] = useState<{
+    date: string;
+    projectId: string;
+    projectName: string;
+  } | null>(null);
+
+  const handleOpenDetail = (g: { date: string; projectId: string; projectName: string }) => {
+    setSelectedDetailGroup(g);
+    setCurrentDate(g.date);
+    const matchingProj = projectsList.find((p) => p.id === g.projectId) || ({ id: g.projectId, name: g.projectName } as Project);
+    setSelectedProject(matchingProj);
+    setProjectSearch(g.projectName);
+  };
+
+  const handleBackToLedger = () => {
+    setSelectedDetailGroup(null);
+    setSelectedProject(null);
+    setProjectSearch("");
+    setCurrentDate(new Date().toISOString().split("T")[0]);
+    setTempSelectedLabours([]);
+  };
+
+  const activeDetailRecords = useMemo(() => {
+    if (!selectedDetailGroup) return [];
+    const start = new Date(selectedDetailGroup.date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(selectedDetailGroup.date);
+    end.setHours(23, 59, 59, 999);
+
+    return attendanceList.filter((a) => {
+      const d = new Date(a.date);
+      return a.projectId === selectedDetailGroup.projectId && d >= start && d <= end;
+    });
+  }, [attendanceList, selectedDetailGroup]);
+
   return (
     <div className="space-y-8 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-zinc-800/60 pb-4">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 font-display flex items-center gap-2.5">
-          <ClipboardCheck className="h-8 w-8 text-primary shrink-0" />
-          Labour Attendance Ledger
-        </h1>
+      {/* Ledger List Mode */}
+      {!selectedDetailGroup && (
+        <div className="space-y-8">
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-zinc-800/60 pb-4">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 font-display flex items-center gap-2.5">
+              <ClipboardCheck className="h-8 w-8 text-primary shrink-0" />
+              Labour Attendance Ledger
+            </h1>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant={showFilterCard ? "default" : "outline"}
-            onClick={() => setShowFilterCard(!showFilterCard)}
-            className="font-medium flex items-center gap-1.5 shadow-sm"
-          >
-            <Filter className="h-4 w-4" />
-            Filters
-            {(filterSearch || filterDate || filterProjectId) ? (
-              <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
-                !
-              </span>
-            ) : null}
-          </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={showFilterCard ? "default" : "outline"}
+                onClick={() => setShowFilterCard(!showFilterCard)}
+                className="font-medium flex items-center gap-1.5 shadow-sm h-9"
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {(filterSearch || filterDate || filterProjectId) ? (
+                  <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
+                    !
+                  </span>
+                ) : null}
+              </Button>
 
-          <Button
-            variant={showAddCard ? "default" : "outline"}
-            onClick={() => setShowAddCard(!showAddCard)}
-            className="font-medium flex items-center gap-1.5 shadow-sm"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Attendance
-          </Button>
-        </div>
-      </div>
+              <Button
+                variant={showAddCard ? "default" : "outline"}
+                onClick={() => {
+                  setShowAddCard(!showAddCard);
+                  // Reset states when starting a new attendance marking flow
+                  setSelectedProject(null);
+                  setProjectSearch("");
+                  setCurrentDate(new Date().toISOString().split("T")[0]);
+                }}
+                className="font-medium flex items-center gap-1.5 shadow-sm h-9"
+              >
+                <UserPlus className="h-4 w-4" />
+                Mark New Attendance
+              </Button>
+            </div>
+          </div>
 
-      {/* Main Form Entry Card */}
-      {showAddCard && (
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md rounded-2xl overflow-visible">
-          <CardHeader className="p-6 border-b border-slate-100 dark:border-zinc-900 pb-4">
-            <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-              <Calendar className="h-4 w-4 text-primary" />
-              Mark Today's Attendance
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 overflow-visible">
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start overflow-visible">
-              {/* Left form entry columns */}
-              <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-visible">
-                {/* Date & Site selection */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Attendance Date
-                  </label>
+          {/* New Attendance Entry Trigger Card */}
+          {showAddCard && (
+            <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md rounded-2xl p-6 max-w-xl mx-auto overflow-visible animate-in fade-in-50 slide-in-from-top-1 duration-150">
+              <CardHeader className="p-0 pb-4 border-b border-slate-100 dark:border-zinc-900">
+                <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  New Attendance sheet
+                </CardTitle>
+                <CardDescription>
+                  Select a project site and date to start marking attendance.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0 pt-4 space-y-4 overflow-visible">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-visible">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                      Attendance Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={currentDate}
+                      onChange={(e) => setCurrentDate(e.target.value)}
+                      className="h-10"
+                    />
+                  </div>
+
+                  <div ref={projectRef} className="space-y-1 relative overflow-visible">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                      Project Site *
+                    </label>
+                    <div className="relative">
+                      <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        className="pl-9 pr-8 h-10"
+                        placeholder="Type site name..."
+                        value={projectSearch}
+                        onFocus={() => setProjectOpen(true)}
+                        onChange={(e) => {
+                          setProjectSearch(e.target.value);
+                          setProjectOpen(true);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            searchProjectsFromServer(projectSearch);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProjectOpen(!projectOpen)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {projectOpen && (
+                      <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-40 overflow-y-auto mt-1 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                        {projectSearching && (
+                          <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                            Searching...
+                          </div>
+                        )}
+                        {filteredProjects.map((p) => (
+                          <div
+                            key={p.id}
+                            className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
+                            onMouseDown={() => {
+                              setSelectedProject(p);
+                              setProjectSearch(p.name);
+                              setProjectOpen(false);
+                            }}
+                          >
+                            {p.name}
+                          </div>
+                        ))}
+                        {!projectSearching && filteredProjects.length === 0 && (
+                          <div className="px-4 py-2 text-xs text-muted-foreground">
+                            No matches. Press Enter to search.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full font-bold shadow-md h-10 mt-2"
+                  disabled={!selectedProject}
+                  onClick={() => {
+                    if (selectedProject) {
+                      handleOpenDetail({
+                        date: currentDate,
+                        projectId: selectedProject.id,
+                        projectName: selectedProject.name,
+                      });
+                      setShowAddCard(false);
+                    }
+                  }}
+                >
+                  Start Marking Attendance
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Global Filter Cards */}
+          {showFilterCard && (
+            <Card className="border border-slate-200/60 dark:border-zinc-800/60 shadow-sm rounded-xl">
+              <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 space-y-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                    <Search className="h-3 w-3" />
+                    Search Labour
+                  </span>
                   <Input
-                    type="date"
-                    value={currentDate}
-                    onChange={(e) => setCurrentDate(e.target.value)}
+                    placeholder="Search present workers by name..."
+                    value={filterSearch}
+                    onChange={(e) => setFilterSearch(e.target.value)}
+                    className="h-10"
                   />
                 </div>
 
-                {/* Site Selection Input Box */}
-                <div ref={projectRef} className="space-y-1 relative overflow-visible">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Select Project Site *
-                  </label>
-                  <div className="relative">
-                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      className="pl-9 pr-8"
-                      placeholder="Type project name... (Enter to search server)"
-                      value={projectSearch}
-                      onFocus={() => setProjectOpen(true)}
-                      onChange={(e) => {
-                        setProjectSearch(e.target.value);
-                        setProjectOpen(true);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          searchProjectsFromServer(projectSearch);
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setProjectOpen(!projectOpen)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {projectOpen && (
-                    <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                      {projectSearching && (
-                        <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
-                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                          Searching server...
-                        </div>
-                      )}
-                      {filteredProjects.map((p) => (
-                        <div
-                          key={p.id}
-                          className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
-                          onMouseDown={() => {
-                            setSelectedProject(p);
-                            setProjectSearch(p.name);
-                            setProjectOpen(false);
-                          }}
-                        >
-                          {p.name}
-                        </div>
-                      ))}
-                      {!projectSearching && filteredProjects.length === 0 && (
-                        <div className="px-4 py-2 text-xs text-muted-foreground">
-                          No matches. Press Enter to search server.
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div className="w-full md:w-56 space-y-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                    <Calendar className="h-3 w-3" />
+                    Filter by Date
+                  </span>
+                  <Input
+                    type="date"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="h-10"
+                  />
                 </div>
 
-                {/* Add Labour Dropdown Input Box */}
-                <div ref={labourRef} className="space-y-1 md:col-span-2 relative overflow-visible">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Add Present Labour *
-                  </label>
-                  <div className="relative">
-                    <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      className="pl-9 pr-8"
-                      placeholder="Search and select labour name..."
-                      value={labourSearch}
-                      disabled={!selectedProject}
-                      onFocus={() => setLabourOpen(true)}
-                      onChange={(e) => {
-                        setLabourSearch(e.target.value);
-                        setLabourOpen(true);
-                      }}
-                    />
-                  </div>
-
-                  {labourOpen && selectedProject && (
-                    <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                      {filteredLabours.map((l) => (
-                        <div
-                          key={l.id}
-                          className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
-                          onMouseDown={() => handleQueueLabour(l)}
-                        >
-                          <span>{l.name}</span>
-                          <span className="text-[10px] text-muted-foreground font-mono font-bold">
-                            ₹{l.paymentPerDay}/day
-                          </span>
-                        </div>
-                      ))}
-                      {filteredLabours.length === 0 && (
-                        <div className="px-4 py-2 text-xs text-muted-foreground italic">
-                          No matches found.
-                        </div>
-                      )}
-                    </div>
-                  )}
+                <div className="w-full md:w-64 space-y-1.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
+                    <Building className="h-3 w-3" />
+                    Filter by Site
+                  </span>
+                  <SearchableSelect
+                    value={filterProjectId}
+                    displayValue={filterProjectDisplay}
+                    options={(projectsData ?? [])
+                      .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((p) => ({ id: p.id, label: p.name }))}
+                    placeholder="All Project Sites"
+                    allLabel="All Project Sites"
+                    onSearchChange={setFilterProjectDisplay}
+                    onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
+                    onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+                  />
                 </div>
 
-                {/* Queued Labours List and Submit Button */}
-                {tempSelectedLabours.length > 0 && (
-                  <div className="md:col-span-2 space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
-                        Ready to Add ({tempSelectedLabours.length})
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleSaveAttendance}
-                        disabled={submittingAttendance}
-                        className="font-bold text-xs shadow-md"
-                      >
-                        {submittingAttendance ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                            Marking...
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                            Mark Attendance
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {tempSelectedLabours.map(({ labour: l, shift }) => {
-                        const baseRate = Number(l.paymentPerDay || 0);
-                        const multiplier = shift === "DAY" ? 1.0 : shift === "NIGHT" ? 0.5 : 1.5;
-                        const calculatedWage = baseRate * multiplier;
-                        const { dayOccupied, nightOccupied, daySiteName, nightSiteName } = getOccupiedShifts(l.id, currentDate);
-                        
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setFilterSearch("");
+                    setFilterDate("");
+                    setFilterProjectId("");
+                    setFilterProjectDisplay("");
+                  }}
+                  className="text-xs font-bold h-10 px-4 hover:bg-slate-100"
+                >
+                  Clear Filters
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Grouped Attendance Table Ledger */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-extrabold tracking-widest text-slate-400 dark:text-zinc-650 uppercase flex items-center gap-1.5 select-none">
+              <Users className="h-4 w-4" />
+              Attendance Sheets Ledger
+            </h3>
+
+            {loadingAttendance ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white/40 dark:bg-zinc-950/40 rounded-2xl border border-slate-200 dark:border-zinc-800">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+                <p className="text-sm font-semibold text-slate-500 animate-pulse">
+                  Fetching attendance mappings ledger...
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-md">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                      <th className="px-6 py-4">Date</th>
+                      <th className="px-6 py-4">Project Site</th>
+                      <th className="px-6 py-4 text-center">Labours Present</th>
+                      <th className="px-6 py-4 text-right">Daily Labor Cost</th>
+                      <th className="px-6 py-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedAttendance.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-20 text-center text-slate-500 font-semibold">
+                          <ClipboardCheck className="h-12 w-12 text-slate-300 dark:text-zinc-700 mx-auto mb-3 opacity-40" />
+                          No Attendance Sheets Found
+                          <p className="text-xs font-normal text-slate-400 mt-1">
+                            Click "Mark New Attendance" to get started or adjust filter parameters.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      groupedAttendance.map((g) => {
+                        const totalCost = g.records.reduce((sum, r) => sum + (Number(r.labour?.paymentPerDay || 0) * Number(r.workDayValue ?? 1.0)), 0);
                         return (
+                          <tr
+                            key={`${g.date}_${g.projectId}`}
+                            onClick={() => handleOpenDetail(g)}
+                            className="border-b border-slate-100 dark:border-zinc-900 hover:bg-slate-50/50 dark:hover:bg-zinc-900/10 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 font-mono font-bold text-xs text-slate-500 dark:text-zinc-400">
+                              {formatDate(g.date)}
+                            </td>
+                            <td className="px-6 py-4 font-extrabold text-slate-800 dark:text-slate-200">
+                              {g.projectName}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 font-extrabold text-xs px-2.5 py-0.5 rounded-full border border-slate-200/20">
+                                {g.records.length} Present
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 text-right font-mono font-extrabold text-slate-900 dark:text-slate-100">
+                              ₹{totalCost.toLocaleString("en-IN")}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDetail(g);
+                                }}
+                                className="font-bold text-xs text-primary hover:text-primary hover:bg-primary/5 rounded-lg"
+                              >
+                                View & Mark
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Detailed View Mode */}
+      {selectedDetailGroup && (
+        <div className="space-y-6">
+          {/* Back Button and Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-zinc-800/60 pb-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBackToLedger}
+                className="h-9 w-9 p-0 rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 font-display">
+                  {selectedDetailGroup.projectName}
+                </h1>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Attendance Sheet for {formatDate(selectedDetailGroup.date)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
+                {activeDetailRecords.length} Workers Present
+              </Badge>
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
+                Wages: ₹{activeDetailRecords.reduce((sum, r) => sum + Number(r.labour?.paymentPerDay || 0) * Number(r.workDayValue ?? 1.0), 0).toLocaleString("en-IN")}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left Column: Mark Attendance & Copy */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Form Entry Card */}
+              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-visible">
+                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 pb-3">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                    <UserPlus className="h-4 w-4 text-primary" />
+                    Add Labour to Roster
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 space-y-4 overflow-visible">
+                  {/* Labour Search */}
+                  <div ref={labourRef} className="space-y-1 relative overflow-visible">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      Search Labourer Name *
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input
+                        className="pl-9 pr-8 h-10"
+                        placeholder="Search by name..."
+                        value={labourSearch}
+                        onFocus={() => setLabourOpen(true)}
+                        onChange={(e) => {
+                          setLabourSearch(e.target.value);
+                          setLabourOpen(true);
+                        }}
+                      />
+                    </div>
+
+                    {labourOpen && (
+                      <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                        {filteredLabours.map((l) => (
                           <div
                             key={l.id}
-                            className="flex items-center justify-between p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm"
+                            className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
+                            onMouseDown={() => handleQueueLabour(l)}
                           >
-                            <div className="space-y-0.5">
-                              <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
-                              <p className="text-[10px] text-slate-400 font-semibold">
-                                Base: ₹{baseRate}/day · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <select
-                                value={shift}
-                                onChange={(e) => handleUpdateQueueShift(l.id, e.target.value as any)}
-                                className="h-8 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-2 py-0.5 text-xs font-bold text-slate-700 dark:text-zinc-350 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                              >
-                                <option value="DAY" disabled={dayOccupied}>Day (1.0x) {dayOccupied ? `• At ${daySiteName}` : ""}</option>
-                                <option value="NIGHT" disabled={nightOccupied}>Night (0.5x) {nightOccupied ? `• At ${nightSiteName}` : ""}</option>
-                                <option value="BOTH" disabled={dayOccupied || nightOccupied}>Both (1.5x) {(dayOccupied || nightOccupied) ? "• Conflict" : ""}</option>
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveFromQueue(l.id)}
-                                className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-905 transition-colors"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
+                            <span>{l.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono font-bold">
+                              ₹{l.paymentPerDay}/day
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
+                        ))}
+                        {filteredLabours.length === 0 && (
+                          <div className="px-4 py-2 text-xs text-muted-foreground italic">
+                            No matches found.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Copy roster columns */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-200/50 dark:border-zinc-800/50 space-y-4">
+                  {/* Queued Labours List and Submit Button */}
+                  {tempSelectedLabours.length > 0 && (
+                    <div className="space-y-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                          Queue ({tempSelectedLabours.length})
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSaveAttendance}
+                          disabled={submittingAttendance}
+                          className="font-bold text-xs shadow-md"
+                        >
+                          {submittingAttendance ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                              Mark Present
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="space-y-2 max-h-56 overflow-y-auto">
+                        {tempSelectedLabours.map(({ labour: l, shift }) => {
+                          const baseRate = Number(l.paymentPerDay || 0);
+                          const multiplier = shift === "DAY" ? 1.0 : shift === "NIGHT" ? 0.5 : 1.5;
+                          const calculatedWage = baseRate * multiplier;
+                          const { dayOccupied, nightOccupied, daySiteName, nightSiteName } = getOccupiedShifts(l.id, currentDate);
+
+                          return (
+                            <div
+                              key={l.id}
+                              className="flex items-center justify-between p-3 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm"
+                            >
+                              <div className="space-y-0.5">
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
+                                <p className="text-[9px] text-slate-400 font-semibold">
+                                  Base: ₹{baseRate} · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={shift}
+                                  onChange={(e) => handleUpdateQueueShift(l.id, e.target.value as any)}
+                                  className="h-8 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:text-zinc-350 focus:outline-none focus:ring-0"
+                                >
+                                  <option value="DAY" disabled={dayOccupied}>Day (1.0x)</option>
+                                  <option value="NIGHT" disabled={nightOccupied}>Night (0.5x)</option>
+                                  <option value="BOTH" disabled={dayOccupied || nightOccupied}>Both (1.5x)</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFromQueue(l.id)}
+                                  className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-slate-50 transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Copy Roster Card */}
+              <Card className="border border-slate-200/50 dark:border-zinc-800/50 shadow-sm bg-slate-50/40 dark:bg-zinc-900/10 rounded-2xl p-5 space-y-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
-                    Copy Names From Date
+                  <label className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
+                    Copy Attendance List From Date
                   </label>
                   <Input
                     type="date"
                     value={copyFromDate}
                     onChange={(e) => setCopyFromDate(e.target.value)}
-                    disabled={!selectedProject}
+                    className="h-10"
                   />
                 </div>
 
@@ -806,270 +1075,86 @@ export default function LabourAttendancePage() {
                   variant="outline"
                   className="w-full font-bold text-xs bg-white hover:bg-slate-100 h-9"
                   onClick={handleCopyNames}
-                  disabled={!selectedProject || !copyFromDate}
+                  disabled={!copyFromDate}
                 >
                   <Copy className="h-4 w-4 mr-1.5" />
                   Copy Attendance List
                 </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Global Filter Cards */}
-      {showFilterCard && (
-        <Card className="border border-slate-200/60 dark:border-zinc-800/60 shadow-sm rounded-xl">
-          <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex-1 space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-                <Search className="h-3 w-3" />
-                Search Labour
-              </span>
-              <Input
-                placeholder="Search present workers by name..."
-                value={filterSearch}
-                onChange={(e) => setFilterSearch(e.target.value)}
-              />
+              </Card>
             </div>
 
-            <div className="w-full md:w-56 space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-                <Calendar className="h-3 w-3" />
-                Filter by Date
-              </span>
-              <Input
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              />
+            {/* Right Column: Present Laborers List */}
+            <div className="lg:col-span-7">
+              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
+                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                    <Users className="h-4 w-4 text-emerald-500" />
+                    Present Workers list ({activeDetailRecords.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {activeDetailRecords.length === 0 ? (
+                    <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
+                      <ClipboardCheck className="h-10 w-10 opacity-30" />
+                      <p className="text-sm font-semibold">No labourers marked present yet.</p>
+                      <p className="text-xs opacity-70">Use the left panel to search and add labourers.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-900 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                            <th className="px-5 py-3">Worker Name</th>
+                            <th className="px-5 py-3 text-center">Shift</th>
+                            <th className="px-5 py-3 text-right">Base / Daily Wage</th>
+                            <th className="px-5 py-3 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeDetailRecords.map((r) => {
+                            const baseRate = Number(r.labour?.paymentPerDay || 0);
+                            const val = Number(r.workDayValue ?? 1.0);
+                            const wage = baseRate * val;
+                            const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
+                            const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
+                              : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
+                              : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
+
+                            return (
+                              <tr key={r.id} className="border-b border-slate-100 dark:border-zinc-900 text-sm hover:bg-slate-50/50 dark:hover:bg-zinc-900/10">
+                                <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-200">
+                                  {r.labour?.name}
+                                </td>
+                                <td className="px-5 py-4 text-center">
+                                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${shiftColor}`}>
+                                    {shiftLabel} ({val}x)
+                                  </span>
+                                </td>
+                                <td className="px-5 py-4 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                  <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
+                                  <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
+                                </td>
+                                <td className="px-5 py-4 text-center">
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-
-            <div className="w-full md:w-64 space-y-1.5">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1 select-none">
-                <Building className="h-3 w-3" />
-                Filter by Site
-              </span>
-              <SearchableSelect
-                value={filterProjectId}
-                displayValue={filterProjectDisplay}
-                options={(projectsData ?? [])
-                  .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
-                  .slice(0, 10)
-                  .map((p) => ({ id: p.id, label: p.name }))}
-                placeholder="All Project Sites"
-                allLabel="All Project Sites"
-                onSearchChange={setFilterProjectDisplay}
-                onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
-                onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
-              />
-            </div>
-
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setFilterSearch("");
-                setFilterDate("");
-                setFilterProjectId("");
-              }}
-              className="text-xs font-bold h-10 px-4 hover:bg-slate-100"
-            >
-              Clear Filters
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Grouped Attendance Cards lists */}
-      <div className="space-y-6">
-        {loadingAttendance ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-white/40 dark:bg-zinc-950/40 rounded-2xl border border-slate-200 dark:border-zinc-800">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-            <p className="text-sm font-semibold text-slate-500 animate-pulse">
-              Fetching attendance mappings ledger...
-            </p>
           </div>
-        ) : (
-          <>
-            {/* TODAY'S LIVE ATTENDANCE GROUP */}
-            {todaysGroups.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-extrabold tracking-widest text-primary uppercase flex items-center gap-1">
-                  <span className="relative flex h-2 w-2 mr-1">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  Today's Active Sites
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {todaysGroups.map((g) => (
-                    <Card
-                      key={`${g.date}_${g.projectId}`}
-                      className="border border-slate-200/80 hover:border-slate-300 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="p-5 pb-3 border-b border-slate-100 dark:border-zinc-900 bg-slate-50/50 dark:bg-zinc-900/10 flex justify-between items-center">
-                          <div className="space-y-0.5">
-                            <h4 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
-                              {g.projectName}
-                            </h4>
-                            <p className="text-[10px] font-bold text-primary uppercase tracking-wider">
-                              {formatDate(g.date)}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/25 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
-                            {g.records.length} Present
-                          </Badge>
-                        </div>
-
-                        <div className="p-5 pt-4 space-y-4">
-                          <div className="flex flex-wrap gap-2">
-                            {g.records.map((r) => {
-                              const baseRate = Number(r.labour?.paymentPerDay || 0);
-                              const val = Number(r.workDayValue ?? 1.0);
-                              const wage = baseRate * val;
-                              const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
-                              const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
-                                : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
-                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
-
-                              return (
-                                <Badge
-                                  key={r.id}
-                                  variant="secondary"
-                                  className="pl-3 pr-2 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-2 select-none"
-                                >
-                                  <span className="text-slate-700 dark:text-slate-300">
-                                    {r.labour?.name}{" "}
-                                    <span className="text-[9px] opacity-60 font-mono">
-                                      (₹{baseRate})
-                                    </span>
-                                  </span>
-                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${shiftColor}`}>
-                                    {shiftLabel} ({val}x)
-                                  </span>
-                                  <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
-                                    ₹{wage}
-                                  </span>
-                                  {r.markedBy?.username && (
-                                    <span className="text-[9px] text-slate-400 font-medium italic hidden sm:inline">
-                                      by {r.markedBy.username}
-                                    </span>
-                                  )}
-                                  <button
-                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                    className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* PAST HISTORY ATTENDANCE GROUPS */}
-            <div className="space-y-4 pt-2">
-              <h3 className="text-xs font-extrabold tracking-widest text-slate-400 dark:text-zinc-600 uppercase flex items-center gap-1 select-none">
-                <Users className="h-3.5 w-3.5" />
-                Attendance History Logs
-              </h3>
-
-              {historyGroups.length === 0 && todaysGroups.length === 0 ? (
-                <div className="p-14 text-center rounded-2xl bg-white/40 dark:bg-zinc-950/40 border border-slate-200 dark:border-zinc-800 flex flex-col items-center justify-center space-y-4">
-                  <ClipboardCheck className="h-12 w-12 text-slate-300 dark:text-zinc-700" />
-                  <div className="space-y-1.5">
-                    <h4 className="font-extrabold text-slate-800 dark:text-slate-200 text-base">
-                      No Attendance Logs Found
-                    </h4>
-                    <p className="text-sm text-slate-500 max-w-sm">
-                      Check your filtration settings or add today's workers list to compile active site checkbooks.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {historyGroups.map((g) => (
-                    <Card
-                      key={`${g.date}_${g.projectId}`}
-                      className="border border-slate-200/50 hover:border-slate-300 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="p-5 pb-3 border-b border-slate-100 dark:border-zinc-900 bg-slate-50/50 dark:bg-zinc-900/10 flex justify-between items-center">
-                          <div className="space-y-0.5">
-                            <h4 className="font-extrabold text-sm text-slate-700 dark:text-slate-300">
-                              {g.projectName}
-                            </h4>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                              {formatDate(g.date)}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
-                            {g.records.length} Present
-                          </Badge>
-                        </div>
-
-                        <div className="p-5 pt-4 space-y-4">
-                          <div className="flex flex-wrap gap-2">
-                            {g.records.map((r) => {
-                              const baseRate = Number(r.labour?.paymentPerDay || 0);
-                              const val = Number(r.workDayValue ?? 1.0);
-                              const wage = baseRate * val;
-                              const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
-                              const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
-                                : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
-                                : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
-
-                              return (
-                                <Badge
-                                  key={r.id}
-                                  variant="secondary"
-                                  className="pl-3 pr-2 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 border border-slate-200/40 rounded-full flex items-center gap-2 select-none"
-                                >
-                                  <span className="text-slate-700 dark:text-slate-300">
-                                    {r.labour?.name}{" "}
-                                    <span className="text-[9px] opacity-60 font-mono">
-                                      (₹{baseRate})
-                                    </span>
-                                  </span>
-                                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${shiftColor}`}>
-                                    {shiftLabel} ({val}x)
-                                  </span>
-                                  <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200">
-                                    ₹{wage}
-                                  </span>
-                                  {r.markedBy?.username && (
-                                    <span className="text-[9px] text-slate-400 font-medium italic hidden sm:inline">
-                                      by {r.markedBy.username}
-                                    </span>
-                                  )}
-                                  <button
-                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                    className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

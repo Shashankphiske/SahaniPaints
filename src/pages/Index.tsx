@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { DashboardLayout } from "../components/layout/DashboardLayout";
 import { InquirySection } from "../components/dashboard/InquirySection";
 import { TaskSection } from "../components/dashboard/TaskSection";
@@ -46,11 +46,35 @@ interface ReportData {
 }
 
 function ReportsSection() {
+  const { initialStart, initialEnd } = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    // April 1st
+    const start = now.getMonth() >= 3
+      ? new Date(currentYear, 3, 1)
+      : new Date(currentYear - 1, 3, 1);
+    // March 31st
+    const end = now.getMonth() >= 3
+      ? new Date(currentYear + 1, 2, 31)
+      : new Date(currentYear, 2, 31);
+
+    const toLocalISO = (d: Date) => {
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - (offset * 60 * 1000));
+      return local.toISOString().split("T")[0];
+    };
+
+    return {
+      initialStart: toLocalISO(start),
+      initialEnd: toLocalISO(end),
+    };
+  }, []);
+
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(initialStart);
+  const [endDate, setEndDate] = useState(initialEnd);
   const [showFilter, setShowFilter] = useState(false);
 
   const fetchReports = async (start?: string, end?: string) => {
@@ -72,7 +96,7 @@ function ReportsSection() {
   };
 
   useEffect(() => {
-    fetchReports();
+    fetchReports(startDate, endDate);
   }, []);
 
   const handleApply = () => {
@@ -80,9 +104,9 @@ function ReportsSection() {
   };
 
   const handleReset = () => {
-    setStartDate("");
-    setEndDate("");
-    fetchReports();
+    setStartDate(initialStart);
+    setEndDate(initialEnd);
+    fetchReports(initialStart, initialEnd);
   };
 
   return (
