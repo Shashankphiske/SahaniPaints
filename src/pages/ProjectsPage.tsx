@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../hooks/use-master-data";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
@@ -36,7 +37,8 @@ import {
   ChevronDown,
   LayoutGrid,
   List,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ClipboardList
 } from "lucide-react";
 import { generateQuotationPDF } from "../utils/quotationPdfGenerator";
 import TasksPage from "./TasksPage";
@@ -101,6 +103,10 @@ interface PaintProductRow {
 }
 
 export default function ProjectsPage() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectIdParam = searchParams.get("projectId") || searchParams.get("id");
   const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -120,10 +126,11 @@ export default function ProjectsPage() {
     return params;
   }, [startDateFilter, endDateFilter]);
 
-  // Load projects, customers, products
+  // Load projects, customers, products, and users (for supervisors)
   const projectsData = useMasterData<Project>("projects", true, projectParams, true);
   const customersData = useMasterData<Customer>("customers", true);
   const productsData = useMasterData<Product>("products", true);
+  const usersData = useMasterData<any>("users", true);
 
   const projects = useMemo(() => {
     return Array.isArray(projectsData.data) ? projectsData.data : [];
@@ -136,6 +143,10 @@ export default function ProjectsPage() {
   const products = useMemo(() => {
     return Array.isArray(productsData.data) ? productsData.data : [];
   }, [productsData.data]);
+
+  const supervisors = useMemo(() => {
+    return Array.isArray(usersData.data) ? usersData.data.filter((u: any) => u.role === "SUPERVISOR") : [];
+  }, [usersData.data]);
 
   // Project detail fetcher for single project detail tabs
   const [fullProject, setFullProject] = useState<any | null>(null);
@@ -164,6 +175,15 @@ export default function ProjectsPage() {
       setFullProject(null);
     }
   }, [viewingProject]);
+
+  useEffect(() => {
+    if (projectIdParam && projects.length > 0) {
+      const match = projects.find((p) => p.id === projectIdParam);
+      if (match) {
+        setViewingProject(match);
+      }
+    }
+  }, [projectIdParam, projects]);
 
   // List filtering logic
 
@@ -348,6 +368,35 @@ export default function ProjectsPage() {
                                 📅 {formatDate(project.projectDate)}
                               </span>
                             </div>
+
+                            {/* Supervisor Status */}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground gap-2 pt-1 border-t border-slate-100 dark:border-zinc-900/40">
+                              <span className="truncate text-[11px] font-medium">
+                                👷 Supervisor: {project.supervisor?.username ? (
+                                  <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{project.supervisor.username}</span>
+                                ) : (
+                                  <span className="text-red-500 font-semibold bg-red-50 dark:bg-red-950/20 px-1.5 py-0.5 rounded border border-red-150">No Supervisor</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Progress Stage Mini Bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase">
+                              <span>Painting Stage</span>
+                              <span className="text-primary font-bold">{project.stage || "Putty"}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                                style={{ 
+                                  width: `${
+                                    ((["Putty", "Primer", "1st Coat", "2nd Coat"].indexOf(project.stage || "Putty") + 1) / 4) * 100
+                                  }%` 
+                                }}
+                              />
+                            </div>
                           </div>
 
                           {/* 3-Column Financial Pill with Simple Light Colors */}
@@ -416,6 +465,7 @@ export default function ProjectsPage() {
                         <TableHead>Project Name</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Deadline Date</TableHead>
+                        <TableHead>Supervisor</TableHead>
                         <TableHead>Total Charges</TableHead>
                         <TableHead>Agreed Price</TableHead>
                         <TableHead>Status</TableHead>
@@ -439,6 +489,13 @@ export default function ProjectsPage() {
                           </TableCell>
                           <TableCell onClick={() => setViewingProject(project)}>
                             {formatDate(project.projectDate)}
+                          </TableCell>
+                          <TableCell onClick={() => setViewingProject(project)}>
+                            {project.supervisor?.username ? (
+                              <span className="font-semibold text-indigo-600 dark:text-indigo-400">{project.supervisor.username}</span>
+                            ) : (
+                              <span className="text-xs font-semibold px-2 py-0.5 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-full border border-red-100">No Supervisor</span>
+                            )}
                           </TableCell>
                           <TableCell onClick={() => setViewingProject(project)}>
                             ₹{fmt(project.totalAmount)}
@@ -494,6 +551,7 @@ export default function ProjectsPage() {
           <CreateProjectForm
             customers={customers}
             products={products}
+            supervisors={supervisors}
             onCancel={() => setIsCreating(false)}
             onCreateCustomer={customersData.createAsync}
             onSave={async (projectPayload) => {
@@ -525,12 +583,17 @@ export default function ProjectsPage() {
             loadingDetails={loadingDetails}
             products={products}
             customers={customers}
+            supervisors={supervisors}
             onCreateCustomer={customersData.createAsync}
             onBack={() => {
               setViewingProject(null);
+              setSearchParams({}); // Clear query parameters
               projectsData.forceServerSearch(""); // Refresh cache list
             }}
-            onRefresh={() => fetchFullProjectDetails(viewingProject.id)}
+            onRefresh={() => {
+              fetchFullProjectDetails(viewingProject.id);
+              queryClient.invalidateQueries({ queryKey: ["projects_infinite"] });
+            }}
             onSearchCustomers={(query) => customersData.forceServerSearch(query)}
             onSearchProducts={(query) => productsData.forceServerSearch(query)}
           />
@@ -545,6 +608,7 @@ export default function ProjectsPage() {
 interface CreateProjectFormProps {
   customers: Customer[];
   products: Product[];
+  supervisors: any[];
   onCancel: () => void;
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSave: (payload: any) => Promise<void>;
@@ -552,11 +616,13 @@ interface CreateProjectFormProps {
   onSearchProducts?: (query: string) => void;
 }
 
-function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts }: CreateProjectFormProps) {
+function CreateProjectForm({ customers, products, supervisors, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts }: CreateProjectFormProps) {
   // Form fields
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerDisplay, setCustomerDisplay] = useState("");
+  const [supervisorId, setSupervisorId] = useState("");
+  const [supervisorDisplay, setSupervisorDisplay] = useState("");
   const [projectDate, setProjectDate] = useState("");
   const [status, setStatus] = useState<any>("PENDING");
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -643,9 +709,12 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
       const payload = {
         name,
         customerId,
+        supervisorId: supervisorId || null,
         _customerName: cust?.name,
+        _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
+        stage: "Putty",
         totalAmount: subtotal,
         tax: Number(taxRate || 0),
         discount: Number(discount || 0),
@@ -775,6 +844,22 @@ function CreateProjectForm({ customers, products, onCancel, onCreateCustomer, on
                     onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
                     onEnter={(val) => onSearchCustomers?.(val)}
                     required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground block">Supervisor</label>
+                  <SearchableSelect
+                    value={supervisorId}
+                    displayValue={supervisorDisplay}
+                    options={supervisors
+                      .filter((s) => !supervisorDisplay || s.username.toLowerCase().includes(supervisorDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((s) => ({ id: s.id, label: s.username }))}
+                    placeholder="Select supervisor"
+                    onSearchChange={setSupervisorDisplay}
+                    onSelect={(id, label) => { setSupervisorId(id); setSupervisorDisplay(label); }}
+                    onClear={() => { setSupervisorId(""); setSupervisorDisplay(""); }}
                   />
                 </div>
 
@@ -1066,6 +1151,7 @@ interface ProjectDetailViewProps {
   loadingDetails: boolean;
   products: Product[];
   customers: Customer[];
+  supervisors: any[];
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onBack: () => void;
   onRefresh: () => void;
@@ -1079,12 +1165,14 @@ function ProjectDetailView({
   loadingDetails,
   products,
   customers,
+  supervisors,
   onCreateCustomer,
   onBack,
   onRefresh,
   onSearchCustomers,
   onSearchProducts,
 }: ProjectDetailViewProps) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
   if (loadingDetails || !fullProject) {
@@ -1177,6 +1265,11 @@ function ProjectDetailView({
           <TabsTrigger value="quotation" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Quotation
           </TabsTrigger>
+          {user?.role === "ADMIN" && (
+            <TabsTrigger value="payments" className="rounded-lg text-xs font-bold py-1.5 px-3">
+              Customer Payments
+            </TabsTrigger>
+          )}
           <TabsTrigger value="profitloss" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Profit / Loss
           </TabsTrigger>
@@ -1187,6 +1280,7 @@ function ProjectDetailView({
           <OverviewEditTab
             fullProject={fullProject}
             customers={customers}
+            supervisors={supervisors}
             onCreateCustomer={onCreateCustomer}
             onSuccess={onRefresh}
             onSearchCustomers={onSearchCustomers}
@@ -1215,6 +1309,14 @@ function ProjectDetailView({
         <TabsContent value="profitloss">
           <ProfitLossTab fullProject={fullProject} />
         </TabsContent>
+
+        {user?.role === "ADMIN" && (
+          <TabsContent value="payments">
+            <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+              <CustomerPaymentsTab fullProject={fullProject} onSuccess={onRefresh} />
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -1226,32 +1328,72 @@ function ProjectDetailView({
 interface OverviewEditTabProps {
   fullProject: any;
   customers: Customer[];
+  supervisors: any[];
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSuccess: () => void;
   onSearchCustomers?: (query: string) => void;
 }
 
-function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, onSearchCustomers }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer, onSuccess, onSearchCustomers }: OverviewEditTabProps) {
   const { user } = useAuth();
+  const { updateAllCaches } = useMasterData<Project>("projects", false); // false = don't fetch, just use cache helpers
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
   const [customerDisplay, setCustomerDisplay] = useState(
     () => customers.find((c) => c.id === fullProject.customerId)?.name || ""
   );
+  const [supervisorId, setSupervisorId] = useState(fullProject.supervisorId || "");
+  const [supervisorDisplay, setSupervisorDisplay] = useState(
+    () => supervisors.find((s) => s.id === fullProject.supervisorId)?.username || ""
+  );
   const [projectDate, setProjectDate] = useState(() => {
     return fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "";
   });
   const [status, setStatus] = useState<any>(fullProject.status);
+  const [stage, setStage] = useState<string>(fullProject.stage || "Putty");
   const [saving, setSaving] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+
+  const todaysProgress = useMemo(() => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    const todayStr = new Date(now.getTime() - tzOffset).toISOString().split("T")[0];
+    
+    const attendanceToday = (fullProject.attendance || []).filter((att: any) => {
+      if (!att.date) return false;
+      const attDateStr = new Date(att.date).toISOString().split("T")[0];
+      return attDateStr === todayStr;
+    });
+    
+    const workToday = (fullProject.contractorWorkLogs || []).filter((log: any) => {
+      if (!log.date) return false;
+      const logDateStr = new Date(log.date).toISOString().split("T")[0];
+      return logDateStr === todayStr;
+    }).reduce((sum: number, log: any) => sum + Number(log.sqFt || 0), 0);
+
+    const materialsToday = (fullProject.materialLogs || []).filter((log: any) => {
+      if (!log.date) return false;
+      const logDateStr = new Date(log.date).toISOString().split("T")[0];
+      return logDateStr === todayStr;
+    });
+
+    return {
+      attendanceCount: attendanceToday.length,
+      workSqFt: workToday,
+      materialsCount: materialsToday.length
+    };
+  }, [fullProject]);
 
   useEffect(() => {
     setName(fullProject.name);
     setCustomerId(fullProject.customerId || "");
     setCustomerDisplay(customers.find((c) => c.id === fullProject.customerId)?.name || "");
+    setSupervisorId(fullProject.supervisorId || "");
+    setSupervisorDisplay(supervisors.find((s) => s.id === fullProject.supervisorId)?.username || "");
     setProjectDate(fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "");
     setStatus(fullProject.status);
-  }, [fullProject]);
+    setStage(fullProject.stage || "Putty");
+  }, [fullProject, customers, supervisors]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1263,9 +1405,12 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
       const payload = {
         name,
         customerId,
+        supervisorId: supervisorId || null,
         _customerName: cust?.name,
+        _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
+        stage,
         totalAmount: Number(fullProject.totalAmount),
         tax: Number(fullProject.tax || 0),
         discount: Number(fullProject.discount || 0),
@@ -1281,6 +1426,8 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
       };
 
       await apiRequest.update("projects", fullProject.id, payload as any);
+      // Optimistically update list cache for status/stage changes
+      updateAllCaches({ id: fullProject.id, name, status, stage, customerId, supervisorId } as any);
       toast({
         title: "Project Details Saved",
         description: "General project information has been updated.",
@@ -1297,12 +1444,222 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
     }
   };
 
+  const STAGES = ["Putty", "Primer", "1st Coat", "2nd Coat"];
+  const currentStageIndex = STAGES.indexOf(stage);
+
   return (
     <div className="space-y-8">
-      {/* 1. Customer Payment Section */}
+      {/* Painting Stage Progress Bar Widget */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+              <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Site Painting Progress</h3>
+          </div>
+          <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full">
+            {stage}
+          </span>
+        </div>
+
+        {/* Stepper Progress Bar */}
+        <div className="relative pt-4 pb-8 px-6">
+          {/* Connector Line */}
+          <div className="absolute top-1/2 left-6 right-6 h-1 bg-slate-100 dark:bg-zinc-900 -translate-y-1/2 rounded-full" />
+          <div 
+            className="absolute top-1/2 left-6 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600 -translate-y-1/2 rounded-full transition-all duration-500" 
+            style={{ width: `${(currentStageIndex / (STAGES.length - 1)) * 84}%` }} // Adjust for offsets
+          />
+
+          {/* Steps */}
+          <div className="relative flex justify-between">
+            {STAGES.map((stepName, idx) => {
+              const isCompleted = idx < currentStageIndex;
+              const isActive = idx === currentStageIndex;
+              
+              return (
+                <div 
+                  key={stepName} 
+                  className="flex flex-col items-center group cursor-pointer relative"
+                  onClick={async () => {
+                    try {
+                      const payload = {
+                        name,
+                        customerId,
+                        _customerName: customers.find((c) => c.id === customerId)?.name,
+                        projectDate: projectDate ? new Date(projectDate).toISOString() : null,
+                        status,
+                        stage: stepName,
+                        totalAmount: Number(fullProject.totalAmount),
+                        tax: Number(fullProject.tax || 0),
+                        discount: Number(fullProject.discount || 0),
+                        discountType: fullProject.discountType || "amount",
+                        agreedPrice: Number(fullProject.agreedPrice || fullProject.totalAmount),
+                        projectProducts: (fullProject.projectProducts || []).map((pp: any) => ({
+                          productId: pp.productId,
+                          area: Number(pp.area),
+                          unit: pp.unit,
+                          rate: Number(pp.rate),
+                          litresUsed: pp.litresUsed,
+                        })),
+                      };
+                      await apiRequest.update("projects", fullProject.id, payload as any);
+                      // Optimistically update the list cache so card mini-bar reflects instantly
+                      setStage(stepName);
+                      updateAllCaches({ id: fullProject.id, stage: stepName } as any);
+                      toast({
+                        title: "Progress Stage Updated",
+                        description: `Site progress is now at: ${stepName}.`,
+                      });
+                      onSuccess(); // Refresh detail view
+                    } catch (err: any) {
+                      toast({
+                        title: "Failed to Update Stage",
+                        description: err.message || "Something went wrong.",
+                        variant: "destructive"
+                      });
+                    }
+                  }}
+                >
+                  {/* Step Bubble */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 shadow-sm transition-all duration-300 z-10 ${
+                    isCompleted 
+                      ? "bg-indigo-600 border-indigo-600 text-white" 
+                      : isActive 
+                        ? "bg-white dark:bg-zinc-950 border-indigo-600 text-indigo-600 scale-110 shadow-md ring-4 ring-indigo-500/10" 
+                        : "bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-400 group-hover:border-slate-350"
+                  }`}>
+                    {isCompleted ? "✓" : idx + 1}
+                  </div>
+                  
+                  {/* Step Label */}
+                  <span className={`absolute top-10 text-[10px] font-bold uppercase tracking-wider text-center whitespace-nowrap transition-colors duration-300 ${
+                    isActive 
+                      ? "text-indigo-600 dark:text-indigo-400 font-extrabold" 
+                      : isCompleted 
+                        ? "text-slate-700 dark:text-slate-300 font-semibold" 
+                        : "text-slate-400"
+                  }`}>
+                    {stepName}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {/* Today's Site Activity / Progress */}
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-900 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+              <ClipboardCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                Today's Site Activity & Progress
+              </h3>
+              <p className="text-[11px] text-muted-foreground">Real-time summary of operations logged today</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-100/50 dark:border-indigo-900/30 uppercase tracking-wider font-mono">
+            {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Labor Force today */}
+          <div className="p-4 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/10 dark:bg-blue-950/5 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
+              👷
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Labour Attendance</p>
+              <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                {todaysProgress.attendanceCount > 0 ? (
+                  `${todaysProgress.attendanceCount} Present`
+                ) : (
+                  <span className="text-muted-foreground font-medium text-sm">Not Marked</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Contractor sq.ft logged today */}
+          <div className="p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/10 dark:bg-emerald-950/5 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0">
+              📏
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Contractor Work</p>
+              <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                {todaysProgress.workSqFt > 0 ? (
+                  `${todaysProgress.workSqFt} sq.ft completed`
+                ) : (
+                  <span className="text-muted-foreground font-medium text-sm">No work logged</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Material Logged today */}
+          <div className="p-4 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/10 dark:bg-purple-950/5 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg shrink-0">
+              📦
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Materials Used</p>
+              <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                {todaysProgress.materialsCount > 0 ? (
+                  `${todaysProgress.materialsCount} Items dispatched`
+                ) : (
+                  <span className="text-muted-foreground font-medium text-sm">None recorded</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 1. Payments Overview Section */}
       {user?.role === "ADMIN" && (
         <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-          <CustomerPaymentsTab fullProject={fullProject} onSuccess={onSuccess} />
+          <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-2 mb-3">
+            <div className="flex items-center gap-2 text-primary">
+              <DollarSign className="h-5 w-5" />
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Payments Overview
+              </h3>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              {
+                label: "Total Project Value",
+                value: fmt(Number(fullProject.agreedPrice || fullProject.totalAmount || 0)),
+                accent: "bg-blue-500",
+              },
+              {
+                label: "Payment Received",
+                value: fmt(Number(fullProject.paid || 0)),
+                accent: "bg-emerald-500",
+              },
+              {
+                label: "Due",
+                value: fmt(Math.max(0, Number(fullProject.agreedPrice || fullProject.totalAmount) - Number(fullProject.paid || 0))),
+                accent: "bg-rose-500",
+              },
+            ].map(({ label, value, accent }) => (
+              <div key={label} className="flex items-center border border-border rounded-lg p-3 bg-muted/10">
+                <div className={`w-1 h-8 rounded-full mr-3 ${accent}`} />
+                <p className="text-xs font-semibold text-muted-foreground flex-1">{label}</p>
+                <p className="text-sm font-bold text-foreground">₹{value}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1393,6 +1750,24 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
 
           <div className="space-y-1">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+              Supervisor
+            </span>
+            <SearchableSelect
+              value={supervisorId}
+              displayValue={supervisorDisplay}
+              options={supervisors
+                .filter((s) => !supervisorDisplay || s.username.toLowerCase().includes(supervisorDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((s) => ({ id: s.id, label: s.username }))}
+              placeholder="Select supervisor"
+              onSearchChange={setSupervisorDisplay}
+              onSelect={(id, label) => { setSupervisorId(id); setSupervisorDisplay(label); }}
+              onClear={() => { setSupervisorId(""); setSupervisorDisplay(""); }}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
               Deadline Date
             </span>
             <Input type="date" value={projectDate} onChange={(e) => setProjectDate(e.target.value)} />
@@ -1415,6 +1790,23 @@ function OverviewEditTab({ fullProject, customers, onCreateCustomer, onSuccess, 
               <option value="DEFAULTER">Defaulter</option>
             </select>
           </div>
+
+          <div className="space-y-1">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+              Painting Stage
+            </span>
+            <select
+              value={stage}
+              onChange={(e) => setStage(e.target.value)}
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none"
+            >
+              <option value="Putty">Putty</option>
+              <option value="Primer">Primer</option>
+              <option value="1st Coat">1st Coat</option>
+              <option value="2nd Coat">2nd Coat</option>
+            </select>
+          </div>
+
           <div className="flex justify-end pt-2 col-span-1 md:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
             <Button type="submit" disabled={saving} size="sm" className="font-bold">
               {saving ? "Saving Details..." : "Save Details"}
@@ -2133,84 +2525,235 @@ interface CustomerPaymentsTabProps {
 }
 
 function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProps) {
-  const [paidVal, setPaidVal] = useState<number>(Number(fullProject.paid || 0));
-  const [savingPaid, setSavingPaid] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState("CASH");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [remarks, setRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    setPaidVal(Number(fullProject.paid || 0));
-  }, [fullProject.paid]);
-
-  const handleSavePaidAmount = async () => {
-    setSavingPaid(true);
-    try {
-      await apiRequest.update("projects", fullProject.id, {
-        paid: Number(paidVal),
-      } as any);
+  const handleRecordPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
       toast({
-        title: "Payments Updated",
-        description: "Customer paid amount registry updated.",
+        title: "Invalid Amount",
+        description: "Please enter a valid positive payment amount.",
+        variant: "destructive",
       });
-      onSuccess();
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        projectId: fullProject.id,
+        amount: numericAmount,
+        type: "INCOMING" as const,
+        paymentMode,
+        paymentDate: new Date(paymentDate).toISOString(),
+        remarks: remarks.trim() || null,
+      };
+
+      await apiRequest.create("project-payments", payload);
+      toast({
+        title: "Payment Recorded",
+        description: `Recorded incoming payment of ₹${numericAmount.toLocaleString("en-IN")}.`,
+      });
+      
+      // Reset form
+      setAmount("");
+      setRemarks("");
+      setPaymentMode("CASH");
+      setPaymentDate(new Date().toISOString().split("T")[0]);
+      
+      onSuccess(); // Refresh project details
     } catch (err: any) {
       toast({
-        title: "Failed to Update",
-        description: err.message || "An error occurred.",
+        title: "Recording Failed",
+        description: err.message || "Could not record payment.",
         variant: "destructive",
       });
     } finally {
-      setSavingPaid(false);
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeletePayment = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this payment record?")) return;
+
+    try {
+      await apiRequest.delete("project-payments", id);
+      toast({
+        title: "Payment Deleted",
+        description: "Project payment record deleted successfully.",
+      });
+      onSuccess(); // Refresh project details
+    } catch (err: any) {
+      toast({
+        title: "Delete Failed",
+        description: err.message || "Could not delete payment.",
+        variant: "destructive",
+      });
     }
   };
 
   const dueBalance = Math.max(0, Number(fullProject.agreedPrice || fullProject.totalAmount) - Number(fullProject.paid || 0));
+  const paymentsList = fullProject.projectPayments || [];
 
   return (
-    <Card className="border-0 shadow-none p-0 space-y-4 bg-transparent">
-      <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-zinc-900 pb-2">
-        <div className="flex items-center gap-2 text-primary">
-          <DollarSign className="h-5 w-5" />
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            Customer Payments
-          </h3>
+    <div className="space-y-6">
+      {/* Financial Summary Header */}
+      <div className="grid grid-cols-3 gap-4 border border-border/60 bg-muted/20 rounded-xl p-4">
+        <div className="space-y-0.5">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Agreed Contract Price</span>
+          <p className="text-sm font-extrabold text-foreground">₹{fmt(fullProject.agreedPrice || fullProject.totalAmount)}</p>
+        </div>
+        <div className="space-y-0.5">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Received</span>
+          <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">₹{fmt(fullProject.paid || 0)}</p>
+        </div>
+        <div className="space-y-0.5">
+          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Due Outstanding</span>
+          <p className={`text-sm font-extrabold ${dueBalance > 0 ? "text-rose-600" : "text-emerald-650"}`}>₹{fmt(dueBalance)}</p>
         </div>
       </div>
 
-      <div className="space-y-3.5 text-sm">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Agreed Contract Price:</span>
-          <span className="font-bold">₹{fmt(fullProject.agreedPrice || fullProject.totalAmount)}</span>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        {/* Record Payment Form */}
+        <div className="md:col-span-5 space-y-4">
+          <Card className="border border-border/80 bg-card rounded-xl p-4 space-y-4 shadow-sm-soft">
+            <h4 className="text-xs font-extrabold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5 border-b pb-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              Record New Payment
+            </h4>
+            
+            <form onSubmit={handleRecordPayment} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Amount (₹) *</label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Enter amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="pl-8 h-8 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Mode</label>
+                  <select
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                    className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="CASH">CASH</option>
+                    <option value="BANK_TRANSFER">BANK TRANSFER</option>
+                    <option value="UPI">UPI</option>
+                    <option value="CHEQUE">CHEQUE</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Date</label>
+                  <Input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="h-8 text-xs px-2"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Remarks / Reference</label>
+                <Input
+                  placeholder="Optional remarks"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="w-full h-8 font-bold text-xs shadow mt-2"
+              >
+                {submitting ? "Recording..." : "Record Payment"}
+              </Button>
+            </form>
+          </Card>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-slate-500">Received Paid Amount:</span>
-          <div className="flex gap-2 items-center">
-            <div className="relative w-36">
-              <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <Input
-                type="number"
-                min="0"
-                value={paidVal}
-                onChange={(e) => setPaidVal(Number(e.target.value))}
-                className="h-8 pl-7 pr-2 font-bold py-0 text-right w-full"
-              />
-            </div>
-            <Button
-              onClick={handleSavePaidAmount}
-              disabled={savingPaid}
-              size="sm"
-              className="h-8 font-bold text-xs"
-            >
-              {savingPaid ? "Saving..." : "Save"}
-            </Button>
-          </div>
-        </div>
-        <div className="border-t border-slate-100 dark:border-zinc-900 pt-3 flex justify-between items-baseline">
-          <span className="font-bold text-slate-500">Due Outstanding Balance:</span>
-          <span className={`text-xl font-extrabold ${dueBalance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-            ₹{fmt(dueBalance)}
-          </span>
+
+        {/* Payments Ledger Table */}
+        <div className="md:col-span-7">
+          <Card className="border border-border/80 bg-card rounded-xl overflow-hidden shadow-sm-soft">
+            <h4 className="text-xs font-extrabold uppercase text-muted-foreground tracking-wider p-4 border-b border-border/80 flex items-center gap-1.5 bg-muted/20">
+              <ClipboardList className="h-4 w-4 text-emerald-500" />
+              Project Payment History ({paymentsList.length})
+            </h4>
+
+            {paymentsList.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic text-center py-12">
+                No payments recorded for this project yet.
+              </p>
+            ) : (
+              <div className="w-full overflow-x-auto no-scrollbar">
+                <Table className="text-xs min-w-max">
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="h-9 px-3">Date</TableHead>
+                      <TableHead className="h-9 px-3 text-right">Amount</TableHead>
+                      <TableHead className="h-9 px-3 text-center">Mode</TableHead>
+                      <TableHead className="h-9 px-3">Remarks</TableHead>
+                      <TableHead className="h-9 px-3 text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paymentsList.map((payment: any) => (
+                      <TableRow key={payment.id} className="hover:bg-muted/20">
+                        <TableCell className="p-3">
+                          {new Date(payment.paymentDate).toLocaleDateString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell className="p-3 text-right font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                          ₹{fmt(payment.amount)}
+                        </TableCell>
+                        <TableCell className="p-3 text-center font-bold">
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+                            {payment.paymentMode || "CASH"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="p-3 max-w-[150px] truncate text-muted-foreground">
+                          {payment.remarks || "—"}
+                        </TableCell>
+                        <TableCell className="p-3 text-center">
+                          <button
+                            onClick={() => handleDeletePayment(payment.id)}
+                            className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -2400,6 +2943,14 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
   const allContractors = useMemo(() => Array.isArray(contractorsRaw) ? contractorsRaw : [], [contractorsRaw]);
 
+  const [isOpen, setIsOpen] = useState(contractorWorkLogs.length > 0);
+
+  useEffect(() => {
+    if (contractorWorkLogs.length > 0) {
+      setIsOpen(true);
+    }
+  }, [contractorWorkLogs.length]);
+
   // Form states
   const [selectedContractorId, setSelectedContractorId] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
@@ -2480,14 +3031,31 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
+      <div 
+        className="flex items-center justify-between cursor-pointer select-none"
+        onClick={() => setIsOpen(!isOpen)}
+      >
         <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Contractor Work Ledger</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            Contractor Work Ledger
+            {contractorWorkLogs.length === 0 && (
+              <span className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 border border-amber-200/40 text-amber-600 dark:text-amber-300 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                No logs (Minimized)
+              </span>
+            )}
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">Log and track contractor work done in sq.ft.</p>
         </div>
+        <button
+          type="button"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all"
+        >
+          <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      {isOpen && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start pt-4 border-t border-slate-100 dark:border-zinc-900 animate-fade-in">
         {/* Form panel */}
         <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm space-y-4">
           <h4 className="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Log Work Done</h4>
@@ -2611,6 +3179,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
           )}
         </Card>
       </div>
+      )}
     </div>
   );
 }

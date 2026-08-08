@@ -3,6 +3,8 @@ import { DashboardLayout } from "../components/layout/DashboardLayout";
 import { InquirySection } from "../components/dashboard/InquirySection";
 import { TaskSection } from "../components/dashboard/TaskSection";
 import { ProjectSection } from "../components/dashboard/ProjectSection";
+import { LowMaterialsSection } from "../components/dashboard/LowMaterialsSection";
+import { CashFlowWidget } from "../components/dashboard/CashFlowWidget";
 import { CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
@@ -204,6 +206,8 @@ export default function Index() {
           <p className="text-sm text-muted-foreground">Welcome to your Paints overview panel</p>
         </div>
         <ReportsSection />
+        <CashFlowWidget />
+        <LowMaterialsSection />
         <ProjectSection />
         <TaskSection />
         <InquirySection />

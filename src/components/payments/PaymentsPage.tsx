@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import { apiRequest } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -31,8 +33,11 @@ function fmt(n: number) {
 }
 
 export default function PaymentsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectsRaw } = useMasterData<Project>("projects");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const projectsList = useMemo(() => (Array.isArray(projectsRaw) ? projectsRaw : []), [projectsRaw]);
 
@@ -153,6 +158,7 @@ export default function PaymentsPage() {
         toast({ title: "Payment Recorded", description: `Recorded incoming payment of ₹${fmt(numericAmount)}.` });
       }
 
+      queryClient.invalidateQueries({ queryKey: ["projects_infinite"] });
       setIsModalOpen(false);
     } catch (err: any) {
       toast({ title: "Save Failed", description: err.message || "Could not save payment.", variant: "destructive" });
@@ -167,6 +173,7 @@ export default function PaymentsPage() {
     try {
       await apiRequest.delete("project-payments", id);
       setPayments((prev) => prev.filter((item) => item.id !== id));
+      queryClient.invalidateQueries({ queryKey: ["projects_infinite"] });
       toast({ title: "Payment Deleted", description: "Project payment record deleted successfully." });
     } catch (err: any) {
       toast({ title: "Delete Failed", description: err.message || "Could not delete payment.", variant: "destructive" });
@@ -222,9 +229,11 @@ export default function PaymentsPage() {
             ) : null}
           </Button>
 
-          <Button onClick={openCreateModal} className="font-medium flex items-center gap-1.5 shadow-sm">
-            <Plus className="h-4 w-4" /> Add Incoming Payment
-          </Button>
+          {isAdmin && (
+            <Button onClick={openCreateModal} className="font-medium flex items-center gap-1.5 shadow-sm">
+              <Plus className="h-4 w-4" /> Add Incoming Payment
+            </Button>
+          )}
         </div>
       </div>
 
@@ -405,14 +414,18 @@ export default function PaymentsPage() {
                       ₹{fmt(p.amount)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
-                          <Pencil size={13} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}>
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
+                      {isAdmin ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
+                            <Pencil size={13} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}>
+                            <Trash2 size={13} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground italic">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

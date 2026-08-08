@@ -28,6 +28,7 @@ const formatDate = (dateStr: any) => {
 const columns: ColumnDef<User>[] = [
   { key: "username", header: "Name" },
   { key: "email", header: "Email" },
+  { key: "role", header: "Role", render: (u) => u.role === "SUPERVISOR" ? "Supervisor" : "Sales Associate" },
   { key: "phonenumber", header: "Phone", render: (u) => u.phonenumber ?? "—" },
   { key: "address", header: "Address", render: (u) => u.address ?? "—" },
   {
@@ -59,9 +60,9 @@ export default function SalesAssociatePage() {
 
   const users = useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
-  // Filter role "SALES_ASSOCIATE" and search term
+  // Filter roles "SALES_ASSOCIATE" and "SUPERVISOR" and search term
   const filtered = useMemo(() => {
-    const roleFiltered = users.filter((u) => u.role === "SALES_ASSOCIATE");
+    const roleFiltered = users.filter((u) => u.role === "SALES_ASSOCIATE" || u.role === "SUPERVISOR");
 
     if (!search) return roleFiltered;
     const term = search.toLowerCase();
@@ -77,7 +78,7 @@ export default function SalesAssociatePage() {
 
   const handleSearch = (term: string) => {
     setSearch(term);
-    const roleFiltered = users.filter((u) => u.role === "SALES_ASSOCIATE");
+    const roleFiltered = users.filter((u) => u.role === "SALES_ASSOCIATE" || u.role === "SUPERVISOR");
     const localHits = roleFiltered.filter(
       (u) =>
         u.username?.toLowerCase().includes(term.toLowerCase()) ||
@@ -94,7 +95,7 @@ export default function SalesAssociatePage() {
   };
 
   const handleSave = (formData: Partial<User>) => {
-    const dataWithRole = { ...formData, role: "SALES_ASSOCIATE" as const };
+    const dataWithRole = { ...formData, role: formData.role || ("SALES_ASSOCIATE" as const) };
     if (editingItem) {
       update({ id: editingItem.id, data: dataWithRole });
     } else {
@@ -112,7 +113,7 @@ export default function SalesAssociatePage() {
     if (!dashboardItem) return;
     update({
       id: dashboardItem.id,
-      data: { ...formData, role: "SALES_ASSOCIATE" as const },
+      data: { ...formData, role: formData.role || dashboardItem.role || ("SALES_ASSOCIATE" as const) },
     });
     setDashboardItem(null);
   };
@@ -121,10 +122,10 @@ export default function SalesAssociatePage() {
     <>
       {!dashboardItem && (
         <MasterPageLayout
-          title="Sales Associates"
+          title="Users"
           resource="users"
           importExtraData={{ role: "SALES_ASSOCIATE" }}
-          searchPlaceholder="Search sales associates by username or email..."
+          searchPlaceholder="Search users by username, email or role..."
           onSearch={handleSearch}
           onSearchSubmit={handleSearchSubmit}
           onAdd={() => setIsModalOpen(true)}
@@ -139,7 +140,7 @@ export default function SalesAssociatePage() {
               setIsModalOpen(true);
             }}
             onDelete={(item) => {
-              if (window.confirm("Delete this sales associate?")) {
+              if (window.confirm("Delete this user?")) {
                 remove(item.id);
               }
             }}
@@ -179,7 +180,7 @@ export default function SalesAssociatePage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editingItem ? "Edit Sales Associate" : "Add New Sales Associate"}
+              {editingItem ? "Edit User" : "Add New User"}
             </DialogTitle>
           </DialogHeader>
 

@@ -59,26 +59,41 @@ export function SearchableSelect({
   disabled = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
+  const [typedValue, setTypedValue] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Sync typedValue with displayValue when not focused or when displayValue changes
+  useEffect(() => {
+    if (!isFocused) {
+      setTypedValue(displayValue || "");
+    }
+  }, [displayValue, isFocused]);
 
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setOpen(false);
+        onSearchChange("");
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [onSearchChange]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onSearchChange(e.target.value);
+    const val = e.target.value;
+    setTypedValue(val);
+    onSearchChange(val);
     setOpen(true);
   };
 
   const handleSelect = (opt: SearchableSelectOption) => {
     onSelect(opt.id, opt.label);
+    setTypedValue(opt.label);
+    onSearchChange("");
+    setIsFocused(false);
     setOpen(false);
   };
 
@@ -86,11 +101,15 @@ export function SearchableSelect({
     e.stopPropagation();
     onClear?.();
     onSearchChange("");
+    setTypedValue("");
+    setIsFocused(false);
     setOpen(false);
   };
 
   const handleAllOption = () => {
     onSelect("", allLabel || "");
+    setTypedValue(allLabel || "");
+    setIsFocused(false);
     setOpen(false);
   };
 
@@ -99,13 +118,25 @@ export function SearchableSelect({
       <div className="relative">
         <Input
           showClear={false}
-          value={displayValue}
+          value={isFocused ? typedValue : (displayValue || "")}
           onChange={handleInputChange}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setIsFocused(true);
+            setTypedValue(displayValue || "");
+            setOpen(true);
+          }}
+          onBlur={() => {
+            // Delay slightly to allow onMouseDown on options list to register
+            setTimeout(() => {
+              setIsFocused(false);
+              setOpen(false);
+              onSearchChange("");
+            }, 200);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              onEnter?.(displayValue);
+              onEnter?.(isFocused ? typedValue : (displayValue || ""));
             }
           }}
           placeholder={placeholder}

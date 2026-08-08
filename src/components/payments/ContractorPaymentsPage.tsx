@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
 import { apiRequest } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
@@ -49,6 +50,8 @@ export interface CombinedCrewPayment {
 }
 
 export default function ContractorPaymentsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectsRaw } = useMasterData<Project>("projects");
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
   const { data: laboursRaw } = useMasterData<Labour>("labours");
@@ -370,9 +373,11 @@ export default function ContractorPaymentsPage() {
             ) : null}
           </Button>
 
-          <Button onClick={openCreateModal} className="font-medium flex items-center gap-1.5 shadow-sm">
-            <Plus className="h-4 w-4" /> Add Outgoing Payout
-          </Button>
+          {isAdmin && (
+            <Button onClick={openCreateModal} className="font-medium flex items-center gap-1.5 shadow-sm">
+              <Plus className="h-4 w-4" /> Add Outgoing Payout
+            </Button>
+          )}
         </div>
       </div>
 
@@ -645,14 +650,18 @@ export default function ContractorPaymentsPage() {
                       ₹{fmt(p.amount)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
-                          <Pencil size={13} />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p)}>
-                          <Trash2 size={13} />
-                        </Button>
-                      </div>
+                      {isAdmin ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
+                            <Pencil size={13} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p)}>
+                            <Trash2 size={13} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground italic">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

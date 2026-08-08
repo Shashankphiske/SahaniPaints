@@ -11,6 +11,7 @@ function getFriendlyErrorMessage(msg: string): string {
   if (
     lowerMsg.includes("unique constraint failed") ||
     lowerMsg.includes("already exists") ||
+    lowerMsg.includes("already taken") ||
     lowerMsg.includes("p2002") ||
     lowerMsg.includes("duplicate key value")
   ) {

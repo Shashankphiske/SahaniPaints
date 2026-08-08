@@ -26,7 +26,7 @@ const ALL_PAGES = [
   { key: "brands", label: "Brands" },
   { key: "products", label: "Products" },
   { key: "interiors", label: "Interiors" },
-  { key: "sales-associate", label: "Sales Associates" },
+  { key: "sales-associate", label: "Users" },
   { key: "tasks", label: "Tasks" },
   { key: "settings", label: "Settings" },
   { key: "colors", label: "Colors" },

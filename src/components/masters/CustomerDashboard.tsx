@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMasterData } from "../../hooks/use-master-data";
 import type { Customer, Project } from "../../types/master";
 import { X } from "lucide-react";
@@ -40,6 +41,7 @@ export default function CustomerDashboard({
   handleSave?: any;
   customerId?: string;
 }) {
+  const navigate = useNavigate();
   // Fetch projects related to the customer
   const { data: projectData, isLoading: isProjectsLoading } = useMasterData<Project>(
     "projects",
@@ -85,7 +87,17 @@ export default function CustomerDashboard({
       {
         key: "name",
         header: "Project",
-        render: (p) => <span className="font-semibold text-foreground">{p.name ?? "—"}</span>,
+        render: (p) => (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/projects?id=${p.id}`);
+            }}
+            className="font-semibold text-primary hover:underline focus:outline-none text-left cursor-pointer"
+          >
+            {p.name ?? "—"}
+          </button>
+        ),
       },
       {
         key: "status",

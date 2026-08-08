@@ -106,7 +106,7 @@ export default function SalesAssociateDashboard({
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">{associate.username}</h1>
-          <p className="text-sm text-muted-foreground">{associate.email} • Sales Associate</p>
+          <p className="text-sm text-muted-foreground">{associate.email} • {associate.role === "SUPERVISOR" ? "Supervisor" : "Sales Associate"}</p>
         </div>
         <button
           onClick={onBack}
@@ -136,7 +136,7 @@ export default function SalesAssociateDashboard({
 
       {/* Edit form */}
       <div className="bg-card rounded-xl border border-border p-5 shadow-sm-soft space-y-4">
-        <h2 className="text-lg font-bold font-display text-foreground">Sales Associate Details</h2>
+        <h2 className="text-lg font-bold font-display text-foreground">User Details</h2>
         <MasterForm
           resource="sales-associates"
           initialData={associate}

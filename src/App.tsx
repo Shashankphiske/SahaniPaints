@@ -32,6 +32,7 @@ import ContractorPaymentsPage from "./components/payments/ContractorPaymentsPage
 import WeeklyDiaryPage from "./components/payments/WeeklyDiaryPage";
 import StoresPage from "./components/masters/StoresPage";
 import ContractorsPage from "./components/masters/ContractorsPage";
+import MaterialRequestsPage from "./components/materials/MaterialRequestsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +90,7 @@ export default function App() {
               <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
               <Route path="/labour-attendance" element={<Protected><LabourAttendancePage /></Protected>} />
               <Route path="/material-usage" element={<Protected><MaterialLogsPage /></Protected>} />
+              <Route path="/material-requests" element={<Protected><MaterialRequestsPage /></Protected>} />
               <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />
               <Route path="/contractor-payments" element={<AdminProtected><ContractorPaymentsPage /></AdminProtected>} />
               <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
@@ -113,7 +115,7 @@ export default function App() {
               <Route path="/masters/brands" element={<Protected><BrandsPage /></Protected>} />
               <Route path="/masters/products" element={<Protected><ProductsPage /></Protected>} />
               <Route path="/masters/interiors" element={<Protected><InteriorsPage /></Protected>} />
-              <Route path="/masters/sales-associate" element={<Protected><SalesAssociatePage /></Protected>} />
+              <Route path="/masters/users" element={<Protected><SalesAssociatePage /></Protected>} />
               <Route path="/masters/colors" element={<Protected><ColorsPage /></Protected>} />
               <Route path="/masters/site-colors" element={<Protected><SiteColorsPage /></Protected>} />
               <Route path="/masters/areas" element={<Protected><AreasPage /></Protected>} />

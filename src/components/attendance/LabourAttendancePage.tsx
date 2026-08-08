@@ -620,25 +620,26 @@ export default function LabourAttendancePage() {
                 ) : null}
               </Button>
 
-              <Button
-                variant={showAddCard ? "default" : "outline"}
-                onClick={() => {
-                  setShowAddCard(!showAddCard);
-                  // Reset states when starting a new attendance marking flow
-                  setSelectedProject(null);
-                  setProjectSearch("");
-                  setCurrentDate(new Date().toISOString().split("T")[0]);
-                }}
-                className="font-medium flex items-center gap-1.5 shadow-sm h-9"
-              >
-                <UserPlus className="h-4 w-4" />
-                Mark New Attendance
-              </Button>
+              {user?.role === "ADMIN" && (
+                <Button
+                  variant={showAddCard ? "default" : "outline"}
+                  onClick={() => {
+                    setShowAddCard(!showAddCard);
+                    setSelectedProject(null);
+                    setProjectSearch("");
+                    setCurrentDate(new Date().toISOString().split("T")[0]);
+                  }}
+                  className="font-medium flex items-center gap-1.5 shadow-sm h-9"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Mark New Attendance
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* New Attendance Entry Trigger Card */}
-          {showAddCard && (
+          {/* New Attendance Entry Trigger Card — Admin only */}
+          {showAddCard && user?.role === "ADMIN" && (
             <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md rounded-2xl p-6 max-w-xl mx-auto overflow-visible animate-in fade-in-50 slide-in-from-top-1 duration-150">
               <CardHeader className="p-0 pb-4 border-b border-slate-100 dark:border-zinc-900">
                 <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
@@ -1128,12 +1129,16 @@ export default function LabourAttendancePage() {
                                   <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
                                 </td>
                                 <td className="p-4 align-middle text-center">
-                                  <button
-                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
+                                  {user?.role === "ADMIN" ? (
+                                    <button
+                                      onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground italic">—</span>
+                                  )}
                                 </td>
                               </tr>
                             );

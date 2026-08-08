@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useMasterData } from "@/hooks/use-master-data";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,6 +101,8 @@ interface DiaryEntry {
 
 export default function WeeklyDiaryPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
 
   const { data: laboursRaw } = useMasterData<Labour>("labours");
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
@@ -714,9 +717,11 @@ export default function WeeklyDiaryPage() {
                         </button>
                       </td>
                       <td className="px-2 py-2.5 text-right">
-                        <button type="button" onClick={() => removeLabourRow(row.labourId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {isAdmin && (
+                          <button type="button" onClick={() => removeLabourRow(row.labourId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -820,9 +825,11 @@ export default function WeeklyDiaryPage() {
                         </button>
                       </td>
                       <td className="px-2 py-2.5 text-right">
-                        <button type="button" onClick={() => removeContractorRow(row.contractorId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {isAdmin && (
+                          <button type="button" onClick={() => removeContractorRow(row.contractorId)} className="text-slate-300 hover:text-rose-500 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors p-1.5 rounded-lg">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -851,9 +858,11 @@ export default function WeeklyDiaryPage() {
             {labourRows.length} labours + {contractorRows.length} contractors for {selectedDate}
           </p>
         </div>
-        <Button onClick={handleSubmitAll} disabled={submitting || submitted || (labourRows.length === 0 && contractorRows.length === 0)} className="font-extrabold gap-2 min-w-48" size="lg">
-          {submitting ? (<><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>) : submitted ? (<><CheckCircle2 className="h-4 w-4" />Diary Saved</>) : (<>Submit All Payments<ChevronRight className="h-4 w-4" /></>)}
-        </Button>
+        {isAdmin && (
+          <Button onClick={handleSubmitAll} disabled={submitting || submitted || (labourRows.length === 0 && contractorRows.length === 0)} className="font-extrabold gap-2 min-w-48" size="lg">
+            {submitting ? (<><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>) : submitted ? (<><CheckCircle2 className="h-4 w-4" />Diary Saved</>) : (<>Submit All Payments<ChevronRight className="h-4 w-4" /></>)}
+          </Button>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -911,17 +920,19 @@ export default function WeeklyDiaryPage() {
                     </button>
 
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmDeleteEntry(entry);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                        title={`Delete all payment records for ${formatDateLabel(entry.date)}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteEntry(entry);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          title={`Delete all payment records for ${formatDateLabel(entry.date)}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -986,14 +997,16 @@ export default function WeeklyDiaryPage() {
                                   <td className="px-4 py-2">{typeBadge(ltype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-amber-600 dark:text-amber-400 text-sm">{formatPrice(Number(p.amount))}</td>
                                   <td className="px-3 py-2 text-right">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSinglePayment("labour-payments", p.id, name)}
-                                      className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
-                                      title={`Delete payment for ${name}`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSinglePayment("labour-payments", p.id, name)}
+                                        className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
+                                        title={`Delete payment for ${name}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                                 );
@@ -1059,14 +1072,16 @@ export default function WeeklyDiaryPage() {
                                   <td className="px-4 py-2">{typeBadge(ctype)}</td>
                                   <td className="px-5 py-2 text-right font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">{formatPrice(Number(p.amount))}</td>
                                   <td className="px-3 py-2 text-right">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSinglePayment("contractor-payments", p.id, name)}
-                                      className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
-                                      title={`Delete payment for ${name}`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    {isAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSinglePayment("contractor-payments", p.id, name)}
+                                        className="p-1 text-slate-300 hover:text-rose-600 dark:text-zinc-600 dark:hover:text-rose-400 transition-colors rounded-lg"
+                                        title={`Delete payment for ${name}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                                 );

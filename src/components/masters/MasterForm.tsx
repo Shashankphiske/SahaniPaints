@@ -26,9 +26,11 @@ const STATUSES = [
 const ROLES = [
   { value: "INTERIOR", label: "Interior Designer" },
   { value: "SALES_ASSOCIATE", label: "Sales Associate" },
+  { value: "SUPERVISOR", label: "Supervisor" },
   { value: "ADMIN", label: "Administrator" },
   { value: "USER", label: "Standard User" }
 ];
+
 
 const RESOURCE_FIELDS: Record<string, string[]> = {
   customers: ["name", "email", "phonenumber", "alternatePhonenumber", "address"],
@@ -245,6 +247,16 @@ export function MasterForm({
     }
   }, [resource]);
 
+  // Populate projectSearch if projectId is passed in initialData but name is missing
+  useEffect(() => {
+    if (resource === "tasks" && formData.projectId && projectsList.length > 0 && !projectSearch) {
+      const match = projectsList.find(p => p.id === formData.projectId);
+      if (match) {
+        setProjectSearch(match.name);
+      }
+    }
+  }, [resource, formData.projectId, projectsList, projectSearch]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -283,6 +295,8 @@ export function MasterForm({
       if (!formData.title?.trim()) newErrors.title = "Task title is required";
       if (!formData.projectId) newErrors.projectId = "Project is required";
       if (!formData.taskDate) newErrors.taskDate = "Task Date is required";
+      if (!formData.priority) newErrors.priority = "Priority is required";
+      if (!formData.status) newErrors.status = "Status is required";
     }
 
     if (normalizedResource === "inquiries") {
@@ -565,8 +579,8 @@ export function MasterForm({
                 />
               </div>
               
-              {/* Only show role selector if resource is generic 'users' */}
-              {resource === "users" && (
+              {/* Only show role selector if resource is generic 'users' or 'sales-associates' */}
+              {(resource === "users" || resource === "sales-associates") && (
                 <div ref={roleRef} className="space-y-1 relative">
                   <label className="text-sm font-semibold text-muted-foreground">Role <span className="text-red-500 font-bold ml-0.5">*</span></label>
                   <Input
@@ -581,7 +595,10 @@ export function MasterForm({
                   />
                   {roleOpen && (
                     <div className="absolute z-50 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-                      {ROLES.filter(r => r.label.toLowerCase().includes(roleSearch.toLowerCase()))
+                      {(resource === "sales-associates" 
+                        ? ROLES.filter(r => r.value === "SALES_ASSOCIATE" || r.value === "SUPERVISOR")
+                        : ROLES
+                      ).filter(r => r.label.toLowerCase().includes(roleSearch.toLowerCase()))
                         .map(r => (
                           <div
                             key={r.value}
@@ -634,13 +651,16 @@ export function MasterForm({
               <Input
                 placeholder="Search and select project... (Enter to search server)"
                 value={projectSearch}
-                onFocus={() => setProjectOpen(true)}
+                disabled={!!initialData?.projectId}
+                onFocus={() => !initialData?.projectId && setProjectOpen(true)}
                 onChange={(e) => {
+                  if (initialData?.projectId) return;
                   setProjectSearch(e.target.value);
                   setFormData(prev => ({ ...prev, projectId: "" }));
                   setProjectOpen(true);
                 }}
                 onKeyDown={(e) => {
+                  if (initialData?.projectId) return;
                   if (e.key === "Enter") {
                     e.preventDefault();
                     searchProjectsFromServer(projectSearch);
@@ -676,7 +696,7 @@ export function MasterForm({
 
             <div className="grid grid-cols-2 gap-4">
               <div ref={priorityRef} className="space-y-1 relative">
-                <label className="text-sm font-semibold text-muted-foreground">Priority</label>
+                <label className="text-sm font-semibold text-muted-foreground">Priority <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   placeholder="Search and select priority..."
                   value={prioritySearch}
@@ -705,10 +725,11 @@ export function MasterForm({
                       ))}
                   </div>
                 )}
+                {errors.priority && <p className="text-xs text-destructive font-semibold">{errors.priority}</p>}
               </div>
 
               <div ref={statusRef} className="space-y-1 relative">
-                <label className="text-sm font-semibold text-muted-foreground">Status</label>
+                <label className="text-sm font-semibold text-muted-foreground">Status <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   placeholder="Search and select status..."
                   value={statusSearch}
@@ -737,6 +758,7 @@ export function MasterForm({
                       ))}
                   </div>
                 )}
+                {errors.status && <p className="text-xs text-destructive font-semibold">{errors.status}</p>}
               </div>
             </div>
 

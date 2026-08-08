@@ -1,6 +1,6 @@
 export type SellingUnit = "METER" | "FEET" | "INCHES" | "CENTIMETER" | "PANHA" | "RFT" | "SQFT" | "SQM" | "SQY" | "ROLL" | "PIECE" | "PANEL" | "PCS";
 
-export type Role = "ADMIN" | "SALES_ASSOCIATE" | "INTERIOR" | "USER";
+export type Role = "ADMIN" | "SALES_ASSOCIATE" | "SUPERVISOR" | "INTERIOR" | "USER";
 
 export interface Brand {
   id: string;
@@ -115,6 +115,7 @@ export interface Project {
   agreedPrice: number | null;
   projectDate: Date;
   status: ProjectStatus;
+  stage: string;
   createdAt: Date;
   creatorId: string;
   customer?: {
@@ -132,6 +133,13 @@ export interface Project {
   creator: {
     username: string;
   };
+  supervisorId?: string | null;
+  supervisor?: {
+    id: string;
+    username: string;
+    email?: string | null;
+    phonenumber?: string | null;
+  } | null;
   projectProducts?: ProjectProduct[];
   attendance?: any[];
   tasks?: any[];
@@ -145,6 +153,7 @@ export interface Project {
 export interface ProjectData {
   name: string;
   customerId?: string | null;
+  supervisorId?: string | null;
   totalAmount?: number | null;
   paid?: number | null;
   discount?: number | null;
@@ -340,6 +349,21 @@ export interface ContractorWorkLog {
     pricePerSqFt?: number | null;
   };
   project?: {
+    name: string;
+  };
+}
+
+export interface LowMaterial {
+  id: string;
+  projectId: string;
+  material: string;
+  quantity: string;
+  approved: boolean;
+  delivered: boolean;
+  date: string;
+  createdAt: string;
+  project?: {
+    id: string;
     name: string;
   };
 }
