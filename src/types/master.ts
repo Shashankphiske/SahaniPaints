@@ -314,7 +314,6 @@ export interface Contractor {
   email?: string | null;
   address?: string | null;
   type: "WEEKLY" | "MONTHLY";
-  pricePerSqFt?: number | null;
   createdAt: string | Date | any;
 }
 
@@ -342,11 +341,12 @@ export interface ContractorWorkLog {
   projectId: string;
   contractorId: string;
   sqFt: number;
+  pricePerSqFt?: number | null;
+  material?: string | null;
   remarks?: string | null;
   createdAt: string;
   contractor?: {
     name: string;
-    pricePerSqFt?: number | null;
   };
   project?: {
     name: string;

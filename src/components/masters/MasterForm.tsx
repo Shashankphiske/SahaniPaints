@@ -43,7 +43,7 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   colors: ["name", "shade"],
   labours: ["name", "paymentPerDay", "phonenumber", "type"],
   areas: ["name"],
-  contractors: ["name", "phonenumber", "email", "address", "type", "pricePerSqFt"]
+  contractors: ["name", "phonenumber", "email", "address", "type"]
 };
 
 function useClickOutside(ref: React.RefObject<HTMLDivElement>, cb: () => void) {
@@ -390,14 +390,7 @@ export function MasterForm({
         payload.size = "1ltr";
       }
     }
-    
-    if (normalizedResource === "contractors") {
-      if (payload.pricePerSqFt !== undefined && payload.pricePerSqFt !== null && payload.pricePerSqFt !== "") {
-        payload.pricePerSqFt = Number(payload.pricePerSqFt);
-      } else {
-        payload.pricePerSqFt = null;
-      }
-    }
+
     
     // Automatically assign the role if creating/editing from a role-filtered page
     if (normalizedResource === "users" && !payload.role) {
@@ -1190,19 +1183,7 @@ export function MasterForm({
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground flex items-center justify-between">
-                <span>Price per Sq.Ft (₹)</span>
-                <span className="text-[11px] text-muted-foreground font-normal italic">(Optional)</span>
-              </label>
-              <Input
-                type="number"
-                name="pricePerSqFt"
-                value={formData.pricePerSqFt ?? ""}
-                onChange={handleChange}
-                placeholder="Enter price per sq.ft (e.g. 15)"
-              />
-            </div>
+
 
             <div className="space-y-1.5 pt-1">
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Contractor Type</label>

@@ -272,7 +272,7 @@ export default function ProjectsPage() {
             const contractorInfo = contractors.find((c) => c.id === log.contractorId);
             const populatedLog = {
               ...log,
-              contractor: contractorInfo ? { name: contractorInfo.name, pricePerSqFt: contractorInfo.pricePerSqFt } : null
+              contractor: contractorInfo ? { name: contractorInfo.name } : null
             };
             return {
               ...prev,
@@ -3071,7 +3071,7 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
   const contractorCost = useMemo(() => {
     const contractorWorkLogs = fullProject.contractorWorkLogs ?? [];
     return contractorWorkLogs.reduce((sum: number, log: any) => {
-      const rate = Number(log.contractor?.pricePerSqFt ?? 0);
+      const rate = Number(log.pricePerSqFt ?? 0);
       return sum + Number(log.sqFt || 0) * rate;
     }, 0);
   }, [fullProject.contractorWorkLogs]);
@@ -3161,6 +3161,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
   const [selectedContractorId, setSelectedContractorId] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
   const [sqFt, setSqFt] = useState("");
+  const [pricePerSqFt, setPricePerSqFt] = useState("");
+  const [material, setMaterial] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -3186,6 +3188,15 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
       });
       return;
     }
+    const valPrice = Number(pricePerSqFt);
+    if (isNaN(valPrice) || valPrice < 0) {
+      toast({
+        title: "Invalid Price value",
+        description: "Please enter a valid price per sq.ft.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -3193,13 +3204,15 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
         projectId,
         contractorId: selectedContractorId,
         sqFt: valSqFt,
+        pricePerSqFt: valPrice,
+        material: material.trim() || null,
         date: new Date(date).toISOString(),
         remarks: remarks || null,
       });
 
       const populatedLog = {
         ...res,
-        contractor: matchedContractor ? { name: matchedContractor.name, pricePerSqFt: matchedContractor.pricePerSqFt } : null
+        contractor: matchedContractor ? { name: matchedContractor.name } : null
       };
 
       setFullProject((prev: any) => {
@@ -3216,6 +3229,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
       });
 
       setSqFt("");
+      setPricePerSqFt("");
+      setMaterial("");
       setRemarks("");
     } catch (err: any) {
       toast({
@@ -3305,24 +3320,44 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
                   setContractorSearch("");
                 }}
               />
-              {matchedContractor && (
-                <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                  Rate: {matchedContractor.pricePerSqFt ? `₹${Number(matchedContractor.pricePerSqFt).toFixed(2)} / sq.ft` : "No price specified"}
-                </p>
-              )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Work Done (Sq.Ft) *</label>
+              <label className="text-xs font-bold text-slate-500 uppercase">Material Used</label>
               <Input
-                type="number"
-                step="0.01"
-                required
-                min="0.01"
-                placeholder="0.00"
-                value={sqFt}
-                onChange={(e) => setSqFt(e.target.value)}
+                type="text"
+                placeholder="e.g. Putty, Primer, 1st Coat paint"
+                value={material}
+                onChange={(e) => setMaterial(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Work (Sq.Ft) *</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  min="0.01"
+                  placeholder="0.00"
+                  value={sqFt}
+                  onChange={(e) => setSqFt(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase">Rate / Sq.Ft *</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  required
+                  min="0.00"
+                  placeholder="0.00"
+                  value={pricePerSqFt}
+                  onChange={(e) => setPricePerSqFt(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -3370,7 +3405,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               </TableHeader>
               <TableBody>
                 {contractorWorkLogs.map((log) => {
-                  const rate = Number(log.contractor?.pricePerSqFt ?? 0);
+                  const rate = Number(log.pricePerSqFt ?? 0);
                   const subtotal = Number(log.sqFt || 0) * rate;
                   return (
                     <TableRow key={log.id}>
@@ -3383,7 +3418,14 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
                       </TableCell>
                       <TableCell>
                         <div className="font-bold">{log.contractor?.name || "Unknown"}</div>
-                        {log.remarks && <p className="text-[10px] text-slate-400">{log.remarks}</p>}
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {log.material && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-600 font-extrabold rounded">
+                              {log.material}
+                            </Badge>
+                          )}
+                          {log.remarks && <span className="text-[10px] text-slate-400 font-medium">{log.remarks}</span>}
+                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-sm">{Number(log.sqFt).toLocaleString()}</TableCell>
                       <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>

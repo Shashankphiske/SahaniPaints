@@ -136,10 +136,10 @@ export default function ContractorDashboard({
 
   const totalEarned = useMemo(() => {
     return workLogsList.reduce((sum, log) => {
-      const rate = Number(log.contractor?.pricePerSqFt ?? contractor.pricePerSqFt ?? 0);
+      const rate = Number(log.pricePerSqFt ?? 0);
       return sum + Number(log.sqFt || 0) * rate;
     }, 0);
-  }, [workLogsList, contractor.pricePerSqFt]);
+  }, [workLogsList]);
 
   const balanceDue = totalEarned - totalPaid;
 
@@ -336,12 +336,7 @@ export default function ContractorDashboard({
                   <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Address</p>
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{contractor.address ?? "—"}</p>
                 </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Price per Sq.Ft</p>
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    {contractor.pricePerSqFt ? `₹${Number(contractor.pricePerSqFt).toFixed(2)} / sq.ft` : "Not Specified"}
-                  </p>
-                </div>
+
               </div>
             </div>
 
@@ -598,7 +593,7 @@ export default function ContractorDashboard({
                 </TableHeader>
                 <TableBody>
                   {workLogsList.map((log) => {
-                    const rate = Number(log.contractor?.pricePerSqFt ?? contractor.pricePerSqFt ?? 0);
+                    const rate = Number(log.pricePerSqFt ?? 0);
                     const subtotal = Number(log.sqFt || 0) * rate;
                     return (
                       <TableRow key={log.id}>
@@ -606,7 +601,12 @@ export default function ContractorDashboard({
                           {formatDate(log.date)}
                         </TableCell>
                         <TableCell className="font-bold text-slate-800 dark:text-slate-100 text-xs">
-                          {log.project?.name || "Unknown Project"}
+                          <div>{log.project?.name || "Unknown Project"}</div>
+                          {log.material && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-600 font-extrabold rounded mt-0.5 w-fit block">
+                              {log.material}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">{Number(log.sqFt).toLocaleString()}</TableCell>
                         <TableCell className="font-mono text-xs">₹{rate.toFixed(2)}</TableCell>
