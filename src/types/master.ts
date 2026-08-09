@@ -115,7 +115,6 @@ export interface Project {
   agreedPrice: number | null;
   projectDate: Date;
   status: ProjectStatus;
-  stage: string;
   createdAt: Date;
   creatorId: string;
   customer?: {
@@ -211,6 +210,7 @@ export interface ProjectAreaColor {
   areaId: string;
   colorId: string;
   description?: string | null;
+  stage: string;
   createdAt: Date;
   color?: Color;
   area?: Area;

@@ -2,9 +2,10 @@ import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../hooks/use-master-data";
+import { getResourceChannel } from "../lib/realtime";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
-import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog } from "../types/master";
+import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color } from "../types/master";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -38,7 +39,15 @@ import {
   LayoutGrid,
   List,
   SlidersHorizontal,
-  ClipboardList
+  ClipboardList,
+  User,
+  UserCheck,
+  Ruler,
+  Package,
+  Paintbrush,
+  MapPin,
+  CheckCircle2,
+  Edit
 } from "lucide-react";
 import { generateQuotationPDF } from "../utils/quotationPdfGenerator";
 import TasksPage from "./TasksPage";
@@ -131,6 +140,7 @@ export default function ProjectsPage() {
   const customersData = useMasterData<Customer>("customers", true);
   const productsData = useMasterData<Product>("products", true);
   const usersData = useMasterData<any>("users", true);
+  const contractorsData = useMasterData<Contractor>("contractors", true);
 
   const projects = useMemo(() => {
     return Array.isArray(projectsData.data) ? projectsData.data : [];
@@ -147,6 +157,10 @@ export default function ProjectsPage() {
   const supervisors = useMemo(() => {
     return Array.isArray(usersData.data) ? usersData.data.filter((u: any) => u.role === "SUPERVISOR") : [];
   }, [usersData.data]);
+
+  const contractors = useMemo(() => {
+    return Array.isArray(contractorsData.data) ? contractorsData.data : [];
+  }, [contractorsData.data]);
 
   // Project detail fetcher for single project detail tabs
   const [fullProject, setFullProject] = useState<any | null>(null);
@@ -184,6 +198,190 @@ export default function ProjectsPage() {
       }
     }
   }, [projectIdParam, projects]);
+
+  // Real-time synchronization of project payments and ledger records
+  useEffect(() => {
+    // 1. Project Payments Real-time listener
+    const paymentsChannel = getResourceChannel("project-payments");
+    paymentsChannel.on("broadcast", { event: "sync" }, ({ payload }: any) => {
+      if (payload?.resource === "project-payments" && payload.data) {
+        const payment = payload.data;
+        const pId = payment.projectId;
+        const isIncoming = payment.type !== "OUTGOING";
+        const amt = Number(payment.amount || 0);
+
+        // Update list/card query cache of projects
+        queryClient.setQueriesData<any>({ queryKey: ["projects_infinite"] }, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              records: (page.records || []).map((p: any) => {
+                if (p.id !== pId) return p;
+                const prevPaid = Number(p.paid || 0);
+                let newPaid = prevPaid;
+                if (payload.action === "CREATE") {
+                  newPaid = prevPaid + (isIncoming ? amt : -amt);
+                } else if (payload.action === "DELETE") {
+                  newPaid = Math.max(0, prevPaid - (isIncoming ? amt : -amt));
+                }
+                return { ...p, paid: newPaid };
+              })
+            }))
+          };
+        });
+
+        // Update detailed view state if it's the current viewing project
+        setFullProject((prev: any) => {
+          if (!prev || prev.id !== pId) return prev;
+          const currentPayments = prev.projectPayments || [];
+          
+          if (payload.action === "CREATE") {
+            if (currentPayments.some((p: any) => p.id === payment.id)) return prev;
+            return {
+              ...prev,
+              paid: Number(prev.paid || 0) + (isIncoming ? amt : -amt),
+              projectPayments: [payment, ...currentPayments]
+            };
+          } else if (payload.action === "DELETE") {
+            return {
+              ...prev,
+              paid: Math.max(0, Number(prev.paid || 0) - (isIncoming ? amt : -amt)),
+              projectPayments: currentPayments.filter((p: any) => p.id !== payment.id)
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    // 2. Contractor Work Logs listener
+    const contractorLogsChannel = getResourceChannel("contractor-work-logs");
+    contractorLogsChannel.on("broadcast", { event: "sync" }, ({ payload }: any) => {
+      if (payload?.resource === "contractor-work-logs" && payload.data) {
+        const log = payload.data;
+        const pId = log.projectId;
+
+        setFullProject((prev: any) => {
+          if (!prev || prev.id !== pId) return prev;
+          const currentLogs = prev.contractorWorkLogs || [];
+
+          if (payload.action === "CREATE") {
+            if (currentLogs.some((l: any) => l.id === log.id)) return prev;
+            const contractorInfo = contractors.find((c) => c.id === log.contractorId);
+            const populatedLog = {
+              ...log,
+              contractor: contractorInfo ? { name: contractorInfo.name, pricePerSqFt: contractorInfo.pricePerSqFt } : null
+            };
+            return {
+              ...prev,
+              contractorWorkLogs: [populatedLog, ...currentLogs]
+            };
+          } else if (payload.action === "DELETE") {
+            return {
+              ...prev,
+              contractorWorkLogs: currentLogs.filter((l: any) => l.id !== log.id)
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    // 3. Labour Attendance listener
+    const attendanceChannel = getResourceChannel("labour-attendance");
+    attendanceChannel.on("broadcast", { event: "sync" }, ({ payload }: any) => {
+      if (payload?.resource === "labour-attendance" && payload.data) {
+        const att = payload.data;
+        const pId = att.projectId;
+
+        setFullProject((prev: any) => {
+          if (!prev || prev.id !== pId) return prev;
+          const currentAttendance = prev.attendance || [];
+
+          if (payload.action === "CREATE") {
+            if (currentAttendance.some((a: any) => a.id === att.id)) return prev;
+            return {
+              ...prev,
+              attendance: [att, ...currentAttendance]
+            };
+          } else if (payload.action === "DELETE") {
+            return {
+              ...prev,
+              attendance: currentAttendance.filter((a: any) => a.id !== att.id)
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    // 4. Material Logs listener
+    const materialLogsChannel = getResourceChannel("project-material-logs");
+    materialLogsChannel.on("broadcast", { event: "sync" }, ({ payload }: any) => {
+      if (payload?.resource === "project-material-logs" && payload.data) {
+        const mat = payload.data;
+        const pId = mat.projectId;
+
+        setFullProject((prev: any) => {
+          if (!prev || prev.id !== pId) return prev;
+          const currentMaterials = prev.materialLogs || [];
+
+          if (payload.action === "CREATE") {
+            if (currentMaterials.some((m: any) => m.id === mat.id)) return prev;
+            return {
+              ...prev,
+              materialLogs: mat.productId ? [mat, ...currentMaterials] : currentMaterials
+            };
+          } else if (payload.action === "DELETE") {
+            return {
+              ...prev,
+              materialLogs: currentMaterials.filter((m: any) => m.id !== mat.id)
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    // 5. Projects list/details general channel listener
+    const projectsChannel = getResourceChannel("projects");
+    projectsChannel.on("broadcast", { event: "sync" }, ({ payload }: any) => {
+      if (payload?.resource === "projects" && payload.data) {
+        const proj = payload.data;
+        if (payload.action === "UPDATE") {
+          setFullProject((prev: any) => {
+            if (!prev || prev.id !== proj.id) return prev;
+            return {
+              ...prev,
+              ...proj
+            };
+          });
+        } else if (payload.action === "DELETE") {
+          setFullProject((prev: any) => {
+            if (prev && prev.id === proj.id) {
+              setViewingProject(null);
+              setSearchParams({});
+              return null;
+            }
+            return prev;
+          });
+        }
+      }
+    });
+
+    // Subscribe to all channels
+    paymentsChannel.subscribe();
+    contractorLogsChannel.subscribe();
+    attendanceChannel.subscribe();
+    materialLogsChannel.subscribe();
+    projectsChannel.subscribe();
+
+    return () => {
+      // Clean up subscriptions
+    };
+  }, [queryClient, contractors]);
 
   // List filtering logic
 
@@ -361,41 +559,27 @@ export default function ProjectsPage() {
 
                             {/* Customer & Date */}
                             <div className="flex items-center justify-between text-xs text-muted-foreground gap-2 pt-0.5">
-                              <span className="truncate text-[11px] font-medium" title={project.customer?.name}>
-                                👤 {project.customer?.name || "No Customer"}
+                              <span className="truncate text-[11px] font-medium flex items-center" title={project.customer?.name}>
+                                <User className="h-3 w-3 mr-1 text-slate-400" />
+                                {project.customer?.name || "No Customer"}
                               </span>
-                              <span className="text-[11px] font-mono shrink-0">
-                                📅 {formatDate(project.projectDate)}
+                              <span className="text-[11px] font-mono shrink-0 flex items-center">
+                                <Calendar className="h-3 w-3 mr-1 text-slate-400" />
+                                {formatDate(project.projectDate)}
                               </span>
                             </div>
 
                             {/* Supervisor Status */}
                             <div className="flex items-center justify-between text-xs text-muted-foreground gap-2 pt-1 border-t border-slate-100 dark:border-zinc-900/40">
-                              <span className="truncate text-[11px] font-medium">
-                                👷 Supervisor: {project.supervisor?.username ? (
-                                  <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{project.supervisor.username}</span>
+                              <span className="truncate text-[11px] font-medium flex items-center">
+                                <UserCheck className="h-3 w-3 mr-1 text-slate-400" />
+                                Supervisor: &nbsp;
+                                {project.supervisor?.username ? (
+                                  <span className="text-primary font-bold">{project.supervisor.username}</span>
                                 ) : (
                                   <span className="text-red-500 font-semibold bg-red-50 dark:bg-red-950/20 px-1.5 py-0.5 rounded border border-red-150">No Supervisor</span>
                                 )}
                               </span>
-                            </div>
-                          </div>
-
-                          {/* Progress Stage Mini Bar */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase">
-                              <span>Painting Stage</span>
-                              <span className="text-primary font-bold">{project.stage || "Putty"}</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-100 dark:bg-zinc-900 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                                style={{ 
-                                  width: `${
-                                    ((["Putty", "Primer", "1st Coat", "2nd Coat"].indexOf(project.stage || "Putty") + 1) / 4) * 100
-                                  }%` 
-                                }}
-                              />
                             </div>
                           </div>
 
@@ -584,6 +768,8 @@ export default function ProjectsPage() {
             products={products}
             customers={customers}
             supervisors={supervisors}
+            setFullProject={setFullProject}
+            updateAllCaches={projectsData.updateAllCaches}
             onCreateCustomer={customersData.createAsync}
             onBack={() => {
               setViewingProject(null);
@@ -714,7 +900,6 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
         _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
-        stage: "Putty",
         totalAmount: subtotal,
         tax: Number(taxRate || 0),
         discount: Number(discount || 0),
@@ -1152,6 +1337,8 @@ interface ProjectDetailViewProps {
   products: Product[];
   customers: Customer[];
   supervisors: any[];
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
+  updateAllCaches: (updatedItem: any) => void;
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onBack: () => void;
   onRefresh: () => void;
@@ -1166,6 +1353,8 @@ function ProjectDetailView({
   products,
   customers,
   supervisors,
+  setFullProject,
+  updateAllCaches,
   onCreateCustomer,
   onBack,
   onRefresh,
@@ -1173,7 +1362,28 @@ function ProjectDetailView({
   onSearchProducts,
 }: ProjectDetailViewProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (urlTab && ["overview", "areastatus", "products", "quotation", "payments", "profitloss"].includes(urlTab)) {
+      return urlTab;
+    }
+    return "overview";
+  });
+
+  useEffect(() => {
+    if (urlTab && ["overview", "areastatus", "products", "quotation", "payments", "profitloss"].includes(urlTab)) {
+      setActiveTab(urlTab);
+    }
+  }, [urlTab]);
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val);
+    setSearchParams((prev) => {
+      prev.set("tab", val);
+      return prev;
+    }, { replace: true });
+  };
 
   if (loadingDetails || !fullProject) {
     return (
@@ -1254,10 +1464,13 @@ function ProjectDetailView({
       </div>
 
       {/* Tabs Container */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto p-1 bg-slate-100 dark:bg-zinc-900 rounded-xl max-w-full">
           <TabsTrigger value="overview" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Overview / Edit
+          </TabsTrigger>
+          <TabsTrigger value="areastatus" className="rounded-lg text-xs font-bold py-1.5 px-3">
+            Area Status
           </TabsTrigger>
           <TabsTrigger value="products" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Selected Products
@@ -1279,20 +1492,27 @@ function ProjectDetailView({
         <TabsContent value="overview">
           <OverviewEditTab
             fullProject={fullProject}
+            setFullProject={setFullProject}
+            updateAllCaches={updateAllCaches}
             customers={customers}
             supervisors={supervisors}
             onCreateCustomer={onCreateCustomer}
-            onSuccess={onRefresh}
             onSearchCustomers={onSearchCustomers}
           />
+        </TabsContent>
+
+        {/* TAB 1.5: ROOM AREA STATUS PROGRESS STEPPER */}
+        <TabsContent value="areastatus">
+          <AreaStatusTab projectId={fullProject.id} />
         </TabsContent>
 
         {/* TAB 2: PRODUCT CONTRACT SELECTIONS */}
         <TabsContent value="products">
           <SelectedProductsTab
             fullProject={fullProject}
+            setFullProject={setFullProject}
+            updateAllCaches={updateAllCaches}
             products={products}
-            onSuccess={onRefresh}
             onSearchProducts={onSearchProducts}
           />
         </TabsContent>
@@ -1301,7 +1521,8 @@ function ProjectDetailView({
         <TabsContent value="quotation">
           <QuotationTab
             fullProject={fullProject}
-            onSuccess={onRefresh}
+            setFullProject={setFullProject}
+            updateAllCaches={updateAllCaches}
           />
         </TabsContent>
 
@@ -1313,7 +1534,11 @@ function ProjectDetailView({
         {user?.role === "ADMIN" && (
           <TabsContent value="payments">
             <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-              <CustomerPaymentsTab fullProject={fullProject} onSuccess={onRefresh} />
+              <CustomerPaymentsTab
+                fullProject={fullProject}
+                setFullProject={setFullProject}
+                updateAllCaches={updateAllCaches}
+              />
             </div>
           </TabsContent>
         )}
@@ -1327,16 +1552,16 @@ function ProjectDetailView({
 /* ──────────────────────────────────────────────────────── */
 interface OverviewEditTabProps {
   fullProject: any;
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
+  updateAllCaches: (updatedItem: any) => void;
   customers: Customer[];
   supervisors: any[];
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
-  onSuccess: () => void;
   onSearchCustomers?: (query: string) => void;
 }
 
-function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer, onSuccess, onSearchCustomers }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, customers, supervisors, onCreateCustomer, onSearchCustomers }: OverviewEditTabProps) {
   const { user } = useAuth();
-  const { updateAllCaches } = useMasterData<Project>("projects", false); // false = don't fetch, just use cache helpers
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
   const [customerDisplay, setCustomerDisplay] = useState(
@@ -1350,7 +1575,6 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
     return fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "";
   });
   const [status, setStatus] = useState<any>(fullProject.status);
-  const [stage, setStage] = useState<string>(fullProject.stage || "Putty");
   const [saving, setSaving] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
@@ -1392,7 +1616,6 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
     setSupervisorDisplay(supervisors.find((s) => s.id === fullProject.supervisorId)?.username || "");
     setProjectDate(fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "");
     setStatus(fullProject.status);
-    setStage(fullProject.stage || "Putty");
   }, [fullProject, customers, supervisors]);
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -1410,7 +1633,6 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
         _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
-        stage,
         totalAmount: Number(fullProject.totalAmount),
         tax: Number(fullProject.tax || 0),
         discount: Number(fullProject.discount || 0),
@@ -1426,13 +1648,25 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
       };
 
       await apiRequest.update("projects", fullProject.id, payload as any);
-      // Optimistically update list cache for status/stage changes
-      updateAllCaches({ id: fullProject.id, name, status, stage, customerId, supervisorId } as any);
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          name,
+          customerId,
+          supervisorId: supervisorId || null,
+          customer: cust ? { id: cust.id, name: cust.name, phonenumber: cust.phonenumber || null, email: cust.email || null, address: cust.address || null } : null,
+          supervisor: supervisorId ? { id: supervisorId, username: supervisors.find((s) => s.id === supervisorId)?.username } : null,
+          projectDate: projectDate ? new Date(projectDate) : null,
+          status,
+        };
+      });
+      // Optimistically update list cache for status changes
+      updateAllCaches({ id: fullProject.id, name, status, customerId, supervisorId } as any);
       toast({
         title: "Project Details Saved",
         description: "General project information has been updated.",
       });
-      onSuccess();
     } catch (err: any) {
       toast({
         title: "Update Failed",
@@ -1444,118 +1678,13 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
     }
   };
 
-  const STAGES = ["Putty", "Primer", "1st Coat", "2nd Coat"];
-  const currentStageIndex = STAGES.indexOf(stage);
-
   return (
     <div className="space-y-8">
-      {/* Painting Stage Progress Bar Widget */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
-              <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Site Painting Progress</h3>
-          </div>
-          <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full">
-            {stage}
-          </span>
-        </div>
-
-        {/* Stepper Progress Bar */}
-        <div className="relative pt-4 pb-8 px-6">
-          {/* Connector Line */}
-          <div className="absolute top-1/2 left-6 right-6 h-1 bg-slate-100 dark:bg-zinc-900 -translate-y-1/2 rounded-full" />
-          <div 
-            className="absolute top-1/2 left-6 h-1 bg-gradient-to-r from-indigo-500 to-indigo-600 -translate-y-1/2 rounded-full transition-all duration-500" 
-            style={{ width: `${(currentStageIndex / (STAGES.length - 1)) * 84}%` }} // Adjust for offsets
-          />
-
-          {/* Steps */}
-          <div className="relative flex justify-between">
-            {STAGES.map((stepName, idx) => {
-              const isCompleted = idx < currentStageIndex;
-              const isActive = idx === currentStageIndex;
-              
-              return (
-                <div 
-                  key={stepName} 
-                  className="flex flex-col items-center group cursor-pointer relative"
-                  onClick={async () => {
-                    try {
-                      const payload = {
-                        name,
-                        customerId,
-                        _customerName: customers.find((c) => c.id === customerId)?.name,
-                        projectDate: projectDate ? new Date(projectDate).toISOString() : null,
-                        status,
-                        stage: stepName,
-                        totalAmount: Number(fullProject.totalAmount),
-                        tax: Number(fullProject.tax || 0),
-                        discount: Number(fullProject.discount || 0),
-                        discountType: fullProject.discountType || "amount",
-                        agreedPrice: Number(fullProject.agreedPrice || fullProject.totalAmount),
-                        projectProducts: (fullProject.projectProducts || []).map((pp: any) => ({
-                          productId: pp.productId,
-                          area: Number(pp.area),
-                          unit: pp.unit,
-                          rate: Number(pp.rate),
-                          litresUsed: pp.litresUsed,
-                        })),
-                      };
-                      await apiRequest.update("projects", fullProject.id, payload as any);
-                      // Optimistically update the list cache so card mini-bar reflects instantly
-                      setStage(stepName);
-                      updateAllCaches({ id: fullProject.id, stage: stepName } as any);
-                      toast({
-                        title: "Progress Stage Updated",
-                        description: `Site progress is now at: ${stepName}.`,
-                      });
-                      onSuccess(); // Refresh detail view
-                    } catch (err: any) {
-                      toast({
-                        title: "Failed to Update Stage",
-                        description: err.message || "Something went wrong.",
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                >
-                  {/* Step Bubble */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 shadow-sm transition-all duration-300 z-10 ${
-                    isCompleted 
-                      ? "bg-indigo-600 border-indigo-600 text-white" 
-                      : isActive 
-                        ? "bg-white dark:bg-zinc-950 border-indigo-600 text-indigo-600 scale-110 shadow-md ring-4 ring-indigo-500/10" 
-                        : "bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-400 group-hover:border-slate-350"
-                  }`}>
-                    {isCompleted ? "✓" : idx + 1}
-                  </div>
-                  
-                  {/* Step Label */}
-                  <span className={`absolute top-10 text-[10px] font-bold uppercase tracking-wider text-center whitespace-nowrap transition-colors duration-300 ${
-                    isActive 
-                      ? "text-indigo-600 dark:text-indigo-400 font-extrabold" 
-                      : isCompleted 
-                        ? "text-slate-700 dark:text-slate-300 font-semibold" 
-                        : "text-slate-400"
-                  }`}>
-                    {stepName}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
       {/* Today's Site Activity / Progress */}
       <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-zinc-900 pb-3">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
               <ClipboardCheck className="h-5 w-5" />
             </div>
             <div>
@@ -1565,19 +1694,19 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
               <p className="text-[11px] text-muted-foreground">Real-time summary of operations logged today</p>
             </div>
           </div>
-          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-100/50 dark:border-indigo-900/30 uppercase tracking-wider font-mono">
+          <span className="text-[10px] font-bold text-slate-600 dark:text-slate-350 bg-slate-100 dark:bg-zinc-900 px-2 py-0.5 rounded border border-slate-200 dark:border-zinc-800 uppercase tracking-wider font-mono">
             {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
           </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Labor Force today */}
-          <div className="p-4 rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/10 dark:bg-blue-950/5 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
-              👷
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <UserCheck className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Labour Attendance</p>
+              <p className="text-[10px] font-bold text-primary dark:text-slate-400 uppercase tracking-wider">Labour Attendance</p>
               <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                 {todaysProgress.attendanceCount > 0 ? (
                   `${todaysProgress.attendanceCount} Present`
@@ -1589,12 +1718,12 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
           </div>
 
           {/* Contractor sq.ft logged today */}
-          <div className="p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/10 dark:bg-emerald-950/5 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0">
-              📏
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <Ruler className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Contractor Work</p>
+              <p className="text-[10px] font-bold text-primary dark:text-slate-400 uppercase tracking-wider">Contractor Work</p>
               <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                 {todaysProgress.workSqFt > 0 ? (
                   `${todaysProgress.workSqFt} sq.ft completed`
@@ -1606,12 +1735,12 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
           </div>
 
           {/* Material Logged today */}
-          <div className="p-4 rounded-xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/10 dark:bg-purple-950/5 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center text-lg shrink-0">
-              📦
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <Package className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Materials Used</p>
+              <p className="text-[10px] font-bold text-primary dark:text-slate-400 uppercase tracking-wider">Materials Used</p>
               <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                 {todaysProgress.materialsCount > 0 ? (
                   `${todaysProgress.materialsCount} Items dispatched`
@@ -1683,7 +1812,7 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
         <ContractorWorkLedgerTab
           projectId={fullProject.id}
           contractorWorkLogs={fullProject.contractorWorkLogs || []}
-          onSuccess={onSuccess}
+          setFullProject={setFullProject}
         />
       </div>
 
@@ -1698,7 +1827,6 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
           projectId={fullProject.id}
           projectProducts={fullProject.projectProducts || []}
           materialLogs={fullProject.materialLogs || []}
-          onSuccess={onSuccess}
         />
       </div>
 
@@ -1791,21 +1919,7 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
             </select>
           </div>
 
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Painting Stage
-            </span>
-            <select
-              value={stage}
-              onChange={(e) => setStage(e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none"
-            >
-              <option value="Putty">Putty</option>
-              <option value="Primer">Primer</option>
-              <option value="1st Coat">1st Coat</option>
-              <option value="2nd Coat">2nd Coat</option>
-            </select>
-          </div>
+
 
           <div className="flex justify-end pt-2 col-span-1 md:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
             <Button type="submit" disabled={saving} size="sm" className="font-bold">
@@ -1858,12 +1972,13 @@ function OverviewEditTab({ fullProject, customers, supervisors, onCreateCustomer
 /* ──────────────────────────────────────────────────────── */
 interface SelectedProductsTabProps {
   fullProject: any;
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
+  updateAllCaches: (updatedItem: any) => void;
   products: Product[];
-  onSuccess: () => void;
   onSearchProducts?: (query: string) => void;
 }
 
-function SelectedProductsTab({ fullProject, products, onSuccess, onSearchProducts }: SelectedProductsTabProps) {
+function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, products, onSearchProducts }: SelectedProductsTabProps) {
   const [rows, setRows] = useState<PaintProductRow[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -1949,11 +2064,50 @@ function SelectedProductsTab({ fullProject, products, onSuccess, onSearchProduct
       };
 
       await apiRequest.update("projects", fullProject.id, payload as any);
+
+      const updatedProjectProducts = filteredRows.map((r, index) => {
+        const prod = products.find((p) => p.id === r.productId);
+        return {
+          id: `temp-${index}-${Date.now()}`,
+          projectId: fullProject.id,
+          productId: r.productId,
+          area: Number(r.area),
+          unit: r.unit,
+          rate: Number(r.rate),
+          litresUsed: r.litresUsed,
+          product: prod ? {
+            id: prod.id,
+            name: prod.name,
+            category: prod.category,
+            price: prod.price,
+            coverageSqFt: prod.coverageSqFt,
+            coverageRnFt: prod.coverageRnFt,
+            size: prod.size,
+            brand: prod.brand
+          } : undefined
+        };
+      });
+
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          totalAmount: newSubtotal,
+          agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
+          projectProducts: updatedProjectProducts,
+        };
+      });
+
+      updateAllCaches({
+        id: fullProject.id,
+        totalAmount: newSubtotal,
+        agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
+      });
+
       toast({
         title: "Selected Products Saved",
         description: "Contract product selections have been successfully updated.",
       });
-      onSuccess();
     } catch (err: any) {
       toast({
         title: "Save Failed",
@@ -2087,10 +2241,11 @@ function SelectedProductsTab({ fullProject, products, onSuccess, onSearchProduct
 /* ──────────────────────────────────────────────────────── */
 interface QuotationTabProps {
   fullProject: any;
-  onSuccess: () => void;
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
+  updateAllCaches: (updatedItem: any) => void;
 }
 
-function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
+function QuotationTab({ fullProject, setFullProject, updateAllCaches }: QuotationTabProps) {
   const [taxRate, setTaxRate] = useState<number | "">(
     fullProject.tax ? Number(fullProject.tax) : ""
   );
@@ -2149,11 +2304,24 @@ function QuotationTab({ fullProject, onSuccess }: QuotationTabProps) {
       };
 
       await apiRequest.update("projects", fullProject.id, payload as any);
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tax: Number(taxRate || 0),
+          discount: Number(discount || 0),
+          discountType,
+          agreedPrice: finalPrice,
+        };
+      });
+      updateAllCaches({
+        id: fullProject.id,
+        agreedPrice: finalPrice,
+      });
       toast({
         title: "Quotation Settings Saved",
         description: "Tax, discounts, and agreed price updated successfully.",
       });
-      onSuccess();
     } catch (err: any) {
       toast({
         title: "Save Failed",
@@ -2266,10 +2434,9 @@ interface MaterialUsedTabProps {
   projectId: string;
   projectProducts: any[];
   materialLogs: any[];
-  onSuccess: () => void;
 }
 
-function MaterialUsedTab({ projectId, projectProducts, materialLogs, onSuccess }: MaterialUsedTabProps) {
+function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialUsedTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -2521,10 +2688,11 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
 /* ──────────────────────────────────────────────────────── */
 interface CustomerPaymentsTabProps {
   fullProject: any;
-  onSuccess: () => void;
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
+  updateAllCaches: (updatedItem: any) => void;
 }
 
-function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProps) {
+function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: CustomerPaymentsTabProps) {
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -2554,7 +2722,26 @@ function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProp
         remarks: remarks.trim() || null,
       };
 
-      await apiRequest.create("project-payments", payload);
+      const res = await apiRequest.create<any>("project-payments", payload);
+
+      // Update local fullProject state
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        const newPayments = [res, ...(prev.projectPayments || [])];
+        const newPaid = Number(prev.paid || 0) + Number(res.amount || 0);
+        return {
+          ...prev,
+          paid: newPaid,
+          projectPayments: newPayments
+        };
+      });
+
+      // Update projects list cache
+      updateAllCaches({
+        id: fullProject.id,
+        paid: Number(fullProject.paid || 0) + Number(res.amount || 0)
+      });
+
       toast({
         title: "Payment Recorded",
         description: `Recorded incoming payment of ₹${numericAmount.toLocaleString("en-IN")}.`,
@@ -2565,8 +2752,6 @@ function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProp
       setRemarks("");
       setPaymentMode("CASH");
       setPaymentDate(new Date().toISOString().split("T")[0]);
-      
-      onSuccess(); // Refresh project details
     } catch (err: any) {
       toast({
         title: "Recording Failed",
@@ -2582,12 +2767,33 @@ function CustomerPaymentsTab({ fullProject, onSuccess }: CustomerPaymentsTabProp
     if (!window.confirm("Are you sure you want to delete this payment record?")) return;
 
     try {
+      const targetPayment = (fullProject.projectPayments || []).find((p: any) => p.id === id);
+      const subAmount = targetPayment ? Number(targetPayment.amount || 0) : 0;
+
       await apiRequest.delete("project-payments", id);
+
+      // Update local fullProject state
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        const newPayments = (prev.projectPayments || []).filter((p: any) => p.id !== id);
+        const newPaid = Math.max(0, Number(prev.paid || 0) - subAmount);
+        return {
+          ...prev,
+          paid: newPaid,
+          projectPayments: newPayments
+        };
+      });
+
+      // Update projects list cache
+      updateAllCaches({
+        id: fullProject.id,
+        paid: Math.max(0, Number(fullProject.paid || 0) - subAmount)
+      });
+
       toast({
         title: "Payment Deleted",
         description: "Project payment record deleted successfully.",
       });
-      onSuccess(); // Refresh project details
     } catch (err: any) {
       toast({
         title: "Delete Failed",
@@ -2936,10 +3142,10 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
 interface ContractorWorkLedgerTabProps {
   projectId: string;
   contractorWorkLogs: ContractorWorkLog[];
-  onSuccess: () => void;
+  setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
 }
 
-function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: ContractorWorkLedgerTabProps) {
+function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject }: ContractorWorkLedgerTabProps) {
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
   const allContractors = useMemo(() => Array.isArray(contractorsRaw) ? contractorsRaw : [], [contractorsRaw]);
 
@@ -2983,12 +3189,25 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
 
     setSubmitting(true);
     try {
-      await apiRequest.create("contractor-work-logs", {
+      const res = await apiRequest.create<any>("contractor-work-logs", {
         projectId,
         contractorId: selectedContractorId,
         sqFt: valSqFt,
         date: new Date(date).toISOString(),
         remarks: remarks || null,
+      });
+
+      const populatedLog = {
+        ...res,
+        contractor: matchedContractor ? { name: matchedContractor.name, pricePerSqFt: matchedContractor.pricePerSqFt } : null
+      };
+
+      setFullProject((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          contractorWorkLogs: [populatedLog, ...(prev.contractorWorkLogs || [])]
+        };
       });
 
       toast({
@@ -2998,7 +3217,6 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
 
       setSqFt("");
       setRemarks("");
-      onSuccess(); // reload project details
     } catch (err: any) {
       toast({
         title: "Failed to record work log",
@@ -3014,11 +3232,19 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, onSuccess }: C
     if (window.confirm("Are you sure you want to remove this contractor work log?")) {
       try {
         await apiRequest.delete("contractor-work-logs", logId);
+
+        setFullProject((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            contractorWorkLogs: (prev.contractorWorkLogs || []).filter((log: any) => log.id !== logId)
+          };
+        });
+
         toast({
           title: "Work log removed",
           description: "Contractor work logs updated successfully.",
         });
-        onSuccess();
       } catch (err: any) {
         toast({
           title: "Delete failed",
@@ -3244,3 +3470,495 @@ const downloadQuotationPDFHelper = (project: Project, products: Product[]) => {
     description: `PDF Quotation downloaded for "${project.name}"`,
   });
 };
+
+/* ──────────────────────────────────────────────────────── */
+/* ── TAB CONTENT: AREA STATUS PROGRESS ──────────────────── */
+/* ──────────────────────────────────────────────────────── */
+interface AreaStatusTabProps {
+  projectId: string;
+}
+
+function AreaStatusTab({ projectId }: AreaStatusTabProps) {
+  const [mappings, setMappings] = useState<ProjectAreaColor[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [updatingStageId, setUpdatingStageId] = useState<string | null>(null);
+
+  // Modal dialog states
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingMappingId, setEditingMappingId] = useState<string | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState("");
+  const [areaSearch, setAreaSearch] = useState("");
+  const [selectedColorId, setSelectedColorId] = useState("");
+  const [colorSearch, setColorSearch] = useState("");
+  const [description, setDescription] = useState("");
+  const [savingMapping, setSavingMapping] = useState(false);
+
+  // Queries for areas & colors
+  const areasQuery = useMasterData<Area>("areas");
+  const colorsQuery = useMasterData<Color>("colors");
+
+  const areas = Array.isArray(areasQuery.data) ? areasQuery.data : [];
+  const colors = Array.isArray(colorsQuery.data) ? colorsQuery.data : [];
+
+  const fetchMappings = async () => {
+    setLoading(true);
+    try {
+      const results = await apiRequest.fetchAll<ProjectAreaColor>("project-area-colors", {
+        projectId,
+      });
+      setMappings(Array.isArray(results) ? results : []);
+    } catch (err: any) {
+      toast({
+        title: "Failed to fetch mappings",
+        description: err.message || "An error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMappings();
+  }, [projectId]);
+
+  const handleUpdateStage = async (mappingId: string, stage: string) => {
+    setUpdatingStageId(mappingId);
+    try {
+      await apiRequest.update("project-area-colors", mappingId, { stage });
+      setMappings((prev) =>
+        prev.map((m) => (m.id === mappingId ? { ...m, stage } : m))
+      );
+      toast({
+        title: "Status Updated",
+        description: `Successfully updated room stage to: ${stage}.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Update Failed",
+        description: err.message || "Could not update status.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingStageId(null);
+    }
+  };
+
+  const handleCreateArea = async (name: string) => {
+    if (!name.trim()) return;
+    try {
+      const created = await apiRequest.create<Area>("areas", { name: name.trim() });
+      setSelectedAreaId(created.id);
+      setAreaSearch(created.name);
+      toast({ title: "Area created", description: `Created global area "${created.name}".` });
+      areasQuery.forceServerSearch(""); // refresh master data
+    } catch (err: any) {
+      toast({ title: "Failed to create area", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateColor = async (name: string) => {
+    if (!name.trim()) return;
+    try {
+      const created = await apiRequest.create<Color>("colors", { name: name.trim() });
+      setSelectedColorId(created.id);
+      setColorSearch(created.name);
+      toast({ title: "Color created", description: `Created global color "${created.name}".` });
+      colorsQuery.forceServerSearch(""); // refresh master data
+    } catch (err: any) {
+      toast({ title: "Failed to create color", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingMappingId(null);
+    setSelectedAreaId("");
+    setAreaSearch("");
+    setSelectedColorId("");
+    setColorSearch("");
+    setDescription("");
+    setDialogOpen(true);
+  };
+
+  const handleOpenEditModal = (m: ProjectAreaColor) => {
+    setEditingMappingId(m.id);
+    setSelectedAreaId(m.areaId);
+    setAreaSearch(m.area?.name || "");
+    setSelectedColorId(m.colorId);
+    setColorSearch(m.color?.shade ? `${m.color.name} (${m.color.shade})` : m.color?.name || "");
+    setDescription(m.description || "");
+    setDialogOpen(true);
+  };
+
+  const handleSaveMapping = async () => {
+    if (!selectedAreaId) {
+      toast({ title: "Area required", description: "Please select or create an area.", variant: "destructive" });
+      return;
+    }
+    if (!selectedColorId) {
+      toast({ title: "Color required", description: "Please select or create a paint color.", variant: "destructive" });
+      return;
+    }
+
+    setSavingMapping(true);
+    try {
+      const payload = {
+        projectId,
+        areaId: selectedAreaId,
+        colorId: selectedColorId,
+        description: description.trim() || null,
+      };
+
+      if (editingMappingId) {
+        await apiRequest.update("project-area-colors", editingMappingId, payload);
+        toast({ title: "Mapping Updated", description: "Successfully updated room configuration." });
+      } else {
+        // Check duplicate area configuration for new additions
+        const isDuplicate = mappings.some((m) => m.areaId === selectedAreaId);
+        if (isDuplicate) {
+          toast({
+            title: "Already Configured",
+            description: "This room/area already has progress tracking configured. Edit the existing record instead.",
+            variant: "destructive",
+          });
+          setSavingMapping(false);
+          return;
+        }
+
+        await apiRequest.create("project-area-colors", {
+          ...payload,
+          stage: "Putty",
+        });
+        toast({ title: "Mapping Created", description: "Successfully added room area and color." });
+      }
+      setDialogOpen(false);
+      fetchMappings(); // Refresh mapping records
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err.message || "An error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingMapping(false);
+    }
+  };
+
+  const handleDeleteMapping = async (mappingId: string, areaName: string) => {
+    if (!window.confirm(`Are you sure you want to remove the area "${areaName}" progress mapping from this project?`)) {
+      return;
+    }
+    try {
+      await apiRequest.delete("project-area-colors", mappingId);
+      setMappings((prev) => prev.filter((m) => m.id !== mappingId));
+      toast({ title: "Mapping Removed", description: `Removed room "${areaName}" mapping.` });
+    } catch (err: any) {
+      toast({
+        title: "Delete Failed",
+        description: err.message || "Could not delete mapping.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const STAGES = ["Putty", "Primer", "1st Coat", "2nd Coat"];
+
+  return (
+    <div className="space-y-6">
+      {/* Top Header Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm">
+        <div className="space-y-0.5">
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Room Areas Status Tracking</h3>
+          <p className="text-xs text-muted-foreground">Manage room area color plans and track step-by-step coating status</p>
+        </div>
+        <Button onClick={handleOpenAddModal} size="sm" className="font-bold flex items-center gap-1.5 shrink-0">
+          <Plus className="h-4 w-4" /> Add Room Area
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-zinc-950 rounded-xl border">
+          <Loader2 className="h-6 w-6 animate-spin text-primary mb-2" />
+          <span className="text-xs text-muted-foreground">Loading room status records...</span>
+        </div>
+      ) : mappings.length === 0 ? (
+        <Card className="border border-slate-200 dark:border-zinc-800/80 shadow-sm rounded-xl">
+          <CardContent className="p-10 text-center flex flex-col items-center justify-center space-y-3">
+            <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-zinc-900 flex items-center justify-center">
+              <Paintbrush className="h-5 w-5 text-slate-400" />
+            </div>
+            <div className="space-y-1">
+              <p className="font-bold text-slate-700 dark:text-slate-350 text-sm">
+                No Room Areas Configured
+              </p>
+              <p className="text-xs text-slate-400 dark:text-zinc-500 max-w-sm">
+                There are no areas assigned to this site yet. Click "Add Room Area" above to get started.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {mappings.map((mapping) => {
+            const currentStageIndex = STAGES.indexOf(mapping.stage || "Putty");
+            return (
+              <Card key={mapping.id} className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm rounded-xl overflow-hidden hover:shadow-md transition-shadow bg-white dark:bg-zinc-950">
+                <div className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  {/* Left info */}
+                  <div className="space-y-2 lg:max-w-md flex-1">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 rounded-md bg-slate-50 dark:bg-zinc-900 text-primary">
+                          <MapPin className="h-4 w-4" />
+                        </div>
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm tracking-tight">
+                          {mapping.area?.name || "Room Area"}
+                        </h4>
+                      </div>
+                      
+                      {/* Action buttons (Edit/Delete) */}
+                      <div className="flex items-center gap-1.5 lg:hidden">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-slate-400 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                          onClick={() => handleOpenEditModal(mapping)}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          onClick={() => handleDeleteMapping(mapping.id, mapping.area?.name || "this area")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary" className="text-[10px] font-bold px-2 py-0.5 uppercase tracking-wide bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-slate-300 flex items-center gap-1 border border-slate-200/50 dark:border-zinc-800">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        {mapping.color?.name || "No Paint Selected"}
+                      </Badge>
+                      {mapping.color?.shade && (
+                        <span className="text-[10px] font-semibold text-muted-foreground font-mono bg-slate-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded border border-slate-200/40">
+                          Shade: {mapping.color.shade}
+                        </span>
+                      )}
+                    </div>
+
+                    {mapping.description && (
+                      <p className="text-xs text-slate-500 dark:text-zinc-400 italic">
+                        “{mapping.description}”
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Right Progress Stepper */}
+                  <div className="flex-1 max-w-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Room Progress Stepper
+                      </span>
+                      <Badge className="bg-blue-650 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Current: {mapping.stage || "Putty"}
+                      </Badge>
+                    </div>
+
+                    <div className="relative pt-4 pb-2">
+                      {/* Line Background */}
+                      <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-slate-100 dark:bg-zinc-900 -translate-y-1/2 rounded-full" />
+                      
+                      {/* Active Line Progress */}
+                      <div
+                        className="absolute top-1/2 left-4 h-0.5 bg-blue-600 -translate-y-1/2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${(Math.max(0, currentStageIndex) / (STAGES.length - 1)) * 95}%`,
+                        }}
+                      />
+
+                      {/* Stepper Buttons */}
+                      <div className="relative flex justify-between">
+                        {STAGES.map((s, idx) => {
+                          const isCompleted = idx < currentStageIndex;
+                          const isActive = idx === currentStageIndex;
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => handleUpdateStage(mapping.id, s)}
+                              disabled={updatingStageId === mapping.id}
+                              className="flex flex-col items-center group focus:outline-none"
+                            >
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center border font-bold text-xs shadow-inner transition-all duration-300 ${
+                                  isActive
+                                    ? "bg-blue-600 text-white border-blue-700 scale-110 shadow-md"
+                                    : isCompleted
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900"
+                                    : "bg-white text-slate-400 border-slate-200 dark:bg-zinc-900 dark:border-zinc-800 hover:border-slate-400"
+                                }`}
+                              >
+                                {idx + 1}
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold mt-1.5 transition-colors ${
+                                  isActive
+                                    ? "text-blue-600 dark:text-blue-400 font-extrabold"
+                                    : isCompleted
+                                    ? "text-emerald-650 dark:text-emerald-500"
+                                    : "text-slate-400 group-hover:text-slate-600"
+                                }`}
+                              >
+                                {s}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Desktop Action Buttons */}
+                  <div className="hidden lg:flex flex-col gap-1.5 pl-4 border-l border-slate-100 dark:border-zinc-900">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900 justify-start"
+                      onClick={() => handleOpenEditModal(mapping)}
+                    >
+                      <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 justify-start"
+                      onClick={() => handleDeleteMapping(mapping.id, mapping.area?.name || "this area")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add / Edit Mapping Dialog Modal */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md overflow-visible rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold tracking-tight">
+              {editingMappingId ? "Edit Area Painting Scheme" : "Add Room Area & Color Scheme"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-3 overflow-visible">
+            {/* Select Area */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                Select Room Area *
+              </span>
+              <SearchableSelect
+                value={selectedAreaId}
+                displayValue={areaSearch}
+                options={areas
+                  .filter((a) => !areaSearch || a.name.toLowerCase().includes(areaSearch.toLowerCase()))
+                  .slice(0, 10)
+                  .map((a) => ({ id: a.id, label: a.name }))}
+                placeholder="Search or type room area name..."
+                onSearchChange={setAreaSearch}
+                onSelect={(id, label) => {
+                  setSelectedAreaId(id);
+                  setAreaSearch(label);
+                }}
+                onClear={() => {
+                  setSelectedAreaId("");
+                  setAreaSearch("");
+                }}
+              />
+              {areaSearch.trim() && !areas.some((a) => a.name.toLowerCase() === areaSearch.toLowerCase().trim()) && (
+                <button
+                  type="button"
+                  onClick={() => handleCreateArea(areaSearch)}
+                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global area: "{areaSearch}"
+                </button>
+              )}
+            </div>
+
+            {/* Select Color */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                Select Paint Color *
+              </span>
+              <SearchableSelect
+                value={selectedColorId}
+                displayValue={colorSearch}
+                options={colors
+                  .filter((c) => !colorSearch || c.name.toLowerCase().includes(colorSearch.toLowerCase()) || (c.shade && c.shade.toLowerCase().includes(colorSearch.toLowerCase())))
+                  .slice(0, 10)
+                  .map((c) => ({ id: c.id, label: c.shade ? `${c.name} (${c.shade})` : c.name }))}
+                placeholder="Search paint colors by name or shade..."
+                onSearchChange={setColorSearch}
+                onSelect={(id, label) => {
+                  setSelectedColorId(id);
+                  setColorSearch(label);
+                }}
+                onClear={() => {
+                  setSelectedColorId("");
+                  setColorSearch("");
+                }}
+              />
+              {colorSearch.trim() && !colors.some((c) => c.name.toLowerCase() === colorSearch.toLowerCase().trim()) && (
+                <button
+                  type="button"
+                  onClick={() => handleCreateColor(colorSearch)}
+                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global color: "{colorSearch}"
+                </button>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                Description / Remarks (Optional)
+              </span>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="E.g., accent wall coloring, first floor bathroom..."
+                className="rounded-xl border-slate-200 dark:border-zinc-800 text-sm font-semibold"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-zinc-900 mt-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setDialogOpen(false)} 
+                className="font-bold text-xs"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveMapping} 
+                disabled={savingMapping} 
+                size="sm" 
+                className="font-bold text-xs"
+              >
+                {savingMapping ? "Saving Configuration..." : "Save Configuration"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

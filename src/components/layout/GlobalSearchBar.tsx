@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMasterData } from "@/hooks/use-master-data";
-import { Search, X, Users, FolderOpen, Hammer, Briefcase, Package, Building2 } from "lucide-react";
+import { Search, X, Users, FolderOpen, Hammer, Briefcase, Package, Building2, Compass } from "lucide-react";
 import type { Customer, Project, Labour, Contractor, Product } from "@/types/master";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Category = "customer" | "site" | "worker" | "contractor" | "material";
+type Category = "page" | "customer" | "site" | "worker" | "contractor" | "material";
 
 interface SearchResult {
   id: string;
@@ -17,14 +17,15 @@ interface SearchResult {
 
 // ─── Category config ──────────────────────────────────────────────────────────
 const CATEGORY_META: Record<Category, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  customer:   { label: "Customers",   icon: Users,     color: "text-violet-600 dark:text-violet-400",  bg: "bg-violet-50 dark:bg-violet-950/40"  },
-  site:       { label: "Sites",       icon: FolderOpen, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/40"  },
-  worker:     { label: "Workers",     icon: Hammer,    color: "text-amber-600 dark:text-amber-400",    bg: "bg-amber-50 dark:bg-amber-950/40"    },
-  contractor: { label: "Contractors", icon: Briefcase, color: "text-rose-600 dark:text-rose-400",      bg: "bg-rose-50 dark:bg-rose-950/40"      },
-  material:   { label: "Materials",   icon: Package,   color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-50 dark:bg-emerald-950/40"},
+  page:       { label: "Pages & Features", icon: Compass,    color: "text-blue-600 dark:text-blue-400",     bg: "bg-blue-50 dark:bg-blue-950/40"      },
+  customer:   { label: "Customers",        icon: Users,      color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/40"  },
+  site:       { label: "Sites",            icon: FolderOpen, color: "text-indigo-600 dark:text-indigo-400",bg: "bg-indigo-50 dark:bg-indigo-950/40"  },
+  worker:     { label: "Workers",          icon: Hammer,     color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/40"    },
+  contractor: { label: "Contractors",      icon: Briefcase,  color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-50 dark:bg-rose-950/40"      },
+  material:   { label: "Materials",        icon: Package,    color: "text-emerald-600 dark:text-emerald-400",bg: "bg-emerald-50 dark:bg-emerald-950/40"},
 };
 
-const CATEGORY_ORDER: Category[] = ["customer", "site", "worker", "contractor", "material"];
+const CATEGORY_ORDER: Category[] = ["page", "customer", "site", "worker", "contractor", "material"];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function GlobalSearchBar() {
@@ -50,6 +51,29 @@ export function GlobalSearchBar() {
 
   // ── Build unified search index ─────────────────────────────────────────────
   const allResults = useMemo<SearchResult[]>(() => [
+    { id: "page-dashboard", label: "Dashboard", sub: "View business metrics & sales summaries", category: "page", route: "/" },
+    { id: "page-customers", label: "Customers", sub: "Manage customer records & details", category: "page", route: "/customers" },
+    { id: "page-projects", label: "Projects / Sites", sub: "Paint project list & progress tracking", category: "page", route: "/projects" },
+    { id: "page-labour-attendance", label: "Labour Attendance", sub: "Daily labor presence logs & crew attendance", category: "page", route: "/labour-attendance" },
+    { id: "page-material-usage", label: "Material Logs / Dispatches", sub: "Material usage logs on site", category: "page", route: "/material-usage" },
+    { id: "page-material-requests", label: "Material Requests", sub: "Indent low-materials & site requests", category: "page", route: "/material-requests" },
+    { id: "page-payments", label: "Project Payments", sub: "Record customer incoming payments", category: "page", route: "/payments" },
+    { id: "page-contractor-payments", label: "Crew & Vendor Payouts", sub: "Contractor logs, sub-contractor details & daily wage diary", category: "page", route: "/contractor-payments" },
+    { id: "page-weekly-diary", label: "Weekly Payment Diary", sub: "Consolidated supervisor payment diary", category: "page", route: "/weekly-diary" },
+    { id: "page-reports", label: "Reports & Analytics", sub: "Generate paint sales & P&L statements", category: "page", route: "/reports" },
+    { id: "page-brands", label: "Brands", sub: "Paint manufacturer brands database", category: "page", route: "/masters/brands" },
+    { id: "page-products", label: "Products / Paints", sub: "Paint products and catalog coverage details", category: "page", route: "/masters/products" },
+    { id: "page-interiors", label: "Interiors", sub: "Interior designer master list", category: "page", route: "/masters/interiors" },
+    { id: "page-users", label: "Users & Supervisors", sub: "Manage user logins and roles", category: "page", route: "/masters/users" },
+    { id: "page-colors", label: "Colors", sub: "Paint color names and shade code indexes", category: "page", route: "/masters/colors" },
+    { id: "page-site-colors", label: "Site Colors Mapping", sub: "Map paint colors to room areas", category: "page", route: "/masters/site-colors" },
+    { id: "page-area-status", label: "Area Status / Progress", sub: "Track room-level painting stage progress (putty, primer, coat)", category: "page", route: "/projects?tab=areastatus" },
+    { id: "page-areas", label: "Areas / Rooms", sub: "Configure master list of home area labels", category: "page", route: "/masters/areas" },
+    { id: "page-labours", label: "Labours", sub: "Labour force worker roster", category: "page", route: "/masters/labours" },
+    { id: "page-contractors", label: "Contractors", sub: "Sub-contractor roster details", category: "page", route: "/masters/contractors" },
+    { id: "page-tasks", label: "Tasks & Reminders", sub: "Project reminders & site TODO checklists", category: "page", route: "/tasks" },
+    { id: "page-stores", label: "Stores", sub: "Retail paint store locations", category: "page", route: "/masters/stores" },
+    { id: "page-settings", label: "Settings", sub: "App themes, profiles, and password preferences", category: "page", route: "/settings" },
     ...customers.map((c) => ({
       id: c.id,
       label: c.name,
@@ -57,13 +81,43 @@ export function GlobalSearchBar() {
       category: "customer" as Category,
       route: `/customers`,
     })),
-    ...projects.map((p) => ({
-      id: p.id,
-      label: p.name,
-      sub: p.status || undefined,
-      category: "site" as Category,
-      route: `/projects`,
-    })),
+    ...projects.flatMap((p) => [
+      {
+        id: `${p.id}-overview`,
+        label: `${p.name} - Overview`,
+        sub: `Overview & general status details for ${p.name}`,
+        category: "site" as Category,
+        route: `/projects?projectId=${p.id}&tab=overview`,
+      },
+      {
+        id: `${p.id}-products`,
+        label: `${p.name} - Selected Products`,
+        sub: `Contract product selections for ${p.name}`,
+        category: "site" as Category,
+        route: `/projects?projectId=${p.id}&tab=products`,
+      },
+      {
+        id: `${p.id}-quotation`,
+        label: `${p.name} - Quotation`,
+        sub: `Tax, discounts & agreed contract value details for ${p.name}`,
+        category: "site" as Category,
+        route: `/projects?projectId=${p.id}&tab=quotation`,
+      },
+      {
+        id: `${p.id}-payments`,
+        label: `${p.name} - Customer Payments`,
+        sub: `Ledger of payments received for ${p.name}`,
+        category: "site" as Category,
+        route: `/projects?projectId=${p.id}&tab=payments`,
+      },
+      {
+        id: `${p.id}-profitloss`,
+        label: `${p.name} - Profit / Loss`,
+        sub: `Profit & loss analysis for ${p.name}`,
+        category: "site" as Category,
+        route: `/projects?projectId=${p.id}&tab=profitloss`,
+      },
+    ]),
     ...labours.map((l) => ({
       id: l.id,
       label: l.name,
@@ -170,7 +224,7 @@ export function GlobalSearchBar() {
         title="Search (Ctrl+K)"
       >
         <Search className="h-3.5 w-3.5 shrink-0 text-slate-400 group-hover:text-primary transition-colors" />
-        <span className="text-xs flex-1 text-left truncate font-medium">Search customers, sites, workers…</span>
+        <span className="text-xs flex-1 text-left truncate font-medium">Search pages, customers, sites…</span>
         <kbd className="hidden sm:flex items-center gap-0.5 bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded px-1.5 py-0.5 text-[10px] font-mono text-slate-400 shrink-0">
           Ctrl K
         </kbd>
@@ -195,7 +249,7 @@ export function GlobalSearchBar() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Search customers, sites, workers, contractors, materials…"
+                placeholder="Search pages, customers, sites, workers, contractors, materials…"
                 className="flex-1 text-sm bg-transparent outline-none text-slate-900 dark:text-slate-100 placeholder:text-muted-foreground font-medium"
               />
               {query && (

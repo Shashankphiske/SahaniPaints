@@ -63,6 +63,9 @@ export function SearchableSelect({
   const [isFocused, setIsFocused] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Store the original displayValue when focused, so we can revert on blur/outside click
+  const originalDisplayValueRef = useRef(displayValue);
+
   // Sync typedValue with displayValue when not focused or when displayValue changes
   useEffect(() => {
     if (!isFocused) {
@@ -75,7 +78,7 @@ export function SearchableSelect({
     const handler = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setOpen(false);
-        onSearchChange("");
+        onSearchChange(originalDisplayValueRef.current || "");
       }
     };
     document.addEventListener("mousedown", handler);
@@ -90,15 +93,17 @@ export function SearchableSelect({
   };
 
   const handleSelect = (opt: SearchableSelectOption) => {
+    originalDisplayValueRef.current = opt.label;
     onSelect(opt.id, opt.label);
     setTypedValue(opt.label);
-    onSearchChange("");
+    onSearchChange(opt.label);
     setIsFocused(false);
     setOpen(false);
   };
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
+    originalDisplayValueRef.current = "";
     onClear?.();
     onSearchChange("");
     setTypedValue("");
@@ -107,6 +112,7 @@ export function SearchableSelect({
   };
 
   const handleAllOption = () => {
+    originalDisplayValueRef.current = allLabel || "";
     onSelect("", allLabel || "");
     setTypedValue(allLabel || "");
     setIsFocused(false);
@@ -123,6 +129,7 @@ export function SearchableSelect({
           onFocus={() => {
             setIsFocused(true);
             setTypedValue(displayValue || "");
+            originalDisplayValueRef.current = displayValue;
             setOpen(true);
           }}
           onBlur={() => {
@@ -130,7 +137,7 @@ export function SearchableSelect({
             setTimeout(() => {
               setIsFocused(false);
               setOpen(false);
-              onSearchChange("");
+              onSearchChange(originalDisplayValueRef.current || "");
             }, 200);
           }}
           onKeyDown={(e) => {
