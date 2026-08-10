@@ -9,10 +9,12 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { toast } from "../../hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import {
   Calendar,
   Search,
   UserPlus,
+  Plus,
   Copy,
   Trash2,
   X,
@@ -64,6 +66,7 @@ export default function LabourAttendancePage() {
   // Temporary queue states before marking present
   const [tempSelectedLabours, setTempSelectedLabours] = useState<QueuedLabour[]>([]);
   const [submittingAttendance, setSubmittingAttendance] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Site (Project) search dropdown states
   const [projectSearch, setProjectSearch] = useState("");
@@ -330,6 +333,7 @@ export default function LabourAttendancePage() {
         description: `Successfully added ${successCount} worker(s) to today's site.`,
       });
       setTempSelectedLabours([]);
+      setIsModalOpen(false);
     }
     setSubmittingAttendance(false);
   };
@@ -921,23 +925,102 @@ export default function LabourAttendancePage() {
               <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
                 Wages: ₹{activeDetailRecords.reduce((sum, r) => sum + Number(r.labour?.paymentPerDay || 0) * Number(r.workDayValue ?? 1.0), 0).toLocaleString("en-IN")}
               </Badge>
+              <Button size="sm" className="font-bold h-8 ml-2" onClick={() => setIsModalOpen(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Add / Copy Labour
+              </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Mark Attendance & Copy */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Form Entry Card */}
-              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-visible">
-                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 pb-3">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                    <UserPlus className="h-4 w-4 text-primary" />
-                    Add Labour to Roster
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 space-y-4 overflow-visible">
+          <div className="w-full">
+            {/* Present Laborers List */}
+            <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
+              <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                  <Users className="h-4 w-4 text-emerald-500" />
+                  Present Workers list ({activeDetailRecords.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {activeDetailRecords.length === 0 ? (
+                  <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
+                    <ClipboardCheck className="h-10 w-10 opacity-30" />
+                    <p className="text-sm font-semibold">No labourers marked present yet.</p>
+                    <p className="text-xs opacity-70">Click "Add / Copy Labour" above to search and add labourers.</p>
+                  </div>
+                ) : (
+                  <div className="w-full overflow-x-auto no-scrollbar">
+                    <table className="w-full min-w-max text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50 transition-colors">
+                          <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Worker Name</th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Shift</th>
+                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Base / Daily Wage</th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeDetailRecords.map((r) => {
+                          const baseRate = Number(r.labour?.paymentPerDay || 0);
+                          const val = Number(r.workDayValue ?? 1.0);
+                          const wage = baseRate * val;
+                          const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
+                          const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
+                            : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
+                            : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
+
+                          return (
+                            <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
+                              <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
+                                {r.labour?.name}
+                              </td>
+                              <td className="p-4 align-middle text-center">
+                                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${shiftColor}`}>
+                                  {shiftLabel} ({val}x)
+                                </span>
+                              </td>
+                              <td className="p-4 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
+                                <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
+                              </td>
+                              <td className="p-4 align-middle text-center">
+                                {user?.role === "ADMIN" ? (
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground italic">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Form Dialog Modal */}
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-visible">
+              <DialogHeader>
+                <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-primary" />
+                  Mark Attendance / Copy list
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-5 pt-2 overflow-visible">
+                {/* Manual adding section */}
+                <div className="space-y-4">
                   {/* Labour Search */}
-                  <div ref={labourRef} className="space-y-1 relative overflow-visible">
+                  <div ref={labourRef} className="space-y-1.5 relative overflow-visible">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       Search Labourer Name *
                     </label>
@@ -1047,110 +1130,50 @@ export default function LabourAttendancePage() {
                       </div>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-
-              {/* Copy Roster Card */}
-              <Card className="border border-slate-200/50 dark:border-zinc-800/50 shadow-sm bg-slate-50/40 dark:bg-zinc-900/10 rounded-2xl p-5 space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
-                    Copy Attendance List From Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={copyFromDate}
-                    onChange={(e) => setCopyFromDate(e.target.value)}
-                    className="h-10"
-                  />
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full font-bold text-xs bg-white hover:bg-slate-100 h-9"
-                  onClick={handleCopyNames}
-                  disabled={!copyFromDate}
-                >
-                  <Copy className="h-4 w-4 mr-1.5" />
-                  Copy Attendance List
-                </Button>
-              </Card>
-            </div>
+                {/* Copy from previous date section */}
+                <div className="border-t pt-4 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
+                      Copy Attendance List From Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={copyFromDate}
+                      onChange={(e) => setCopyFromDate(e.target.value)}
+                      className="h-10"
+                    />
+                  </div>
 
-            {/* Right Column: Present Laborers List */}
-            <div className="lg:col-span-7">
-              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
-                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                    <Users className="h-4 w-4 text-emerald-500" />
-                    Present Workers list ({activeDetailRecords.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {activeDetailRecords.length === 0 ? (
-                    <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
-                      <ClipboardCheck className="h-10 w-10 opacity-30" />
-                      <p className="text-sm font-semibold">No labourers marked present yet.</p>
-                      <p className="text-xs opacity-70">Use the left panel to search and add labourers.</p>
-                    </div>
-                  ) : (
-                    <div className="w-full overflow-x-auto no-scrollbar">
-                      <table className="w-full min-w-max text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50 transition-colors">
-                            <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Worker Name</th>
-                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Shift</th>
-                            <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Base / Daily Wage</th>
-                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeDetailRecords.map((r) => {
-                            const baseRate = Number(r.labour?.paymentPerDay || 0);
-                            const val = Number(r.workDayValue ?? 1.0);
-                            const wage = baseRate * val;
-                            const shiftLabel = r.workDayType === "NIGHT" ? "Night" : r.workDayType === "BOTH" ? "Both" : "Day";
-                            const shiftColor = r.workDayType === "NIGHT" ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100"
-                              : r.workDayType === "BOTH" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-100"
-                              : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100";
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full font-bold text-xs bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 h-9"
+                    onClick={() => {
+                      handleCopyNames();
+                      setIsModalOpen(false);
+                    }}
+                    disabled={!copyFromDate}
+                  >
+                    <Copy className="h-4 w-4 mr-1.5" />
+                    Copy Attendance List
+                  </Button>
+                </div>
 
-                            return (
-                              <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
-                                <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
-                                  {r.labour?.name}
-                                </td>
-                                <td className="p-4 align-middle text-center">
-                                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${shiftColor}`}>
-                                    {shiftLabel} ({val}x)
-                                  </span>
-                                </td>
-                                <td className="p-4 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                                  <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
-                                  <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
-                                </td>
-                                <td className="p-4 align-middle text-center">
-                                  {user?.role === "ADMIN" ? (
-                                    <button
-                                      onClick={() => handleDeleteAttendance(r.id, r.labour?.name || "Labourer")}
-                                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] text-muted-foreground italic">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                <div className="flex justify-end gap-2.5 pt-3 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsModalOpen(false)}
+                    className="h-9 text-xs font-bold"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>

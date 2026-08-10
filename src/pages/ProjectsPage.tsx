@@ -2693,6 +2693,7 @@ interface CustomerPaymentsTabProps {
 }
 
 function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: CustomerPaymentsTabProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -2752,6 +2753,7 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
       setRemarks("");
       setPaymentMode("CASH");
       setPaymentDate(new Date().toISOString().split("T")[0]);
+      setIsModalOpen(false);
     } catch (err: any) {
       toast({
         title: "Recording Failed",
@@ -2807,8 +2809,16 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
   const paymentsList = fullProject.projectPayments || [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Financial Summary Header */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Customer Payments</h3>
+        <Button size="sm" className="font-bold h-8" onClick={() => setIsModalOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          Record Payment
+        </Button>
+      </div>
+
       <div className="grid grid-cols-3 gap-4 border border-border/60 bg-muted/20 rounded-xl p-4">
         <div className="space-y-0.5">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Agreed Contract Price</span>
@@ -2824,141 +2834,151 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-        {/* Record Payment Form */}
-        <div className="md:col-span-5 space-y-4">
-          <Card className="border border-border/80 bg-card rounded-xl p-4 space-y-4 shadow-sm-soft">
-            <h4 className="text-xs font-extrabold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5 border-b pb-2">
-              <DollarSign className="h-4 w-4 text-primary" />
+      <div className="w-full">
+        {/* Payments Ledger Table */}
+        <Card className="border border-border/80 bg-card rounded-xl overflow-hidden shadow-sm-soft">
+          <h4 className="text-xs font-extrabold uppercase text-muted-foreground tracking-wider p-4 border-b border-border/80 flex items-center gap-1.5 bg-muted/20">
+            <ClipboardList className="h-4 w-4 text-emerald-500" />
+            Project Payment History ({paymentsList.length})
+          </h4>
+
+          {paymentsList.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic text-center py-12">
+              No payments recorded for this project yet.
+            </p>
+          ) : (
+            <div className="w-full overflow-x-auto no-scrollbar">
+              <Table className="text-xs min-w-max">
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="h-9 px-3">Date</TableHead>
+                    <TableHead className="h-9 px-3 text-right">Amount</TableHead>
+                    <TableHead className="h-9 px-3 text-center">Mode</TableHead>
+                    <TableHead className="h-9 px-3">Remarks</TableHead>
+                    <TableHead className="h-9 px-3 text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentsList.map((payment: any) => (
+                    <TableRow key={payment.id} className="hover:bg-muted/20">
+                      <TableCell className="p-3">
+                        {new Date(payment.paymentDate).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell className="p-3 text-right font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        ₹{fmt(payment.amount)}
+                      </TableCell>
+                      <TableCell className="p-3 text-center font-bold">
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+                          {payment.paymentMode || "CASH"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="p-3 max-w-[150px] truncate text-muted-foreground">
+                        {payment.remarks || "—"}
+                      </TableCell>
+                      <TableCell className="p-3 text-center">
+                        <button
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Record Payment Dialog Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
               Record New Payment
-            </h4>
-            
-            <form onSubmit={handleRecordPayment} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Amount (₹) *</label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="Enter amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="pl-8 h-8 font-bold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Mode</label>
-                  <select
-                    value={paymentMode}
-                    onChange={(e) => setPaymentMode(e.target.value)}
-                    className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="CASH">CASH</option>
-                    <option value="BANK_TRANSFER">BANK TRANSFER</option>
-                    <option value="UPI">UPI</option>
-                    <option value="CHEQUE">CHEQUE</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Date</label>
-                  <Input
-                    type="date"
-                    value={paymentDate}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                    className="h-8 text-xs px-2"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Remarks / Reference</label>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <form onSubmit={handleRecordPayment} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Amount (₹) *</label>
+              <div className="relative">
+                <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <Input
-                  placeholder="Optional remarks"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  className="h-8 text-xs"
+                  type="number"
+                  min="1"
+                  placeholder="Enter amount"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="pl-8 h-9 font-bold"
+                  required
                 />
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Payment Mode</label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="CASH">CASH</option>
+                  <option value="BANK_TRANSFER">BANK TRANSFER</option>
+                  <option value="UPI">UPI</option>
+                  <option value="CHEQUE">CHEQUE</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Payment Date</label>
+                <Input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="h-9 text-xs px-2"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Remarks / Reference</label>
+              <Input
+                placeholder="Optional remarks or transaction ID"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsModalOpen(false)}
+                className="h-9 text-xs font-bold"
+              >
+                Cancel
+              </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-8 font-bold text-xs shadow mt-2"
+                className="h-9 text-xs font-bold shadow"
               >
                 {submitting ? "Recording..." : "Record Payment"}
               </Button>
-            </form>
-          </Card>
-        </div>
-
-        {/* Payments Ledger Table */}
-        <div className="md:col-span-7">
-          <Card className="border border-border/80 bg-card rounded-xl overflow-hidden shadow-sm-soft">
-            <h4 className="text-xs font-extrabold uppercase text-muted-foreground tracking-wider p-4 border-b border-border/80 flex items-center gap-1.5 bg-muted/20">
-              <ClipboardList className="h-4 w-4 text-emerald-500" />
-              Project Payment History ({paymentsList.length})
-            </h4>
-
-            {paymentsList.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic text-center py-12">
-                No payments recorded for this project yet.
-              </p>
-            ) : (
-              <div className="w-full overflow-x-auto no-scrollbar">
-                <Table className="text-xs min-w-max">
-                  <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="h-9 px-3">Date</TableHead>
-                      <TableHead className="h-9 px-3 text-right">Amount</TableHead>
-                      <TableHead className="h-9 px-3 text-center">Mode</TableHead>
-                      <TableHead className="h-9 px-3">Remarks</TableHead>
-                      <TableHead className="h-9 px-3 text-center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paymentsList.map((payment: any) => (
-                      <TableRow key={payment.id} className="hover:bg-muted/20">
-                        <TableCell className="p-3">
-                          {new Date(payment.paymentDate).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </TableCell>
-                        <TableCell className="p-3 text-right font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                          ₹{fmt(payment.amount)}
-                        </TableCell>
-                        <TableCell className="p-3 text-center font-bold">
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
-                            {payment.paymentMode || "CASH"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="p-3 max-w-[150px] truncate text-muted-foreground">
-                          {payment.remarks || "—"}
-                        </TableCell>
-                        <TableCell className="p-3 text-center">
-                          <button
-                            onClick={() => handleDeletePayment(payment.id)}
-                            className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -3150,6 +3170,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
   const allContractors = useMemo(() => Array.isArray(contractorsRaw) ? contractorsRaw : [], [contractorsRaw]);
 
   const [isOpen, setIsOpen] = useState(contractorWorkLogs.length > 0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (contractorWorkLogs.length > 0) {
@@ -3232,6 +3253,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
       setPricePerSqFt("");
       setMaterial("");
       setRemarks("");
+      setIsModalOpen(false);
     } catch (err: any) {
       toast({
         title: "Failed to record work log",
@@ -3272,10 +3294,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
 
   return (
     <div className="space-y-6">
-      <div 
-        className="flex items-center justify-between cursor-pointer select-none"
-        onClick={() => setIsOpen(!isOpen)}
-      >
+      <div className="flex items-center justify-between select-none">
         <div>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
             Contractor Work Ledger
@@ -3287,22 +3306,100 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">Log and track contractor work done in sq.ft.</p>
         </div>
-        <button
-          type="button"
-          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all"
-        >
-          <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
-        </button>
+        <div className="flex items-center gap-2.5">
+          <Button size="sm" className="font-bold h-8" onClick={() => setIsModalOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Log Work
+          </Button>
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900 transition-all"
+          >
+            <ChevronDown className={`h-5 w-5 transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {isOpen && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start pt-4 border-t border-slate-100 dark:border-zinc-900 animate-fade-in">
-        {/* Form panel */}
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm space-y-4">
-          <h4 className="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Log Work Done</h4>
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Choose Contractor *</label>
+        <div className="pt-4 border-t border-slate-100 dark:border-zinc-900 animate-fade-in">
+          {/* Logs Table */}
+          <Card className="w-full border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
+            {contractorWorkLogs.length === 0 ? (
+              <div className="p-12 text-center text-muted-foreground italic text-sm">
+                No contractor work logs recorded yet for this project.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Contractor Name</TableHead>
+                    <TableHead>Work (Sq.Ft)</TableHead>
+                    <TableHead>Rate / Sq.Ft</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead className="text-center w-12">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {contractorWorkLogs.map((log) => {
+                    const rate = Number(log.pricePerSqFt ?? 0);
+                    const subtotal = Number(log.sqFt || 0) * rate;
+                    return (
+                      <TableRow key={log.id}>
+                        <TableCell className="font-semibold text-xs text-slate-600 dark:text-slate-400">
+                          {new Date(log.date).toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-bold">{log.contractor?.name || "Unknown"}</div>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {log.material && (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-600 font-extrabold rounded">
+                                {log.material}
+                              </Badge>
+                            )}
+                            {log.remarks && <span className="text-[10px] text-slate-400 font-medium">{log.remarks}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{Number(log.sqFt).toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>
+                        <TableCell className="font-bold text-right">₹{fmt(subtotal)}</TableCell>
+                        <TableCell className="text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLog(log.id)}
+                            className="text-slate-400 hover:text-rose-600 p-2.5 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Log Work Dialog Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-visible">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              Log Contractor Work Done
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4 pt-2 overflow-visible">
+            <div className="space-y-1.5 relative overflow-visible">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Choose Contractor *</label>
               <SearchableSelect
                 value={selectedContractorId}
                 displayValue={matchedContractor?.name || ""}
@@ -3322,8 +3419,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Material Used</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Material Used</label>
               <Input
                 type="text"
                 placeholder="e.g. Putty, Primer, 1st Coat paint"
@@ -3333,8 +3430,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
             </div>
 
             <div className="grid grid-cols-2 gap-3.5">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Work (Sq.Ft) *</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Work (Sq.Ft) *</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -3346,8 +3443,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase">Rate / Sq.Ft *</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Rate / Sq.Ft *</label>
                 <Input
                   type="number"
                   step="0.01"
@@ -3360,8 +3457,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Log Date *</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Log Date *</label>
               <Input
                 type="date"
                 required
@@ -3370,84 +3467,35 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase">Remarks / Notes</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Remarks / Notes</label>
               <Input
-                placeholder="e.g. Completed base coat bedroom"
+                placeholder="Optional notes e.g. base coat master bedroom"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Saving Log..." : "Log Work"}
-            </Button>
-          </form>
-        </Card>
-
-        {/* Logs Table */}
-        <Card className="lg:col-span-2 border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
-          {contractorWorkLogs.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground italic text-sm">
-              No contractor work logs recorded yet for this project.
+            <div className="flex justify-end gap-2.5 pt-3 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsModalOpen(false)}
+                className="h-9 text-xs font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="h-9 text-xs font-bold shadow"
+              >
+                {submitting ? "Saving Log..." : "Log Work"}
+              </Button>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Contractor Name</TableHead>
-                  <TableHead>Work (Sq.Ft)</TableHead>
-                  <TableHead>Rate / Sq.Ft</TableHead>
-                  <TableHead className="text-right">Subtotal</TableHead>
-                  <TableHead className="text-center w-12">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {contractorWorkLogs.map((log) => {
-                  const rate = Number(log.pricePerSqFt ?? 0);
-                  const subtotal = Number(log.sqFt || 0) * rate;
-                  return (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-semibold text-xs text-slate-600 dark:text-slate-400">
-                        {new Date(log.date).toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-bold">{log.contractor?.name || "Unknown"}</div>
-                        <div className="flex flex-wrap gap-1 mt-0.5">
-                          {log.material && (
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-blue-200 bg-blue-50 text-blue-600 font-extrabold rounded">
-                              {log.material}
-                            </Badge>
-                          )}
-                          {log.remarks && <span className="text-[10px] text-slate-400 font-medium">{log.remarks}</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{Number(log.sqFt).toLocaleString()}</TableCell>
-                      <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>
-                      <TableCell className="font-bold text-right">₹{fmt(subtotal)}</TableCell>
-                      <TableCell className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLog(log.id)}
-                          className="text-slate-400 hover:text-rose-600 p-2.5 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </Card>
-      </div>
-      )}
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

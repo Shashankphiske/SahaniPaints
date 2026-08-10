@@ -55,6 +55,7 @@ export default function MaterialLogsPage() {
   const [logsList, setLogsList] = useState<ProjectMaterialLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [selectedDetailGroup, setSelectedDetailGroup] = useState<{ date: string; projectId: string; projectName: string } | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Form Fields State
   const [currentDate, setCurrentDate] = useState(() => {
@@ -284,6 +285,7 @@ export default function MaterialLogsPage() {
         description: `Successfully added ${successCount} material logs to "${activeProject.name}".`,
       });
       setTempSelectedMaterials([]);
+      setIsModalOpen(false);
     }
     setSubmittingLogs(false);
   };
@@ -755,239 +757,252 @@ export default function MaterialLogsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
                 {activeDetailRecords.length} Items Logged
               </Badge>
               <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
                 Volume: {activeDetailRecords.reduce((sum, r) => sum + (Number(r.quantity || 0) * getProductSizeInLitres(r.product?.size)), 0).toFixed(1)} L
               </Badge>
+              <Button size="sm" className="font-bold h-8 ml-2" onClick={() => setIsModalOpen(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Log Materials
+              </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Queue & Log */}
-            <div className="lg:col-span-5 space-y-6">
-              {/* Form Entry Card */}
-              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-visible">
-                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900 pb-3">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                    <Package className="h-4 w-4 text-primary" />
-                    Log Materials Added
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 space-y-4 overflow-visible">
-                  {/* Search Products */}
-                  <div ref={productRef} className="space-y-1 relative overflow-visible">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Search & Select Product *
-                    </label>
-                    <div className="relative">
-                      <PackagePlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input
-                        className="pl-9 pr-8"
-                        placeholder="Type product name or brand to select..."
-                        value={productSearch}
-                        onFocus={() => setProductOpen(true)}
-                        onChange={(e) => {
-                          setProductSearch(e.target.value);
-                          setProductOpen(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            searchProductsFromServer(productSearch);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setProductOpen(!productOpen)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {productOpen && (
-                      <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                        {productSearching && (
-                          <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
-                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                            Searching server...
-                          </div>
-                        )}
-                        {filteredProducts.map((prod) => (
-                          <div
-                            key={prod.id}
-                            className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
-                            onMouseDown={() => handleQueueProduct(prod)}
-                          >
-                            <div>
-                              <span>{prod.name}</span>
-                              {prod.category && (
-                                <span className="text-[10px] text-muted-foreground ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-zinc-800 rounded font-normal">
-                                  {prod.category}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {prod.size || "1ltr"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          <div className="w-full">
+            {/* Logged Materials List */}
+            <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
+              <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                  <ClipboardList className="h-4 w-4 text-emerald-500" />
+                  Logged Materials ({activeDetailRecords.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {activeDetailRecords.length === 0 ? (
+                  <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
+                    <Package className="h-10 w-10 opacity-30 animate-pulse" />
+                    <p className="text-sm font-semibold">No materials logged for this site yet.</p>
+                    <p className="text-xs opacity-70">Click "Log Materials" above to search and add paint products.</p>
                   </div>
-
-                  {/* Queued Materials List */}
-                  {tempSelectedMaterials.length > 0 && (
-                    <div className="space-y-4 pt-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase text-slate-655 dark:text-zinc-400 tracking-wider">
-                          Queue ({tempSelectedMaterials.length})
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={handleSaveLogs}
-                          disabled={submittingLogs}
-                          className="font-bold text-xs shadow-md"
-                        >
-                          {submittingLogs ? (
-                            <>
-                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
-                              Log Entry
-                            </>
-                          )}
-                        </Button>
-                      </div>
-
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {tempSelectedMaterials.map(({ queueId, product: p, quantity, allocatedArea, unit }) => {
-                          const litresPerPack = getProductSizeInLitres(p.size);
-                          const totalLitresLogged = quantity * litresPerPack;
-                          const coveragePerLitre = Number(p.coverageSqFt || p.coverageRnFt || 0);
-                          const actualCoverage = totalLitresLogged * coveragePerLitre;
-                          const isExceeding = allocatedArea > 0 && actualCoverage > allocatedArea;
-
+                ) : (
+                  <div className="w-full overflow-x-auto no-scrollbar">
+                    <table className="w-full min-w-max text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50 transition-colors">
+                          <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Product Name</th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Pack Quantity</th>
+                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Volume</th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeDetailRecords.map((r) => {
+                          const litresPerPack = getProductSizeInLitres(r.product?.size);
+                          const totalLitres = Number(r.quantity) * litresPerPack;
                           return (
-                            <div
-                              key={queueId}
-                              className="p-3 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2 shadow-sm"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{p.name}</span>
-                                  <Badge variant="outline" className="text-[9px] px-1 py-0 rounded">
-                                    {p.size || "1ltr"}
-                                  </Badge>
-                                </div>
+                            <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
+                              <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
+                                {r.product?.name}
+                                <span className="text-[10px] text-muted-foreground font-normal ml-2">({r.product?.size || "1ltr"})</span>
+                              </td>
+                              <td className="p-4 align-middle text-center font-semibold">
+                                {Number(r.quantity)} Pack{Number(r.quantity) > 1 ? "s" : ""}
+                              </td>
+                              <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                {totalLitres.toFixed(1)} Litres
+                              </td>
+                              <td className="p-4 align-middle text-center">
                                 <button
-                                  type="button"
-                                  onClick={() => handleRemoveFromQueue(queueId)}
-                                  className="text-slate-400 hover:text-rose-600 p-0.5 rounded"
+                                  onClick={() => handleDeleteLog(r.id, r.product?.name || "Product")}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
                                 >
-                                  <X className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2 pt-0.5 items-center">
-                                <div className="flex items-center gap-1">
-                                  <Input
-                                    type="number"
-                                    min="0.01"
-                                    step="0.01"
-                                    value={quantity}
-                                    onChange={(e) => handleUpdateQueueQuantity(queueId, Number(e.target.value))}
-                                    className="h-7 w-16 text-xs text-center px-1"
-                                  />
-                                  <span className="text-[10px] text-slate-400 font-bold">Packs</span>
-                                </div>
-                                <div className="text-right">
-                                  <span className="text-[10px] text-slate-400 block font-semibold">Coverage:</span>
-                                  <span className={`text-[11px] font-bold ${isExceeding ? "text-rose-600" : "text-emerald-600"}`}>
-                                    {actualCoverage.toFixed(1)} {unit}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
+                              </td>
+                            </tr>
                           );
                         })}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column: Logged Materials List */}
-            <div className="lg:col-span-7">
-              <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
-                <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                    <ClipboardList className="h-4 w-4 text-emerald-500" />
-                    Logged Materials ({activeDetailRecords.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {activeDetailRecords.length === 0 ? (
-                    <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
-                      <Package className="h-10 w-10 opacity-30 animate-pulse" />
-                      <p className="text-sm font-semibold">No materials logged for this site yet.</p>
-                      <p className="text-xs opacity-70">Use the left panel to search and add paint products.</p>
-                    </div>
-                  ) : (
-                    <div className="w-full overflow-x-auto no-scrollbar">
-                      <table className="w-full min-w-max text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50 transition-colors">
-                            <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Product Name</th>
-                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Pack Quantity</th>
-                            <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Volume</th>
-                            <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activeDetailRecords.map((r) => {
-                            const litresPerPack = getProductSizeInLitres(r.product?.size);
-                            const totalLitres = Number(r.quantity) * litresPerPack;
-                            return (
-                              <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
-                                <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
-                                  {r.product?.name}
-                                  <span className="text-[10px] text-muted-foreground font-normal ml-2">({r.product?.size || "1ltr"})</span>
-                                </td>
-                                <td className="p-4 align-middle text-center font-semibold">
-                                  {Number(r.quantity)} Pack{Number(r.quantity) > 1 ? "s" : ""}
-                                </td>
-                                <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                  {totalLitres.toFixed(1)} Litres
-                                </td>
-                                <td className="p-4 align-middle text-center">
-                                  <button
-                                    onClick={() => handleDeleteLog(r.id, r.product?.name || "Product")}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
+
+          {/* Form Entry Dialog Modal */}
+          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-visible">
+              <DialogHeader>
+                <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  Log Materials Added
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4 pt-2 overflow-visible">
+                {/* Search Products */}
+                <div ref={productRef} className="space-y-1.5 relative overflow-visible">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Search & Select Product *
+                  </label>
+                  <div className="relative">
+                    <PackagePlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      className="pl-9 pr-8"
+                      placeholder="Type product name or brand to select..."
+                      value={productSearch}
+                      onFocus={() => setProductOpen(true)}
+                      onChange={(e) => {
+                        setProductSearch(e.target.value);
+                        setProductOpen(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchProductsFromServer(productSearch);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setProductOpen(!productOpen)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {productOpen && (
+                    <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
+                      {productSearching && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                          Searching server...
+                        </div>
+                      )}
+                      {filteredProducts.map((prod) => (
+                        <div
+                          key={prod.id}
+                          className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
+                          onMouseDown={() => handleQueueProduct(prod)}
+                        >
+                          <div>
+                            <span>{prod.name}</span>
+                            {prod.category && (
+                              <span className="text-[10px] text-muted-foreground ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-zinc-800 rounded font-normal">
+                                {prod.category}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {prod.size || "1ltr"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Queued Materials List */}
+                {tempSelectedMaterials.length > 0 && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
+                        Queue ({tempSelectedMaterials.length})
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSaveLogs}
+                        disabled={submittingLogs}
+                        className="font-bold text-xs shadow-md"
+                      >
+                        {submittingLogs ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
+                            Log Entry
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {tempSelectedMaterials.map(({ queueId, product: p, quantity, allocatedArea, unit }) => {
+                        const litresPerPack = getProductSizeInLitres(p.size);
+                        const totalLitresLogged = quantity * litresPerPack;
+                        const coveragePerLitre = Number(p.coverageSqFt || p.coverageRnFt || 0);
+                        const actualCoverage = totalLitresLogged * coveragePerLitre;
+                        const isExceeding = allocatedArea > 0 && actualCoverage > allocatedArea;
+
+                        return (
+                          <div
+                            key={queueId}
+                            className="p-3 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{p.name}</span>
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 rounded">
+                                  {p.size || "1ltr"}
+                                </Badge>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleQueueProduct(p)} // toggles remove from queue
+                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-0.5 items-center">
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  value={quantity}
+                                  onChange={(e) => handleUpdateQueueQuantity(queueId, Number(e.target.value))}
+                                  className="h-7 w-16 text-xs text-center px-1"
+                                />
+                                <span className="text-[10px] text-slate-400 font-bold">Packs</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400 block font-semibold">Coverage:</span>
+                                <span className={`text-[11px] font-bold ${isExceeding ? "text-rose-600" : "text-emerald-600"}`}>
+                                  {actualCoverage.toFixed(1)} {unit}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsModalOpen(false)}
+                    className="h-9 text-xs font-bold"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
     </div>
