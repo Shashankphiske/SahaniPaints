@@ -167,23 +167,6 @@ export function ProjectSection() {
                       </div>
                     </div>
 
-                    {/* Progress Stage Mini Bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground uppercase">
-                        <span>Painting Stage</span>
-                        <span className="text-primary font-bold">{project.stage || "Putty"}</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-slate-100 dark:bg-zinc-900 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 rounded-full transition-all duration-300"
-                          style={{ 
-                            width: `${
-                              ((["Putty", "Primer", "1st Coat", "2nd Coat"].indexOf(project.stage || "Putty") + 1) / 4) * 100
-                            }%` 
-                          }}
-                        />
-                      </div>
-                    </div>
 
                     {/* Financial Summary Pill with Simple Light Colors */}
                     <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
