@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import { apiRequest } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -41,9 +41,51 @@ export default function PaymentsPage() {
 
   const projectsList = useMemo(() => (Array.isArray(projectsRaw) ? projectsRaw : []), [projectsRaw]);
 
-  // Project payments list state
-  const [payments, setPayments] = useState<ProjectPayment[]>([]);
-  const [loading, setLoading] = useState(false);
+  // ── Project payments — cached in React Query so navigating away and back
+  //    does not trigger a full refetch (staleTime = 5 min).
+  const { data: payments = [], isLoading: loading } = useQuery<ProjectPayment[]>({
+    queryKey: ["project-payments"],
+    queryFn: () => apiRequest.fetchAll<ProjectPayment>("project-payments"),
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("db-project-payments-sync")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "project_payments" },
+        async (payload) => {
+          try {
+            const newRecord = await apiRequest.execute<ProjectPayment>(`/project-payments/${payload.new.id}`);
+            queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) => {
+              if (prev.some((r) => r.id === newRecord.id)) return prev;
+              return [newRecord, ...prev];
+            });
+          } catch {
+            queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+          }
+        }
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "project_payments" },
+        (payload) => {
+          queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) =>
+            prev.filter((r) => r.id !== payload.old.id)
+          );
+        }
+      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "project_payments" },
+        (payload) => {
+          queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) =>
+            prev.map((r) => (r.id === payload.new.id ? { ...r, ...payload.new } : r))
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
 
   // Dialog & Edit state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -63,37 +105,6 @@ export default function PaymentsPage() {
   const [filterProjectId, setFilterProjectId] = useState("");
   const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
   const [filterMode, setFilterMode] = useState("");
-
-  const fetchPayments = async () => {
-    setLoading(true);
-    try {
-      const logs = await apiRequest.fetchAll<ProjectPayment>("project-payments");
-      setPayments(Array.isArray(logs) ? logs : []);
-    } catch (err: any) {
-      toast({
-        title: "Fetch Error",
-        description: err.message || "Failed to load project payments.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPayments();
-
-    const channel = supabase
-      .channel("db-project-payments-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "project_payments" }, () => {
-        fetchPayments();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   const openCreateModal = () => {
     setEditingItem(null);
@@ -145,7 +156,26 @@ export default function PaymentsPage() {
 
       if (editingItem) {
         const updated = await apiRequest.update<ProjectPayment>("project-payments", editingItem.id, payload);
-        setPayments((prev) => prev.map((item) => (item.id === editingItem.id ? { ...item, ...updated } : item)));
+        // Patch cache in-place
+        queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) =>
+          prev.map((item) => (item.id === editingItem.id ? { ...item, ...updated } : item))
+        );
+        // Adjust project paid amount by the difference
+        const diff = numericAmount - Number(editingItem.amount || 0);
+        if (diff !== 0) {
+          queryClient.setQueriesData<any>({ queryKey: ["projects_infinite"] }, (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page: any) => ({
+                ...page,
+                records: (page.records ?? []).map((p: any) =>
+                  p.id === projectId ? { ...p, paid: (Number(p.paid) || 0) + diff } : p
+                ),
+              })),
+            };
+          });
+        }
         toast({ title: "Payment Updated", description: "Project payment record updated successfully." });
       } else {
         const created = await apiRequest.create<ProjectPayment>("project-payments", payload);
@@ -154,11 +184,24 @@ export default function PaymentsPage() {
           ...created,
           project: matchedProject ? { name: matchedProject.name } : created.project,
         };
-        setPayments((prev) => [completeRecord, ...prev]);
+        // Prepend to cache
+        queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) => [completeRecord, ...prev]);
+        // Add to project paid amount in cache
+        queryClient.setQueriesData<any>({ queryKey: ["projects_infinite"] }, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              records: (page.records ?? []).map((p: any) =>
+                p.id === projectId ? { ...p, paid: (Number(p.paid) || 0) + numericAmount } : p
+              ),
+            })),
+          };
+        });
         toast({ title: "Payment Recorded", description: `Recorded incoming payment of ₹${fmt(numericAmount)}.` });
       }
 
-      queryClient.invalidateQueries({ queryKey: ["projects_infinite"] });
       setIsModalOpen(false);
     } catch (err: any) {
       toast({ title: "Save Failed", description: err.message || "Could not save payment.", variant: "destructive" });
@@ -167,18 +210,36 @@ export default function PaymentsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+
+  const handleDelete = async (id: string, deletedAmount: number, deletedProjectId: string) => {
     if (!window.confirm("Are you sure you want to delete this payment record?")) return;
 
     try {
       await apiRequest.delete("project-payments", id);
-      setPayments((prev) => prev.filter((item) => item.id !== id));
-      queryClient.invalidateQueries({ queryKey: ["projects_infinite"] });
+      // Remove from cache
+      queryClient.setQueryData<ProjectPayment[]>(["project-payments"], (prev = []) =>
+        prev.filter((item) => item.id !== id)
+      );
+      // Subtract from project paid amount in cache
+      queryClient.setQueriesData<any>({ queryKey: ["projects_infinite"] }, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            records: (page.records ?? []).map((p: any) =>
+              p.id === deletedProjectId ? { ...p, paid: Math.max(0, (Number(p.paid) || 0) - deletedAmount) } : p
+            ),
+          })),
+        };
+      });
       toast({ title: "Payment Deleted", description: "Project payment record deleted successfully." });
     } catch (err: any) {
       toast({ title: "Delete Failed", description: err.message || "Could not delete payment.", variant: "destructive" });
     }
   };
+
+
 
   // Filtered Payments
   const filteredPayments = useMemo(() => {
@@ -419,7 +480,7 @@ export default function PaymentsPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditModal(p)}>
                             <Pencil size={13} />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id, Number(p.amount), p.projectId)}>
                             <Trash2 size={13} />
                           </Button>
                         </div>

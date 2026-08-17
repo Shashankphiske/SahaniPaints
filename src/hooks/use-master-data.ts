@@ -32,6 +32,16 @@ const META_RECONSTRUCTORS: Record<string, Reconstructor[]> = {
       return { brand: { id: sent.brandId, name: sent._brandName } };
     },
   ],
+  "low-materials": [
+    (sent, res) => {
+      // Prefer the full project object from the server response (returned after our backend fix).
+      // Fall back to a minimal object built from sent._projectName if available.
+      if (res?.project) return { project: res.project };
+      if (sent.projectId && sent._projectName)
+        return { project: { id: sent.projectId, name: sent._projectName } };
+      return {};
+    },
+  ],
 };
 
 function applyMetaReconstructors(
@@ -423,54 +433,104 @@ export function useMasterData<T extends { id: string | number }>(
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string | number; data: Partial<T> }) =>
       apiRequest.update<T>(resource, id, data),
-    onSuccess: (response, variables) => {
+
+    // ── Optimistic: update the cache immediately, before the server responds ──
+    onMutate: (variables) => {
       const sent = variables.data as any;
-      
+
       if (resource === "authorizations") {
+        // Snapshot current state before optimistic update
+        const queries = queryClient.getQueriesData<any>({ queryKey: ["authorizations_infinite"] });
         updateAuthorizationsCache(sent.userId, sent.access || []);
+        return { _authSnapshot: queries };
+      }
+
+      // Snapshot all matching query caches before mutating
+      const queries = queryClient.getQueriesData<any>({ queryKey: [`${resource}_infinite`] });
+      const snapshot = queries.map(([key, val]) => [key, val]);
+
+      // Apply the update to the cache immediately
+      updateAllCaches({ id: variables.id, ...sent });
+
+      return { snapshot };
+    },
+
+    // ── Broadcast to other tabs/users once the server confirms ──
+    onSuccess: (_response, variables) => {
+      const sent = variables.data as any;
+      if (resource === "authorizations") {
         broadcast(resource, { action: "UPDATE", resource, data: { userId: sent.userId, access: sent.access || [] } });
         return;
       }
-
-      updateAllCaches({ id: variables.id, ...sent });
-      
       const broadcastData = Object.fromEntries(
-        Object.entries({ id: variables.id, ...sent }).filter(
-          ([k]) => !k.startsWith("_")
-        )
+        Object.entries({ id: variables.id, ...sent }).filter(([k]) => !k.startsWith("_"))
       );
       broadcast(resource, { action: "UPDATE", resource, data: broadcastData });
     },
-    onError: (error: any) => {
+
+    // ── Rollback: restore the snapshot if the server rejects the change ──
+    onError: (error: any, _variables, context: any) => {
+      if (context?.snapshot) {
+        context.snapshot.forEach(([key, val]: [any, any]) => {
+          queryClient.setQueryData(key, val);
+        });
+      }
+      if (context?._authSnapshot) {
+        context._authSnapshot.forEach(([key, val]: [any, any]) => {
+          queryClient.setQueryData(key, val);
+        });
+      }
       console.error(`Error updating ${resource}:`, error);
       toast({
-        title: `Failed to update ${resource.slice(0, -1) || resource}`,
-        description: error.message || "Something went wrong.",
+        title: `Failed to update`,
+        description: error.message || "Something went wrong. Your change has been reverted.",
         variant: "destructive"
       });
     }
   });
 
+
   const deleteMutation = useMutation({
     mutationFn: (id: string | number) => apiRequest.delete(resource, id),
+
+    // ── Optimistic: remove from cache immediately ──
+    onMutate: (deletedId) => {
+      if (resource === "authorizations") return {};
+
+      // Snapshot current cache before deleting
+      const queries = queryClient.getQueriesData<any>({ queryKey: [`${resource}_infinite`] });
+      const snapshot = queries.map(([key, val]) => [key, val]);
+
+      deleteAllCaches(deletedId);
+
+      return { snapshot };
+    },
+
+    // ── Broadcast to other tabs/users once the server confirms ──
     onSuccess: (_, deletedId) => {
       if (resource === "authorizations") {
         broadcast(resource, { action: "DELETE", resource, data: { id: deletedId } });
         return;
       }
-
-      deleteAllCaches(deletedId);
       broadcast(resource, { action: "DELETE", resource, data: { id: deletedId } });
     },
-    onError: (error: any) => {
+
+    // ── Rollback: restore the item if the server rejects the delete ──
+    onError: (error: any, _id, context: any) => {
+      if (context?.snapshot) {
+        context.snapshot.forEach(([key, val]: [any, any]) => {
+          queryClient.setQueryData(key, val);
+        });
+      }
       console.error(`Error deleting ${resource}:`, error);
       toast({
-        title: `Failed to delete ${resource.slice(0, -1) || resource}`,
-        description: error.message || "Something went wrong.",
+        title: `Failed to delete`,
+        description: error.message || "Something went wrong. The item has been restored.",
         variant: "destructive"
       });
     }
   });
+
 
   const isMutating =
     createMutation.isPending ||

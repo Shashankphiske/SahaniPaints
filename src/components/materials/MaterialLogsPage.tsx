@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "@/hooks/use-master-data";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Calendar,
   Building,
@@ -51,9 +53,14 @@ export default function MaterialLogsPage() {
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: productsData } = useMasterData<Product>("products");
 
-  // State for all material logs
-  const [logsList, setLogsList] = useState<ProjectMaterialLog[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  // ── Material logs — cached in React Query so navigating away and back
+  //    does not trigger a full refetch (staleTime = 5 min).
+  const queryClient = useQueryClient();
+  const { data: logsList = [], isLoading: loadingLogs } = useQuery<ProjectMaterialLog[]>({
+    queryKey: ["material-logs"],
+    queryFn: () => apiRequest.fetchAll<ProjectMaterialLog>("project-material-logs"),
+    staleTime: Infinity,
+  });
   const [selectedDetailGroup, setSelectedDetailGroup] = useState<{ date: string; projectId: string; projectName: string } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -121,34 +128,46 @@ export default function MaterialLogsPage() {
     setLocalProductsList(productsList);
   }, [productsList]);
 
-  // Fetch all material logs on load
-  const fetchLogs = async () => {
-    setLoadingLogs(true);
-    try {
-      const result = await apiRequest.fetchAll<ProjectMaterialLog>("project-material-logs");
-      setLogsList(Array.isArray(result) ? result : []);
-    } catch (err: any) {
-      toast({
-        title: "Fetch Error",
-        description: err.message || "Failed to load material logs.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingLogs(false);
-    }
-  };
-
+  // Realtime: keep the React Query cache live for changes from other users.
+  // We DON'T do a full refetch — we patch the cache in-place.
   useEffect(() => {
-    fetchLogs();
-
-    // Listeners for real-time synchronization
     const channel = supabase
       .channel("db-material-logs-sync")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "project_material_logs" },
-        () => {
-          fetchLogs();
+        { event: "INSERT", schema: "public", table: "project_material_logs" },
+        async (payload) => {
+          try {
+            const newRecord = await apiRequest.execute<ProjectMaterialLog>(
+              `/project-material-logs/${payload.new.id}`
+            );
+            queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) => {
+              // Skip if already in cache (our own optimistic update added it)
+              if (prev.some((r) => r.id === newRecord.id)) return prev;
+              return [newRecord, ...prev];
+            });
+          } catch {
+            // Fallback: invalidate so React Query refetches
+            queryClient.invalidateQueries({ queryKey: ["material-logs"] });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "project_material_logs" },
+        (payload) => {
+          queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) =>
+            prev.filter((r) => r.id !== payload.old.id)
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "project_material_logs" },
+        (payload) => {
+          queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) =>
+            prev.map((r) => (r.id === payload.new.id ? { ...r, ...payload.new } : r))
+          );
         }
       )
       .subscribe();
@@ -156,7 +175,7 @@ export default function MaterialLogsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [queryClient]);
 
   // Handle outside clicks to close dropdown lists
   useEffect(() => {
@@ -279,7 +298,11 @@ export default function MaterialLogsPage() {
     }
 
     if (successCount > 0) {
-      setLogsList((prev) => [...newRecords, ...prev]);
+      // Update the React Query cache directly — no refetch needed
+      queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) => [
+        ...newRecords,
+        ...prev,
+      ]);
       toast({
         title: "Materials logged",
         description: `Successfully added ${successCount} material logs to "${activeProject.name}".`,
@@ -296,7 +319,10 @@ export default function MaterialLogsPage() {
 
     try {
       await apiRequest.delete("project-material-logs", id);
-      setLogsList((prev) => prev.filter((item) => item.id !== id));
+      // Update cache directly — no refetch needed
+      queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) =>
+        prev.filter((item) => item.id !== id)
+      );
       toast({
         title: "Log deleted",
         description: `Successfully deleted material log for "${productName}".`,

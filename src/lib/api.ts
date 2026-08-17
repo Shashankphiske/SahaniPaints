@@ -103,6 +103,9 @@ export const apiRequest = {
       credentials: "include",
     });
 
+    // 204 No Content — no body to parse (e.g. delete endpoints)
+    if (res.status === 204) return null as any;
+
     const rawData = await res.json();
     console.log(rawData.message);
     if (!res.ok) {

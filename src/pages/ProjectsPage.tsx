@@ -865,7 +865,7 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
         const prod = products.find((p) => p.id === row.productId);
         if (prod) {
           const coverage = row.unit === "sq.ft" ? Number(prod.coverageSqFt) : Number(prod.coverageRnFt);
-          row.rate = coverage && coverage > 0 ? Number(prod.price) / coverage : 0;
+          row.rate = coverage && coverage > 0 ? parseFloat((Number(prod.price) / coverage).toFixed(2)) : 0;
         } else {
           row.rate = 0;
         }
@@ -2693,6 +2693,7 @@ interface CustomerPaymentsTabProps {
 }
 
 function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: CustomerPaymentsTabProps) {
+  const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("CASH");
