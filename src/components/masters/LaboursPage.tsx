@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
 import { ChevronDown, Loader2 } from "lucide-react";
 import LabourDashboard from "./LabourDashboard";
+import { useToast } from "../../hooks/use-toast";
+import { apiRequest } from "../../lib/api";
 
 // Format date helper: "dd MMM yyyy"
 const formatDate = (dateStr: any) => {
@@ -72,11 +74,13 @@ const columns: ColumnDef<Labour>[] = [
 ];
 
 export default function LaboursPage() {
+  const { toast } = useToast();
   const {
     data,
     isLoading,
     create,
     update,
+    updateAsync,
     remove,
     hasNextPage,
     isFetchingNextPage,
@@ -139,9 +143,22 @@ export default function LaboursPage() {
       <LabourDashboard
         labour={selectedLabour}
         onBack={() => setSelectedLabour(null)}
-        handleSave={(formData) => {
-          update({ id: selectedLabour.id, data: formData });
-          setSelectedLabour((prev) => prev ? { ...prev, ...formData } : null);
+        handleSave={async (formData) => {
+          try {
+            await updateAsync({ id: selectedLabour.id, data: formData });
+            setSelectedLabour((prev) => prev ? { ...prev, ...formData } : null);
+            toast({
+              title: "Labour details saved",
+              description: "Labour details updated successfully."
+            });
+          } catch (err: any) {
+            toast({
+              title: "Failed to save details",
+              description: err.message || "Something went wrong.",
+              variant: "destructive"
+            });
+            throw err;
+          }
         }}
       />
     );

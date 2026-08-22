@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
 import { ChevronDown, Loader2 } from "lucide-react";
 import ContractorDashboard from "./ContractorDashboard";
+import { useToast } from "../../hooks/use-toast";
+import { apiRequest } from "../../lib/api";
 
 // Format date helper: "dd MMM yyyy"
 const formatDate = (dateStr: any) => {
@@ -61,11 +63,13 @@ const columns: ColumnDef<Contractor>[] = [
 ];
 
 export default function ContractorsPage() {
+  const { toast } = useToast();
   const {
     data,
     isLoading,
     create,
     update,
+    updateAsync,
     remove,
     hasNextPage,
     isFetchingNextPage,
@@ -130,9 +134,22 @@ export default function ContractorsPage() {
       <ContractorDashboard
         contractor={selectedContractor}
         onBack={() => setSelectedContractor(null)}
-        handleSave={(formData) => {
-          update({ id: selectedContractor.id, data: formData });
-          setSelectedContractor((prev) => prev ? { ...prev, ...formData } : null);
+        handleSave={async (formData) => {
+          try {
+            await updateAsync({ id: selectedContractor.id, data: formData });
+            setSelectedContractor((prev) => prev ? { ...prev, ...formData } : null);
+            toast({
+              title: "Profile saved",
+              description: "Contractor contact information has been updated successfully."
+            });
+          } catch (err: any) {
+            toast({
+              title: "Failed to save profile",
+              description: err.message || "Something went wrong.",
+              variant: "destructive"
+            });
+            throw err;
+          }
         }}
       />
     );

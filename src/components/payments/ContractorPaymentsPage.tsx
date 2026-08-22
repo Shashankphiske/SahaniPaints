@@ -354,7 +354,7 @@ export default function ContractorPaymentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Briefcase className="h-6 w-6 text-primary" />
-            Crew & Vendor Outgoing Payments
+            Regular Payments Book
           </h1>
         </div>
 

@@ -36,6 +36,8 @@ interface SearchableSelectProps {
   textSize?: string;
   /** Disabled state */
   disabled?: boolean;
+  /** Direction of dropdown list display (default 'down') */
+  direction?: "up" | "down";
 }
 
 /**
@@ -57,6 +59,7 @@ export function SearchableSelect({
   inputHeight = "h-10",
   textSize = "text-sm",
   disabled = false,
+  direction = "down",
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [typedValue, setTypedValue] = useState("");
@@ -122,6 +125,16 @@ export function SearchableSelect({
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       <div className="relative">
+        {value && onClear && (
+          <button
+            type="button"
+            onClick={handleClear}
+            onMouseDown={(e) => e.preventDefault()}
+            className="absolute left-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors z-10"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         <Input
           showClear={false}
           value={isFocused ? typedValue : (displayValue || "")}
@@ -149,31 +162,26 @@ export function SearchableSelect({
           placeholder={placeholder}
           disabled={disabled}
           required={required && !value}
-          className={`${inputHeight} ${textSize} pr-16 font-semibold`}
+          className={`${inputHeight} ${textSize} ${value && onClear ? "pl-9" : "pl-3"} pr-9 font-semibold`}
         />
-        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-          {value && onClear && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            disabled={disabled}
-            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((v) => !v);
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+          disabled={disabled}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 transition-colors z-10"
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        </button>
       </div>
 
       {open && (
-        <div className="absolute z-[999] mt-1 w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl max-h-52 overflow-y-auto animate-in fade-in-50 slide-in-from-top-1 duration-150">
+        <div className={`absolute z-[999] w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl max-h-52 overflow-y-auto duration-150 animate-in fade-in-50 ${
+          direction === "up" ? "bottom-full mb-1 slide-in-from-bottom-1" : "mt-1 slide-in-from-top-1"
+        }`}>
           {allLabel !== undefined && (
             <div
               onMouseDown={handleAllOption}

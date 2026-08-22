@@ -69,8 +69,8 @@ const mainItems = [
   { title: "Material Logs", url: "/material-usage", icon: ClipboardList },
   { title: "Material Requests", url: "/material-requests", icon: Package },
   { title: "Project Payments", url: "/payments", icon: Coins },
-  { title: "Crew & Vendor Payouts", url: "/contractor-payments", icon: Briefcase },
-  { title: "Weekly Payment Diary", url: "/weekly-diary", icon: BookOpen },
+  { title: "Regular Payments Book", url: "/contractor-payments", icon: Briefcase },
+  { title: "Mangalwar Payment Book", url: "/weekly-diary", icon: BookOpen },
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 

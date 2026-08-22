@@ -41,7 +41,7 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   inquiries: ["projectName", "customerName", "phonenumber", "followUpDate", "comments"],
   products: ["name", "brandId", "category", "price", "coverageSqFt", "coverageRnFt", "hasToken", "size"],
   colors: ["name", "shade"],
-  labours: ["name", "paymentPerDay", "phonenumber", "type"],
+  labours: ["name", "paymentPerDay", "tuesdayPaymentAmount", "phonenumber", "type"],
   areas: ["name"],
   contractors: ["name", "phonenumber", "email", "address", "type"]
 };
@@ -388,6 +388,17 @@ export function MasterForm({
       payload.hasToken = !!payload.hasToken;
       if (!payload.size) {
         payload.size = "1ltr";
+      }
+    }
+    
+    if (normalizedResource === "labours") {
+      if (payload.paymentPerDay !== undefined && payload.paymentPerDay !== null && payload.paymentPerDay !== "") {
+        payload.paymentPerDay = Number(payload.paymentPerDay);
+      }
+      if (payload.tuesdayPaymentAmount !== undefined && payload.tuesdayPaymentAmount !== null && payload.tuesdayPaymentAmount !== "") {
+        payload.tuesdayPaymentAmount = Number(payload.tuesdayPaymentAmount);
+      } else {
+        payload.tuesdayPaymentAmount = null;
       }
     }
 

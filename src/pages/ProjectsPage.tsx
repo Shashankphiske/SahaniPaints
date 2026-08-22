@@ -5,7 +5,7 @@ import { useMasterData } from "../hooks/use-master-data";
 import { getResourceChannel } from "../lib/realtime";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
-import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color } from "../types/master";
+import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color, LowMaterial } from "../types/master";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -1486,6 +1486,9 @@ function ProjectDetailView({
           <TabsTrigger value="profitloss" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Profit / Loss
           </TabsTrigger>
+          <TabsTrigger value="materialrequests" className="rounded-lg text-xs font-bold py-1.5 px-3">
+            Material Requests
+          </TabsTrigger>
         </TabsList>
 
          {/* TAB 1: CONSOLIDATED OVERVIEW & SPEC DETAILS */}
@@ -1529,6 +1532,11 @@ function ProjectDetailView({
         {/* TAB 4: PROFIT & LOSS CALCULATOR */}
         <TabsContent value="profitloss">
           <ProfitLossTab fullProject={fullProject} />
+        </TabsContent>
+
+        {/* TAB 4.5: MATERIAL REQUESTS LOG */}
+        <TabsContent value="materialrequests">
+          <MaterialRequestsTab projectId={fullProject.id} />
         </TabsContent>
 
         {user?.role === "ADMIN" && (
@@ -1981,6 +1989,23 @@ interface SelectedProductsTabProps {
 function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, products, onSearchProducts }: SelectedProductsTabProps) {
   const [rows, setRows] = useState<PaintProductRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const checkIfDirty = (currentRows: PaintProductRow[]) => {
+    if (currentRows.some(r => r.productId === "")) return true;
+
+    const original = fullProject.projectProducts || [];
+    if (currentRows.length !== original.length) return true;
+
+    for (const r of currentRows) {
+      const origRow = original.find((o: any) => o.productId === r.productId);
+      if (!origRow) return true;
+      if (Number(origRow.area) !== Number(r.area)) return true;
+      if (origRow.unit !== r.unit) return true;
+      if (Number(origRow.rate) !== Number(r.rate)) return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     if (fullProject.projectProducts) {
@@ -1991,24 +2016,113 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
             productId: pp.productId,
             area: Number(pp.area),
             unit: pp.unit as any,
-            rate: Number(pp.rate),
+            rate: Number(Number(pp.rate).toFixed(2)),
             litresUsed: pp.litresUsed != null ? Number(pp.litresUsed) : null,
             _search: prodName,
           };
         })
       );
+      setIsDirty(false);
     }
   }, [fullProject.projectProducts, products]);
 
   const handleAddRow = () => {
-    setRows((prev) => [...prev, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
+    const updated = [...rows, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }];
+    setRows(updated);
+    setIsDirty(checkIfDirty(updated));
   };
 
-  const handleRemoveRow = (index: number) => {
+  const handleRemoveRow = async (index: number) => {
+    let updatedRows: PaintProductRow[] = [];
     if (rows.length === 1) {
-      setRows([{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
+      updatedRows = [{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }];
     } else {
-      setRows((prev) => prev.filter((_, i) => i !== index));
+      updatedRows = rows.filter((_, i) => i !== index);
+    }
+    
+    setRows(updatedRows);
+    setIsDirty(checkIfDirty(updatedRows));
+
+    const rowToDelete = rows[index];
+    if (rowToDelete && rowToDelete.productId) {
+      const filteredRows = updatedRows.filter((r) => r.productId && Number(r.area) > 0);
+      setSaving(true);
+      try {
+        const newSubtotal = filteredRows.reduce((sum, r) => sum + (Number(r.rate || 0) * Number(r.area || 0)), 0);
+        const payload = {
+          name: fullProject.name,
+          customerId: fullProject.customerId,
+          _customerName: fullProject.customer?.name,
+          projectDate: fullProject.projectDate,
+          status: fullProject.status,
+          totalAmount: newSubtotal,
+          tax: Number(fullProject.tax || 0),
+          discount: Number(fullProject.discount || 0),
+          discountType: fullProject.discountType || "amount",
+          agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
+          projectProducts: filteredRows.map((r) => ({
+            productId: r.productId,
+            area: r.area,
+            unit: r.unit,
+            rate: r.rate,
+            litresUsed: r.litresUsed,
+          })),
+        };
+
+        await apiRequest.update("projects", fullProject.id, payload as any);
+
+        const updatedProjectProducts = filteredRows.map((r, idx2) => {
+          const prod = products.find((p) => p.id === r.productId);
+          return {
+            id: `temp-${idx2}-${Date.now()}`,
+            projectId: fullProject.id,
+            productId: r.productId,
+            area: Number(r.area),
+            unit: r.unit,
+            rate: Number(r.rate),
+            litresUsed: r.litresUsed,
+            product: prod ? {
+              id: prod.id,
+              name: prod.name,
+              category: prod.category,
+              price: prod.price,
+              coverageSqFt: prod.coverageSqFt,
+              coverageRnFt: prod.coverageRnFt,
+              size: prod.size,
+              brand: prod.brand
+            } : undefined
+          };
+        });
+
+        setFullProject((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            totalAmount: newSubtotal,
+            agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
+            projectProducts: updatedProjectProducts,
+          };
+        });
+
+        updateAllCaches({
+          id: fullProject.id,
+          totalAmount: newSubtotal,
+          agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
+        });
+
+        toast({
+          title: "Product Deleted",
+          description: "The product selection was deleted instantly.",
+        });
+      } catch (err: any) {
+        toast({
+          title: "Delete Failed",
+          description: err.message || "An error occurred.",
+          variant: "destructive",
+        });
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -2022,7 +2136,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
         if (prod) {
           const coverage = row.unit === "sq.ft" ? Number(prod.coverageSqFt) : Number(prod.coverageRnFt);
           if (coverage && coverage > 0) {
-            row.rate = Number(prod.price) / coverage;
+            row.rate = Number((Number(prod.price) / coverage).toFixed(2));
           } else {
             row.rate = "";
           }
@@ -2032,6 +2146,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
       }
 
       updated[index] = row;
+      setIsDirty(checkIfDirty(updated));
       return updated;
     });
   };
@@ -2104,6 +2219,8 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
         agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
       });
 
+      setIsDirty(false);
+
       toast({
         title: "Selected Products Saved",
         description: "Contract product selections have been successfully updated.",
@@ -2121,8 +2238,8 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
-      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <CardHeader className="p-5 pb-3 border-b border-slate-100 dark:border-zinc-900 bg-slate-50/50 dark:bg-zinc-900/10 flex flex-row items-center justify-between">
+      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft overflow-visible">
+        <CardHeader className="p-5 pb-3 border-b border-slate-100 dark:border-zinc-900 bg-slate-50/50 dark:bg-zinc-900/10 flex flex-row items-center justify-between overflow-visible">
           <div>
             <CardTitle className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Selected Products
@@ -2139,9 +2256,9 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
             Add Row
           </Button>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="p-0 overflow-visible">
+          <div className="overflow-visible">
+            <table className="w-full caption-bottom text-sm overflow-visible">
               <TableHeader>
                 <TableRow className="bg-slate-50/30">
                   <TableHead className="w-5/12">Product Description</TableHead>
@@ -2152,10 +2269,10 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                   <TableHead className="w-10 text-right"></TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <TableBody className="overflow-visible">
                 {rows.map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="p-3">
+                  <TableRow key={idx} className="overflow-visible">
+                    <TableCell className="p-3 overflow-visible">
                        <SearchableSelect
                         value={row.productId}
                         displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
@@ -2203,8 +2320,14 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                         type="number"
                         min="0"
                         step="0.01"
-                        value={row.rate || ""}
-                        onChange={(e) => handleRowChange(idx, "rate", Number(e.target.value))}
+                        value={row.rate !== "" && row.rate !== undefined ? row.rate : ""}
+                        onChange={(e) => handleRowChange(idx, "rate", e.target.value)}
+                        onBlur={(e) => {
+                          const val = Number(e.target.value);
+                          if (!isNaN(val) && e.target.value !== "") {
+                            handleRowChange(idx, "rate", Number(val.toFixed(2)));
+                          }
+                        }}
                       />
                     </TableCell>
                     <TableCell className="p-3 text-right font-semibold">
@@ -2223,15 +2346,17 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </table>
           </div>
         </CardContent>
       </Card>
-      <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-zinc-900">
-        <Button type="submit" disabled={saving} className="font-bold">
-          {saving ? "Saving Products..." : "Save Products"}
-        </Button>
-      </div>
+      {isDirty && (
+        <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-zinc-900">
+          <Button type="submit" disabled={saving} className="font-bold">
+            {saving ? "Saving Products..." : "Save Products"}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }
@@ -3189,6 +3314,19 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Reset form states when modal is closed
+  useEffect(() => {
+    if (!isModalOpen) {
+      setSelectedContractorId("");
+      setContractorSearch("");
+      setSqFt("");
+      setPricePerSqFt("");
+      setMaterial("");
+      setDate(new Date().toISOString().split("T")[0]);
+      setRemarks("");
+    }
+  }, [isModalOpen]);
+
   const matchedContractor = allContractors.find(c => c.id === selectedContractorId);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -4050,6 +4188,157 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+interface MaterialRequestsTabProps {
+  projectId: string;
+}
+
+function MaterialRequestsTab({ projectId }: MaterialRequestsTabProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+
+  const { data: requestsRaw, isLoading, update, remove } = useMasterData<LowMaterial>("low-materials");
+
+  const projectRequests = useMemo(() => {
+    const list = Array.isArray(requestsRaw) ? requestsRaw : [];
+    return list.filter((r) => r.projectId === projectId);
+  }, [requestsRaw, projectId]);
+
+  const handleApprove = (req: LowMaterial) => {
+    update({
+      id: req.id,
+      data: { approved: true } as any
+    });
+    toast({ title: "Request Approved", description: "Office approval recorded." });
+  };
+
+  const handleDeliver = (req: LowMaterial) => {
+    update({
+      id: req.id,
+      data: { delivered: true } as any
+    });
+    toast({ title: "Request Delivered", description: "Material marked as delivered." });
+  };
+
+  const handleDelete = (req: LowMaterial) => {
+    if (!window.confirm(`Are you sure you want to delete this material request for "${req.material}"?`)) return;
+    remove(req.id);
+    toast({ title: "Request Deleted", description: "Material request deleted successfully." });
+  };
+
+  return (
+    <div className="space-y-4 bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+      <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-900">
+        <div>
+          <h3 className="text-sm font-extrabold uppercase text-slate-700 dark:text-zinc-300 flex items-center gap-2">
+            <ClipboardList className="h-4.5 w-4.5 text-primary" />
+            Project Material Requests Log
+          </h3>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Full history of material requests, office approvals, and delivery status for this project.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border overflow-hidden">
+        <Table>
+          <TableHeader className="bg-slate-50 dark:bg-zinc-900">
+            <TableRow>
+              <TableHead className="text-xs">Date</TableHead>
+              <TableHead className="text-xs">Material</TableHead>
+              <TableHead className="text-xs">Quantity</TableHead>
+              <TableHead className="text-xs">Approved by Office</TableHead>
+              <TableHead className="text-xs">Delivered</TableHead>
+              <TableHead className="text-xs text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                  <span className="text-xs text-muted-foreground mt-2 block">Loading requests...</span>
+                </TableCell>
+              </TableRow>
+            ) : projectRequests.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-xs italic">
+                  No material requests found for this project.
+                </TableCell>
+              </TableRow>
+            ) : (
+              projectRequests.map((req) => (
+                <TableRow key={req.id}>
+                  <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
+                  <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400">{req.material}</TableCell>
+                  <TableCell className="font-medium text-xs">{req.quantity}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          req.approved
+                            ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450 border-emerald-200"
+                            : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-450 border-amber-200"
+                        }`}
+                      >
+                        {req.approved ? "Approved" : "Pending"}
+                      </Badge>
+                      {isAdmin && !req.approved && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleApprove(req)}
+                          className="h-6 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-55 font-bold px-2"
+                        >
+                          Approve
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          req.delivered
+                            ? "bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-450 border-blue-200"
+                            : "bg-slate-50 dark:bg-zinc-900 text-slate-500 border-slate-200"
+                        }`}
+                      >
+                        {req.delivered ? "Delivered" : "Pending"}
+                      </Badge>
+                      {isAdmin && !req.delivered && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeliver(req)}
+                          className="h-6 text-[10px] text-blue-650 hover:text-blue-750 hover:bg-blue-50 font-bold px-2"
+                        >
+                          Mark Delivered
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right text-xs">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(req)}
+                      className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-55 dark:hover:bg-rose-950/20 rounded-lg"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -171,4 +171,10 @@ input[type=number] {
     background: hsl(var(--card));
     box-shadow: var(--shadow-md);
   }
+
+  /* Sidebar Minimization width collapse overrides */
+  [data-state="collapsed"][data-collapsible="icon"],
+  [data-state="collapsed"][data-collapsible="icon"] > div {
+    width: var(--sidebar-width-icon) !important;
+  }
 }

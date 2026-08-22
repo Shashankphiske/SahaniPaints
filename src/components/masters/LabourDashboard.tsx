@@ -548,8 +548,15 @@ export default function LabourDashboard({
               resource="labours"
               initialData={labour}
               editing={true}
-              onSubmit={handleSave}
-              onCancel={onBack}
+              onSubmit={async (formData) => {
+                try {
+                  await handleSave(formData);
+                  setActiveTab("overview");
+                } catch {
+                  // error handled in parent
+                }
+              }}
+              onCancel={() => setActiveTab("overview")}
             />
           </div>
         </div>

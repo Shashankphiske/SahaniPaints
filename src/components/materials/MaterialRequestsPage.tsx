@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMasterData } from "@/hooks/use-master-data";
+import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,6 @@ export default function MaterialRequestsPage() {
 
   const { data: requestsRaw, isLoading, create, update, remove } = useMasterData<LowMaterial>("low-materials");
   const projectsData = useMasterData<Project>("projects");
-  const productsData = useMasterData<Product>("products");
 
   const [isOpen, setIsOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -45,9 +45,38 @@ export default function MaterialRequestsPage() {
   const [requestDate, setRequestDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [fullSelectedProject, setFullSelectedProject] = useState<Project | null>(null);
+  const [fetchingProject, setFetchingProject] = useState(false);
+
+  const fetchFullProjectDetails = async (projectId: string) => {
+    console.log("MaterialRequestsPage: Fetching details for project ID:", projectId);
+    setFetchingProject(true);
+    try {
+      const full = await apiRequest.execute<Project>(`/projects/${projectId}`);
+      console.log("MaterialRequestsPage: Fetched project details successfully:", full);
+      setFullSelectedProject(full);
+    } catch (err: any) {
+      console.error("MaterialRequestsPage: Error fetching project details:", err);
+      toast({
+        title: "Error fetching project details",
+        description: err.message || "Failed to load project details.",
+        variant: "destructive",
+      });
+    } finally {
+      setFetchingProject(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      fetchFullProjectDetails(selectedProjectId);
+    } else {
+      setFullSelectedProject(null);
+    }
+  }, [selectedProjectId]);
+
   const requests = useMemo(() => (Array.isArray(requestsRaw) ? requestsRaw : []), [requestsRaw]);
   const projectsList = useMemo(() => (Array.isArray(projectsData.data) ? projectsData.data : []), [projectsData.data]);
-  const productsList = useMemo(() => (Array.isArray(productsData.data) ? productsData.data : []), [productsData.data]);
 
   // Project options filtered by whatever the user is typing
   const filteredProjectOptions = useMemo(() =>
@@ -58,17 +87,23 @@ export default function MaterialRequestsPage() {
     [projectsList, projectFilter]
   );
 
-  // Product options filtered by whatever the user is typing
-  const filteredProductOptions = useMemo(() =>
-    productsList
-      .filter((p) => !productFilter || p.name.toLowerCase().includes(productFilter.toLowerCase()))
-      .slice(0, 15)
-      .map((p) => ({ id: p.id, label: p.name })),
-    [productsList, productFilter]
-  );
+  // Product options filtered by whatever the user is typing, restricted to the selected project's products
+  const filteredProductOptions = useMemo(() => {
+    console.log("MaterialRequestsPage: Recalculating product options. fullSelectedProject:", fullSelectedProject);
+    const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
+    console.log("MaterialRequestsPage: projectProducts mapped list:", projectProducts);
+    const filtered = projectProducts
+      .filter((p: any) => !productFilter || p.name.toLowerCase().includes(productFilter.toLowerCase()))
+      .map((p: any) => ({ id: p.id, label: p.name }));
+    console.log("MaterialRequestsPage: Final options list:", filtered);
+    return filtered;
+  }, [fullSelectedProject, productFilter]);
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
+      // Hide requests that are both approved AND delivered on the main page
+      if (r.approved && r.delivered) return false;
+
       const projName = r.project?.name || "";
       const matName = r.material || "";
       return (
@@ -195,7 +230,7 @@ export default function MaterialRequestsPage() {
                   value={selectedProductId}
                   displayValue={materialName}
                   options={filteredProductOptions}
-                  placeholder="Search products or type custom material"
+                  placeholder={fetchingProject ? "Loading project products..." : "Search project products or type custom material"}
                   onSearchChange={(q) => {
                     setProductFilter(q);
                     if (q) {
@@ -216,7 +251,6 @@ export default function MaterialRequestsPage() {
                     setProductFilter("");
                   }}
                   onEnter={(val) => {
-                    productsData.forceServerSearch(val);
                     setMaterialName(val); // allow custom typed material on Enter
                   }}
                   required

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import { useAuth } from "../../context/AuthContext";
 import { apiRequest } from "../../lib/api";
+import { supabase } from "../../lib/realtime";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import type { Project, Labour, LabourAttendance } from "../../types/master";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
@@ -53,9 +55,46 @@ export default function LabourAttendancePage() {
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: laboursData } = useMasterData<Labour>("labours");
 
-  // State for all attendance records
-  const [attendanceList, setAttendanceList] = useState<LabourAttendance[]>([]);
-  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const queryClient = useQueryClient();
+
+  // ── Labour attendance — cached in React Query so navigating away and back
+  //    does not trigger a full refetch (staleTime = Infinity).
+  const { data: attendanceList = [], isLoading: loadingAttendance } = useQuery<LabourAttendance[]>({
+    queryKey: ["labour-attendance"],
+    queryFn: () => apiRequest.fetchAll<LabourAttendance>("labour-attendance"),
+    staleTime: Infinity,
+  });
+
+  // Real-time synchronization of project payments and ledger records via Supabase
+  useEffect(() => {
+    const channel = supabase
+      .channel("db-labour-attendance-sync")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "labour_attendance" },
+        async (payload) => {
+          try {
+            const newRecord = await apiRequest.execute<LabourAttendance>(`/labour-attendance/${payload.new.id}`);
+            queryClient.setQueryData<LabourAttendance[]>(["labour-attendance"], (prev = []) => {
+              if (prev.some((r) => r.id === newRecord.id)) return prev;
+              return [newRecord, ...prev];
+            });
+          } catch {
+            queryClient.invalidateQueries({ queryKey: ["labour-attendance"] });
+          }
+        }
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "labour_attendance" },
+        (payload) => {
+          queryClient.setQueryData<LabourAttendance[]>(["labour-attendance"], (prev = []) =>
+            prev.filter((item) => item.id !== payload.old.id)
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Form Fields State
   const [currentDate, setCurrentDate] = useState(() => {
@@ -107,26 +146,7 @@ export default function LabourAttendancePage() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  // Fetch all attendance records from backend
-  const fetchAttendance = async () => {
-    setLoadingAttendance(true);
-    try {
-      const res = await apiRequest.fetchAll<LabourAttendance>("labour-attendance");
-      setAttendanceList(res || []);
-    } catch (err: any) {
-      toast({
-        title: "Failed to load attendance history",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingAttendance(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchAttendance();
-  }, []);
 
   // Project server-side search on Enter
   const searchProjectsFromServer = async (term: string) => {
@@ -324,7 +344,7 @@ export default function LabourAttendancePage() {
     }
 
     if (successCount > 0) {
-      setAttendanceList((prev) => {
+      queryClient.setQueryData<LabourAttendance[]>(["labour-attendance"], (prev = []) => {
         const filteredPrev = prev.filter((r) => !newRecords.some((nr) => nr.id === r.id));
         return [...newRecords, ...filteredPrev];
       });
@@ -346,7 +366,9 @@ export default function LabourAttendancePage() {
 
     try {
       await apiRequest.delete("labour-attendance", attendanceId);
-      setAttendanceList((prev) => prev.filter((a) => a.id !== attendanceId));
+      queryClient.setQueryData<LabourAttendance[]>(["labour-attendance"], (prev = []) =>
+        prev.filter((a) => a.id !== attendanceId)
+      );
       toast({
         title: "Attendance removed",
         description: `Removed "${name}" from records.`,
@@ -463,7 +485,7 @@ export default function LabourAttendancePage() {
         };
       });
 
-      setAttendanceList((prev) => {
+      queryClient.setQueryData<LabourAttendance[]>(["labour-attendance"], (prev = []) => {
         const filteredPrev = prev.filter((r) => !formattedResults.some((fr) => fr.id === r.id));
         return [...formattedResults, ...filteredPrev];
       });
@@ -675,6 +697,7 @@ export default function LabourAttendancePage() {
                     <div className="relative">
                       <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
+                        showClear={false}
                         className="pl-9 pr-8 h-10"
                         placeholder="Type site name..."
                         value={projectSearch}
@@ -692,7 +715,11 @@ export default function LabourAttendancePage() {
                       />
                       <button
                         type="button"
-                        onClick={() => setProjectOpen(!projectOpen)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectOpen(!projectOpen);
+                        }}
+                        onMouseDown={(e) => e.preventDefault()}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                       >
                         <ChevronDown className="h-4 w-4" />

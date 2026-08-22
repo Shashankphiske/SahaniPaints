@@ -22,6 +22,7 @@ import {
   ChevronUp,
   ArrowUpRight,
   Filter,
+  Search,
 } from "lucide-react";
 import type { Labour, Contractor, LabourPayment, ContractorPayment } from "@/types/master";
 import { supabase } from "@/lib/realtime";
@@ -126,6 +127,7 @@ export default function WeeklyDiaryPage() {
   const [submitted, setSubmitted] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<"WEEKLY" | "MONTHLY" | "BOTH">("BOTH");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ── History / saved records ──────────────────────────────────────────────
   const [diaryHistory, setDiaryHistory] = useState<DiaryEntry[]>([]);
@@ -160,12 +162,14 @@ export default function WeeklyDiaryPage() {
 
         const existing = prevMap.get(l.id);
         if (existing) {
+          const amountUnchanged = !existing.amount || existing.amount === String(existing.paymentPerDay);
           return {
             ...existing,
             name: l.name,
             paymentPerDay: tuesdayVal,
             type: l.type,
             phonenumber: l.phonenumber,
+            amount: amountUnchanged ? String(tuesdayVal) : existing.amount,
           };
         }
 
@@ -419,7 +423,7 @@ export default function WeeklyDiaryPage() {
       (r) => !r.amount || isNaN(Number(r.amount)) || Number(r.amount) <= 0
     );
     if (invalid) {
-      toast({ title: "Invalid amounts", description: "Please enter a valid positive amount for all received rows.", variant: "destructive" });
+      toast({ title: "Invalid Amount", description: "Please enter the payment amount", variant: "destructive" });
       return;
     }
 
@@ -467,6 +471,14 @@ export default function WeeklyDiaryPage() {
   const totalLabour     = labourRows.filter((r) => Boolean(r.received)).reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const totalContractor = contractorRows.filter((r) => Boolean(r.received)).reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const grandTotal      = totalLabour + totalContractor;
+
+  const filteredLabourRows = useMemo(() => {
+    return labourRows.filter((r) => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [labourRows, searchQuery]);
+
+  const filteredContractorRows = useMemo(() => {
+    return contractorRows.filter((r) => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [contractorRows, searchQuery]);
 
   if (selectedLabour) {
     return (
@@ -564,11 +576,20 @@ export default function WeeklyDiaryPage() {
           <div className="flex items-center gap-2">
             <BookOpen className="h-6 w-6 text-primary" />
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-              Weekly Payment Diary
+              Mangalwar Payment Book
             </h2>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-48 sm:w-60">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search worker by name..."
+              className="pl-9 h-9 text-xs bg-slate-50/50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
@@ -681,23 +702,28 @@ export default function WeeklyDiaryPage() {
                 </div>
               )}
             </div>
+          ) : filteredLabourRows.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground italic font-medium flex flex-col items-center justify-center gap-1.5">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <span>No labours match "{searchQuery}"</span>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-zinc-800">
-                    {["Name", "Type", "Phone", "Daily Rate", "Amount (₹)", "Payment Received?", ""].map((h) => (
+                    {["Name", "Type", "Phone", "Rate", "Amount (₹)", "Payment Received?", ""].map((h) => (
                       <th key={h} className="text-left px-4 py-2.5 text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {labourRows.map((row) => (
+                  {filteredLabourRows.map((row) => (
                     <tr key={row.labourId} className={`border-b border-slate-50 dark:border-zinc-900 transition-colors ${!row.received ? "opacity-60 bg-slate-50/40 dark:bg-zinc-900/20" : "hover:bg-slate-50/50 dark:hover:bg-zinc-900/30"}`}>
                       <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                       <td className="px-4 py-2.5">{typeBadge(row.type)}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 font-medium">{row.phonenumber || "—"}</td>
-                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400">{formatPrice(row.paymentPerDay)}/day</td>
+                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400">{formatPrice(row.paymentPerDay)}</td>
                       <td className="px-4 py-2.5">
                         <Input type="number" min="1" value={row.amount} onChange={(e) => updateLabourAmount(row.labourId, e.target.value)} className="h-8 text-xs font-semibold w-32" placeholder="0.00" />
                       </td>
@@ -726,7 +752,7 @@ export default function WeeklyDiaryPage() {
                     </tr>
                   ))}
                 </tbody>
-                {labourRows.length > 0 && (
+                {filteredLabourRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50/80 dark:bg-zinc-900/30">
                       <td colSpan={4} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Labour Subtotal (Received)</td>
@@ -790,6 +816,11 @@ export default function WeeklyDiaryPage() {
                 </div>
               )}
             </div>
+          ) : filteredContractorRows.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground italic font-medium flex flex-col items-center justify-center gap-1.5">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <span>No contractors match "{searchQuery}"</span>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -801,7 +832,7 @@ export default function WeeklyDiaryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {contractorRows.map((row) => (
+                  {filteredContractorRows.map((row) => (
                     <tr key={row.contractorId} className={`border-b border-slate-50 dark:border-zinc-900 transition-colors ${!row.received ? "opacity-60 bg-slate-50/40 dark:bg-zinc-900/20" : "hover:bg-slate-50/50 dark:hover:bg-zinc-900/30"}`}>
                       <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                       <td className="px-4 py-2.5">{typeBadge(row.type)}</td>
@@ -834,7 +865,7 @@ export default function WeeklyDiaryPage() {
                     </tr>
                   ))}
                 </tbody>
-                {contractorRows.length > 0 && (
+                {filteredContractorRows.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-50/80 dark:bg-zinc-900/30">
                       <td colSpan={3} className="px-4 py-2.5 text-xs font-extrabold text-slate-600 dark:text-zinc-400 text-right uppercase tracking-wider">Contractor Subtotal (Received)</td>

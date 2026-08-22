@@ -633,12 +633,13 @@ export default function ContractorDashboard({
             <MasterForm
               resource="contractors"
               initialData={contractor}
-              onSubmit={(formData) => {
-                handleSave(formData);
-                toast({
-                  title: "Profile saved",
-                  description: "Contractor contact information has been updated."
-                });
+              onSubmit={async (formData) => {
+                try {
+                  await handleSave(formData);
+                  setActiveTab("overview");
+                } catch {
+                  // error handled in parent
+                }
               }}
               onCancel={() => setActiveTab("overview")}
               editing={true}

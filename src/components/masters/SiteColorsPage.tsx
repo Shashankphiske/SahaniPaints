@@ -8,6 +8,7 @@ import { Input } from "../ui/input";
 import { Badge } from "../ui/badge";
 import { toast } from "../../hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import {
   FolderOpen,
   Plus,
@@ -640,147 +641,74 @@ export default function SiteColorsPage() {
 
           <div className="space-y-5 pt-3 overflow-visible">
             {/* Select Area Dropdown */}
-            <div ref={modalAreaRef} className="space-y-1.5 relative overflow-visible">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
                 Select Area *
               </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  className="pl-10 pr-10 rounded-xl border-slate-200 dark:border-zinc-800 focus:ring-primary/20 focus:border-primary text-sm font-semibold"
-                  placeholder="Type to search or select global area..."
-                  value={modalAreaSearch}
-                  onFocus={() => setModalAreaOpen(true)}
-                  onChange={(e) => {
-                    setModalAreaSearch(e.target.value);
-                    setSelectedArea(null);
-                    setModalAreaOpen(true);
-                    setHasSearchedArea(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      areasQuery.forceServerSearch(modalAreaSearch);
-                      setHasSearchedArea(true);
-                    }
-                  }}
-                />
+              <SearchableSelect
+                value={selectedArea?.id || ""}
+                displayValue={modalAreaSearch}
+                options={filteredGlobalAreas.map((a) => ({ id: a.id, label: a.name }))}
+                placeholder="Type to search or select global area..."
+                onSearchChange={(val) => {
+                  setModalAreaSearch(val);
+                  if (!val) setSelectedArea(null);
+                }}
+                onSelect={(id, label) => {
+                  const area = globalAreasData?.find((a) => a.id === id);
+                  setSelectedArea(area || null);
+                  setModalAreaSearch(label);
+                }}
+                onClear={() => {
+                  setSelectedArea(null);
+                  setModalAreaSearch("");
+                }}
+                onEnter={(val) => areasQuery.forceServerSearch(val)}
+              />
+              {modalAreaSearch.trim() && !filteredGlobalAreas.some((a) => a.name.toLowerCase() === modalAreaSearch.toLowerCase().trim()) && (
                 <button
                   type="button"
-                  onClick={() => setModalAreaOpen(!modalAreaOpen)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-655"
+                  onClick={() => handleCreateGlobalAreaInline(modalAreaSearch)}
+                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global area: "{modalAreaSearch}"
                 </button>
-              </div>
-
-              {modalAreaOpen && (
-                <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-1 animate-in fade-in-50 duration-100 font-medium">
-                  {filteredGlobalAreas.map((area) => (
-                    <div
-                      key={area.id}
-                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between text-slate-900 dark:text-slate-100"
-                      onMouseDown={() => {
-                        setSelectedArea(area);
-                        setModalAreaSearch(area.name);
-                        setModalAreaOpen(false);
-                      }}
-                    >
-                      <span>{area.name}</span>
-                    </div>
-                  ))}
-                  {hasSearchedArea && modalAreaSearch.trim() && !filteredGlobalAreas.some(a => a.name.toLowerCase() === modalAreaSearch.toLowerCase().trim()) && (
-                    <div
-                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-xs text-primary font-bold flex items-center gap-1.5 border-t border-slate-100 dark:border-zinc-900"
-                      onMouseDown={() => handleCreateGlobalAreaInline(modalAreaSearch)}
-                    >
-                      {creatingArea ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Create global area: "{modalAreaSearch}"
-                    </div>
-                  )}
-                  {(!hasSearchedArea || !modalAreaSearch.trim()) && filteredGlobalAreas.length === 0 && (
-                    <div className="px-4 py-3 text-xs text-muted-foreground italic font-semibold">
-                      No unused areas found.
-                    </div>
-                  )}
-                </div>
               )}
             </div>
 
-            {/* Select Color Dropdown */}
-            <div ref={modalColorRef} className="space-y-1.5 relative overflow-visible">
+            {/* Select Paint Color Dropdown */}
+            <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
                 Select Paint Color *
               </label>
-              <div className="relative">
-                <Paintbrush className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  className="pl-10 pr-10 rounded-xl border-slate-200 dark:border-zinc-800 focus:ring-primary/20 focus:border-primary text-sm font-semibold"
-                  placeholder="Search colors by name or shade..."
-                  value={modalColorSearch}
-                  onFocus={() => setModalColorOpen(true)}
-                  onChange={(e) => {
-                    setModalColorSearch(e.target.value);
-                    setSelectedColor(null);
-                    setModalColorOpen(true);
-                    setHasSearchedColor(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      colorsQuery.forceServerSearch(modalColorSearch);
-                      setHasSearchedColor(true);
-                    }
-                  }}
-                />
+              <SearchableSelect
+                value={selectedColor?.id || ""}
+                displayValue={modalColorSearch}
+                options={filteredColors.map((c) => ({ id: c.id, label: c.shade ? `${c.name} (${c.shade})` : c.name }))}
+                placeholder="Search paint colors by name or shade..."
+                onSearchChange={(val) => {
+                  setModalColorSearch(val);
+                  if (!val) setSelectedColor(null);
+                }}
+                onSelect={(id, label) => {
+                  const color = colorsData?.find((c) => c.id === id);
+                  setSelectedColor(color || null);
+                  setModalColorSearch(label);
+                }}
+                onClear={() => {
+                  setSelectedColor(null);
+                  setModalColorSearch("");
+                }}
+                onEnter={(val) => colorsQuery.forceServerSearch(val)}
+              />
+              {modalColorSearch.trim() && !filteredColors.some((c) => c.name.toLowerCase() === modalColorSearch.toLowerCase().trim()) && (
                 <button
                   type="button"
-                  onClick={() => setModalColorOpen(!modalColorOpen)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-655"
+                  onClick={() => handleCreateGlobalColorInline(modalColorSearch)}
+                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global color: "{modalColorSearch}"
                 </button>
-              </div>
-
-              {modalColorOpen && (
-                <div className="absolute z-[998] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-1 animate-in fade-in-50 duration-100 font-medium">
-                  {filteredColors.map((color) => (
-                    <div
-                      key={color.id}
-                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900/80 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between text-slate-900 dark:text-slate-100"
-                      onMouseDown={() => {
-                        setSelectedColor(color);
-                        setModalColorSearch(color.shade ? `${color.name} (${color.shade})` : color.name);
-                        setModalColorOpen(false);
-                      }}
-                    >
-                      <span>{color.name}</span>
-                      {color.shade && <span className="text-xs text-muted-foreground font-mono">({color.shade})</span>}
-                    </div>
-                  ))}
-                  {hasSearchedColor && modalColorSearch.trim() && !filteredColors.some(c => c.name.toLowerCase() === modalColorSearch.toLowerCase().trim()) && (
-                    <div
-                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-xs text-primary font-bold flex items-center gap-1.5 border-t border-slate-100 dark:border-zinc-900"
-                      onMouseDown={() => handleCreateGlobalColorInline(modalColorSearch)}
-                    >
-                      {creatingColor ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Create global color: "{modalColorSearch}"
-                    </div>
-                  )}
-                  {(!hasSearchedColor || !modalColorSearch.trim()) && filteredColors.length === 0 && (
-                    <div className="px-4 py-3 text-xs text-muted-foreground italic font-semibold">
-                      No matching colors found.
-                    </div>
-                  )}
-                </div>
               )}
             </div>
 
@@ -835,55 +763,29 @@ export default function SiteColorsPage() {
             </p>
 
             {/* Select Project to Copy From */}
-            <div ref={modalDupProjectRef} className="space-y-1.5 relative overflow-visible">
+            <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
                 Copy From Project *
               </label>
-              <div className="relative">
-                <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  className="pl-10 pr-10 rounded-xl border-slate-200 dark:border-zinc-800 focus:ring-primary/20 focus:border-primary text-sm font-semibold"
-                  placeholder="Select source project..."
-                  value={modalDupProjectSearch}
-                  onFocus={() => setModalDupProjectOpen(true)}
-                  onChange={(e) => {
-                    setModalDupProjectSearch(e.target.value);
-                    setDuplicateSourceProject(null);
-                    setModalDupProjectOpen(true);
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setModalDupProjectOpen(!modalDupProjectOpen)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-655"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
-
-              {modalDupProjectOpen && (
-                <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-1 animate-in fade-in-50 duration-100 font-medium">
-                  {filteredDupSourceProjects.map((p) => (
-                    <div
-                      key={p.id}
-                      className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between text-slate-900 dark:text-slate-100"
-                      onMouseDown={() => {
-                        setDuplicateSourceProject(p);
-                        setModalDupProjectSearch(p.name);
-                        setModalDupProjectOpen(false);
-                      }}
-                    >
-                      <span>{p.name}</span>
-                      <span className="text-xs text-muted-foreground">({p.customer?.name || "—"})</span>
-                    </div>
-                  ))}
-                  {filteredDupSourceProjects.length === 0 && (
-                    <div className="px-4 py-3 text-xs text-muted-foreground italic font-semibold">
-                      No other projects found.
-                    </div>
-                  )}
-                </div>
-              )}
+              <SearchableSelect
+                value={duplicateSourceProject?.id || ""}
+                displayValue={modalDupProjectSearch}
+                options={filteredDupSourceProjects.map((p) => ({ id: p.id, label: p.customer?.name ? `${p.name} (${p.customer.name})` : p.name }))}
+                placeholder="Select source project..."
+                onSearchChange={(val) => {
+                  setModalDupProjectSearch(val);
+                  if (!val) setDuplicateSourceProject(null);
+                }}
+                onSelect={(id, label) => {
+                  const p = projectsData?.find((proj) => proj.id === id);
+                  setDuplicateSourceProject(p || null);
+                  setModalDupProjectSearch(p?.name || label);
+                }}
+                onClear={() => {
+                  setDuplicateSourceProject(null);
+                  setModalDupProjectSearch("");
+                }}
+              />
             </div>
 
             {/* Action buttons */}

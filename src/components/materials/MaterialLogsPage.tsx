@@ -51,8 +51,6 @@ interface QueuedMaterial {
 
 export default function MaterialLogsPage() {
   const { data: projectsData } = useMasterData<Project>("projects");
-  const { data: productsData } = useMasterData<Product>("products");
-
   // ── Material logs — cached in React Query so navigating away and back
   //    does not trigger a full refetch (staleTime = 5 min).
   const queryClient = useQueryClient();
@@ -104,8 +102,6 @@ export default function MaterialLogsPage() {
   // Product search dropdown states
   const [productSearch, setProductSearch] = useState("");
   const [productOpen, setProductOpen] = useState(false);
-  const [productSearching, setProductSearching] = useState(false);
-  const [localProductsList, setLocalProductsList] = useState<Product[]>([]);
   const productRef = useRef<HTMLDivElement>(null);
 
   // Listings filtration states
@@ -117,16 +113,11 @@ export default function MaterialLogsPage() {
   const { toast } = useToast();
 
   const projectsList = useMemo(() => Array.isArray(projectsData) ? projectsData : [], [projectsData]);
-  const productsList = useMemo(() => Array.isArray(productsData) ? productsData : [], [productsData]);
 
   // Sync server list with local options
   useEffect(() => {
     setLocalProjectsList(projectsList);
   }, [projectsList]);
-
-  useEffect(() => {
-    setLocalProductsList(productsList);
-  }, [productsList]);
 
   // Realtime: keep the React Query cache live for changes from other users.
   // We DON'T do a full refetch — we patch the cache in-place.
@@ -205,19 +196,7 @@ export default function MaterialLogsPage() {
     }
   };
 
-  // Search products on server
-  const searchProductsFromServer = async (query: string) => {
-    if (!query.trim()) return;
-    setProductSearching(true);
-    try {
-      const res = await apiRequest.fetchAll<Product>("products", { search: query });
-      setLocalProductsList(res);
-    } catch (err: any) {
-      console.error(err);
-    } finally {
-      setProductSearching(false);
-    }
-  };
+
 
   // Queue product locally before saving
   const handleQueueProduct = (product: Product & { allocatedArea?: number; unit?: string }) => {
@@ -345,17 +324,17 @@ export default function MaterialLogsPage() {
     return localProjectsList.filter((p) => p.name?.toLowerCase().includes(term));
   }, [localProjectsList, projectSearch]);
 
-  // Filter products across full catalog (all products)
+  // Filter products added to the selected project site
   const filteredProducts = useMemo(() => {
-    const catalog = localProductsList.length > 0 ? localProductsList : productsList;
+    const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
     const term = productSearch.toLowerCase().trim();
-    if (!term) return catalog.slice(0, 30);
-    return catalog.filter(
-      (p) =>
+    if (!term) return projectProducts;
+    return projectProducts.filter(
+      (p: any) =>
         p.name?.toLowerCase().includes(term) ||
         p.category?.toLowerCase().includes(term)
     );
-  }, [productsList, localProductsList, productSearch]);
+  }, [fullSelectedProject, productSearch]);
 
   // Apply UI Filters for Listings
   const filteredLogs = useMemo(() => {
@@ -531,6 +510,7 @@ export default function MaterialLogsPage() {
                     <div className="relative">
                       <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input
+                        showClear={false}
                         className="pl-9 pr-8 font-medium"
                         placeholder="Type project name... (Enter to search server)"
                         value={projectSearch}
@@ -548,7 +528,11 @@ export default function MaterialLogsPage() {
                       />
                       <button
                         type="button"
-                        onClick={() => setProjectOpen(!projectOpen)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectOpen(!projectOpen);
+                        }}
+                        onMouseDown={(e) => e.preventDefault()}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
                       >
                         <ChevronDown className="h-4 w-4" />
@@ -878,24 +862,23 @@ export default function MaterialLogsPage() {
                   <div className="relative">
                     <PackagePlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
+                      showClear={false}
                       className="pl-9 pr-8"
-                      placeholder="Type product name or brand to select..."
+                      placeholder="Search products added to this project..."
                       value={productSearch}
                       onFocus={() => setProductOpen(true)}
                       onChange={(e) => {
                         setProductSearch(e.target.value);
                         setProductOpen(true);
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          searchProductsFromServer(productSearch);
-                        }
-                      }}
                     />
                     <button
                       type="button"
-                      onClick={() => setProductOpen(!productOpen)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProductOpen(!productOpen);
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
                     >
                       <ChevronDown className="h-4 w-4" />
@@ -904,13 +887,13 @@ export default function MaterialLogsPage() {
 
                   {productOpen && (
                     <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                      {productSearching && (
+                      {fetchingProject && (
                         <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                          Searching server...
+                          Loading project products...
                         </div>
                       )}
-                      {filteredProducts.map((prod) => (
+                      {!fetchingProject && filteredProducts.map((prod) => (
                         <div
                           key={prod.id}
                           className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
@@ -929,6 +912,11 @@ export default function MaterialLogsPage() {
                           </span>
                         </div>
                       ))}
+                      {!fetchingProject && filteredProducts.length === 0 && (
+                        <div className="px-4 py-2 text-xs text-muted-foreground text-center py-4">
+                          No matching products added to this project.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
