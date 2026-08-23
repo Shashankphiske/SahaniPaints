@@ -66,6 +66,7 @@ const mainItems = [
   { title: "Customers", url: "/customers", icon: Users },
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Labour Attendance", url: "/labour-attendance", icon: ClipboardCheck },
+  { title: "Labour Daily Log", url: "/labour-daily-log", icon: ClipboardList },
   { title: "Material Logs", url: "/material-usage", icon: ClipboardList },
   { title: "Material Requests", url: "/material-requests", icon: Package },
   { title: "Project Payments", url: "/payments", icon: Coins },

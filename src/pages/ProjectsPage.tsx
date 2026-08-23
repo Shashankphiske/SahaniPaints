@@ -583,27 +583,27 @@ export default function ProjectsPage() {
                             </div>
                           </div>
 
-                          {/* 3-Column Financial Pill with Simple Light Colors */}
-                          <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
-                            <div className="flex flex-col p-1.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                              <span className="text-[9px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
-                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate mt-0.5">
+                          {/* Vertical Financial Pills with Simple Light Colors */}
+                          <div className="flex flex-col gap-1.5 text-xs">
+                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
+                              <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
                                 ₹{fmt(total)}
                               </span>
                             </div>
-                            <div className="flex flex-col p-1.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
-                              <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
-                              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate mt-0.5">
+                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
+                              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                                 ₹{fmt(paid)}
                               </span>
                             </div>
-                            <div className={`flex flex-col p-1.5 rounded-lg border ${
+                            <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border ${
                               due > 0
                                 ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
                                 : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
                             }`}>
-                              <span className={`text-[9px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
-                              <span className={`text-xs font-bold truncate mt-0.5 ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
+                              <span className={`text-[10px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                              <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
                                 ₹{fmt(due)}
                               </span>
                             </div>
@@ -4005,7 +4005,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                       <div
                         className="absolute top-1/2 left-4 h-0.5 bg-blue-600 -translate-y-1/2 rounded-full transition-all duration-300"
                         style={{
-                          width: `${(Math.max(0, currentStageIndex) / (STAGES.length - 1)) * 95}%`,
+                          width: `calc((100% - 32px) * ${Math.max(0, currentStageIndex) / (STAGES.length - 1)})`,
                         }}
                       />
 

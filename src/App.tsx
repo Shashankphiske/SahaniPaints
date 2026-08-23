@@ -26,6 +26,7 @@ import SiteColorsPage from "./components/masters/SiteColorsPage";
 import LaboursPage from "./components/masters/LaboursPage";
 import AreasPage from "./components/masters/AreasPage";
 import LabourAttendancePage from "./components/attendance/LabourAttendancePage";
+import LabourDailyLogPage from "./components/attendance/LabourDailyLogPage";
 import MaterialLogsPage from "./components/materials/MaterialLogsPage";
 import PaymentsPage from "./components/payments/PaymentsPage";
 import ContractorPaymentsPage from "./components/payments/ContractorPaymentsPage";
@@ -89,6 +90,7 @@ export default function App() {
               <Route path="/projects" element={<Protected><ProjectsPage /></Protected>} />
               <Route path="/tasks" element={<Protected><TasksPage /></Protected>} />
               <Route path="/labour-attendance" element={<Protected><LabourAttendancePage /></Protected>} />
+              <Route path="/labour-daily-log" element={<Protected><LabourDailyLogPage /></Protected>} />
               <Route path="/material-usage" element={<Protected><MaterialLogsPage /></Protected>} />
               <Route path="/material-requests" element={<Protected><MaterialRequestsPage /></Protected>} />
               <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />

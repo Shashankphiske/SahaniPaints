@@ -55,6 +55,7 @@ export function GlobalSearchBar() {
     { id: "page-customers", label: "Customers", sub: "Manage customer records & details", category: "page", route: "/customers" },
     { id: "page-projects", label: "Projects / Sites", sub: "Paint project list & progress tracking", category: "page", route: "/projects" },
     { id: "page-labour-attendance", label: "Labour Attendance", sub: "Daily labor presence logs & crew attendance", category: "page", route: "/labour-attendance" },
+    { id: "page-labour-daily-log", label: "Labour Daily Log", sub: "Aggregated daily labor logs & site allocations", category: "page", route: "/labour-daily-log" },
     { id: "page-material-usage", label: "Material Logs / Dispatches", sub: "Material usage logs on site", category: "page", route: "/material-usage" },
     { id: "page-material-requests", label: "Material Requests", sub: "Indent low-materials & site requests", category: "page", route: "/material-requests" },
     { id: "page-payments", label: "Project Payments", sub: "Record customer incoming payments", category: "page", route: "/payments" },

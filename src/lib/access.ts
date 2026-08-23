@@ -15,6 +15,7 @@ export const ROUTE_ACCESS_MAP: Record<string, string> = {
   "/masters/contractors": "labours",
   "/masters/stores": "stores",
   "/labour-attendance": "labour-attendance",
+  "/labour-daily-log": "labour-attendance",
   "/material-usage": "dashboard",
   "/payments": "dashboard",
   "/contractor-payments": "dashboard",

@@ -30,6 +30,20 @@ const STATUS_LABELS: Record<string, string> = {
   DEFAULTER: "Defaulter",
 };
 
+const calculateProjectProgress = (project: any) => {
+  const mappings = project.projectAreaColors;
+  if (!mappings || !Array.isArray(mappings) || mappings.length === 0) {
+    return 0;
+  }
+  const STAGES = ["Putty", "Primer", "1st Coat", "2nd Coat"];
+  const sum = mappings.reduce((acc, m) => {
+    const idx = m.stage ? STAGES.indexOf(m.stage) : -1;
+    const progress = idx >= 0 ? ((idx + 1) / STAGES.length) * 100 : 0;
+    return acc + progress;
+  }, 0);
+  return Math.round(sum / mappings.length);
+};
+
 function fmt(n: number) {
   return (Number(n) || 0).toLocaleString("en-IN", {
     maximumFractionDigits: 2,
@@ -165,30 +179,49 @@ export function ProjectSection() {
                           <span>{formatDate(project.projectDate)}</span>
                         </div>
                       </div>
+                      
+                      {/* Room Progress Average */}
+                      {(() => {
+                        const progress = calculateProjectProgress(project);
+                        return (
+                          <div className="space-y-1.5 pt-1">
+                            <div className="flex items-center justify-between text-[11px] font-bold">
+                              <span className="text-muted-foreground uppercase tracking-wider text-[9px]">Rooms Avg Progress</span>
+                              <span className="text-blue-600 font-extrabold">{progress}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden border border-slate-200/20">
+                              <div
+                                className="h-full bg-blue-600 rounded-full transition-all duration-500"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
 
-                    {/* Financial Summary Pill with Simple Light Colors */}
-                    <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
-                      <div className="flex flex-col p-1.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                        <span className="text-[9px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
-                        <span className="text-xs font-bold text-blue-900 dark:text-blue-200 truncate mt-0.5">
+                    {/* Vertical Financial Pills with Simple Light Colors */}
+                    <div className="flex flex-col gap-1.5 text-xs">
+                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
+                        <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                        <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
                           ₹{fmt(total)}
                         </span>
                       </div>
-                      <div className="flex flex-col p-1.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
-                        <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
-                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate mt-0.5">
+                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
+                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                           ₹{fmt(paid)}
                         </span>
                       </div>
-                      <div className={`flex flex-col p-1.5 rounded-lg border ${
+                      <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border ${
                         due > 0
                           ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
                           : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
                       }`}>
-                        <span className={`text-[9px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
-                        <span className={`text-xs font-bold truncate mt-0.5 ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                        <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
                           ₹{fmt(due)}
                         </span>
                       </div>
