@@ -34,6 +34,7 @@ import WeeklyDiaryPage from "./components/payments/WeeklyDiaryPage";
 import StoresPage from "./components/masters/StoresPage";
 import ContractorsPage from "./components/masters/ContractorsPage";
 import MaterialRequestsPage from "./components/materials/MaterialRequestsPage";
+import ActivityLogsPage from "./components/admin/ActivityLogsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />
               <Route path="/contractor-payments" element={<AdminProtected><ContractorPaymentsPage /></AdminProtected>} />
               <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
+              <Route path="/activity-logs" element={<AdminProtected><ActivityLogsPage /></AdminProtected>} />
               <Route
                 path="/settings"
                 element={

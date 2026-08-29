@@ -154,32 +154,31 @@ export default function WeeklyDiaryPage() {
       const prevMap = new Map(prevRows.map((r) => [r.labourId, r]));
 
       return filteredLabours.map((l) => {
-        const tuesdayVal = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0
-          ? Number(l.tuesdayPaymentAmount)
-          : l.paymentPerDay != null && Number(l.paymentPerDay) > 0
-          ? Number(l.paymentPerDay)
-          : 0;
+        const hasWeeklyAmount = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0;
+        const weeklyVal = hasWeeklyAmount ? Number(l.tuesdayPaymentAmount) : null;
+        const initialAmountStr = weeklyVal !== null ? String(weeklyVal) : "";
+        const rateVal = weeklyVal !== null ? weeklyVal : 0;
 
         const existing = prevMap.get(l.id);
         if (existing) {
-          const amountUnchanged = !existing.amount || existing.amount === String(existing.paymentPerDay);
+          const amountUnchanged = !existing.amount || existing.amount === (existing.paymentPerDay > 0 ? String(existing.paymentPerDay) : "");
           return {
             ...existing,
             name: l.name,
-            paymentPerDay: tuesdayVal,
+            paymentPerDay: rateVal,
             type: l.type,
             phonenumber: l.phonenumber,
-            amount: amountUnchanged ? String(tuesdayVal) : existing.amount,
+            amount: amountUnchanged ? initialAmountStr : existing.amount,
           };
         }
 
         return {
           labourId: l.id,
           name: l.name,
-          paymentPerDay: tuesdayVal,
+          paymentPerDay: rateVal,
           type: l.type,
           phonenumber: l.phonenumber,
-          amount: String(tuesdayVal),
+          amount: initialAmountStr,
           received: false,
         };
       });
@@ -324,13 +323,17 @@ export default function WeeklyDiaryPage() {
       setLabourRows(
         allLabours.filter((l) => prevLabourIds.has(l.id)).map((l) => {
           const prev = filteredLP.find((p) => p.labourId === l.id);
+          const hasWeeklyAmount = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0;
+          const weeklyVal = hasWeeklyAmount ? Number(l.tuesdayPaymentAmount) : null;
+          const initialAmountStr = weeklyVal !== null ? String(weeklyVal) : "";
+          const rateVal = weeklyVal !== null ? weeklyVal : 0;
           return {
             labourId: l.id,
             name: l.name,
-            paymentPerDay: Number(l.paymentPerDay),
+            paymentPerDay: rateVal,
             type: l.type,
             phonenumber: l.phonenumber,
-            amount: prev ? String(Number(prev.amount)) : String(Number(l.paymentPerDay)),
+            amount: prev ? String(Number(prev.amount)) : initialAmountStr,
             received: false,
           };
         })
@@ -370,21 +373,20 @@ export default function WeeklyDiaryPage() {
   const addLabourRow = (labourId: string) => {
     const l = allLabours.find((x) => x.id === labourId);
     if (!l) return;
-    const tuesdayVal = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0
-      ? Number(l.tuesdayPaymentAmount)
-      : l.paymentPerDay != null && Number(l.paymentPerDay) > 0
-      ? Number(l.paymentPerDay)
-      : 0;
+    const hasWeeklyAmount = l.tuesdayPaymentAmount != null && Number(l.tuesdayPaymentAmount) > 0;
+    const weeklyVal = hasWeeklyAmount ? Number(l.tuesdayPaymentAmount) : null;
+    const initialAmountStr = weeklyVal !== null ? String(weeklyVal) : "";
+    const rateVal = weeklyVal !== null ? weeklyVal : 0;
 
     setLabourRows((prev) => [
       ...prev,
       {
         labourId: l.id,
         name: l.name,
-        paymentPerDay: tuesdayVal,
+        paymentPerDay: rateVal,
         type: l.type,
         phonenumber: l.phonenumber,
-        amount: String(tuesdayVal),
+        amount: initialAmountStr,
         received: false,
       },
     ]);
@@ -723,7 +725,7 @@ export default function WeeklyDiaryPage() {
                       <td className="px-4 py-2.5 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                       <td className="px-4 py-2.5">{typeBadge(row.type)}</td>
                       <td className="px-4 py-2.5 text-xs text-slate-500 font-medium">{row.phonenumber || "—"}</td>
-                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400">{formatPrice(row.paymentPerDay)}</td>
+                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.paymentPerDay > 0 ? formatPrice(row.paymentPerDay) : "—"}</td>
                       <td className="px-4 py-2.5">
                         <Input type="number" min="1" value={row.amount} onChange={(e) => updateLabourAmount(row.labourId, e.target.value)} className="h-8 text-xs font-semibold w-32" placeholder="0.00" />
                       </td>

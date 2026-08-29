@@ -6,11 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Trash2, Search, ClipboardList, Loader2 } from "lucide-react";
-import type { LowMaterial, Project, Product } from "@/types/master";
+import { Plus, Trash2, Search, ClipboardList, Loader2, PackagePlus } from "lucide-react";
+import type { LowMaterial, Project } from "@/types/master";
+
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const formatDate = (dateStr: any) => {
   if (!dateStr) return "—";
@@ -27,6 +35,14 @@ const formatDate = (dateStr: any) => {
   }
 };
 
+interface MaterialItemRow {
+  id: string;
+  selectedProductId: string;
+  materialName: string;
+  productFilter: string;
+  quantity: string;
+}
+
 export default function MaterialRequestsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
@@ -35,25 +51,25 @@ export default function MaterialRequestsPage() {
   const projectsData = useMasterData<Project>("projects");
 
   const [isOpen, setIsOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [projectDisplay, setProjectDisplay] = useState(""); // shown in the input when selected
-  const [projectFilter, setProjectFilter] = useState("");   // live typed query for filtering options
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [materialName, setMaterialName] = useState("");     // final material name (submitted)
-  const [productFilter, setProductFilter] = useState("");   // live typed query for filtering products
-  const [quantity, setQuantity] = useState("");
-  const [requestDate, setRequestDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [projectDisplay, setProjectDisplay] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [requestDate, setRequestDate] = useState(() => getTodayString());
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Multi-material item rows
+  const [items, setItems] = useState<MaterialItemRow[]>([
+    { id: "1", selectedProductId: "", materialName: "", productFilter: "", quantity: "" },
+  ]);
 
   const [fullSelectedProject, setFullSelectedProject] = useState<Project | null>(null);
   const [fetchingProject, setFetchingProject] = useState(false);
 
   const fetchFullProjectDetails = async (projectId: string) => {
-    console.log("MaterialRequestsPage: Fetching details for project ID:", projectId);
     setFetchingProject(true);
     try {
       const full = await apiRequest.execute<Project>(`/projects/${projectId}`);
-      console.log("MaterialRequestsPage: Fetched project details successfully:", full);
       setFullSelectedProject(full);
     } catch (err: any) {
       console.error("MaterialRequestsPage: Error fetching project details:", err);
@@ -78,26 +94,43 @@ export default function MaterialRequestsPage() {
   const requests = useMemo(() => (Array.isArray(requestsRaw) ? requestsRaw : []), [requestsRaw]);
   const projectsList = useMemo(() => (Array.isArray(projectsData.data) ? projectsData.data : []), [projectsData.data]);
 
-  // Project options filtered by whatever the user is typing
-  const filteredProjectOptions = useMemo(() =>
-    projectsList
-      .filter((p) => !projectFilter || p.name.toLowerCase().includes(projectFilter.toLowerCase()))
-      .slice(0, 10)
-      .map((p) => ({ id: p.id, label: p.name })),
+  // Project options filtered by typed query
+  const filteredProjectOptions = useMemo(
+    () =>
+      projectsList
+        .filter((p) => !projectFilter || p.name.toLowerCase().includes(projectFilter.toLowerCase()))
+        .slice(0, 10)
+        .map((p) => ({ id: p.id, label: p.name })),
     [projectsList, projectFilter]
   );
 
-  // Product options filtered by whatever the user is typing, restricted to the selected project's products
-  const filteredProductOptions = useMemo(() => {
-    console.log("MaterialRequestsPage: Recalculating product options. fullSelectedProject:", fullSelectedProject);
+  // Helper to get filtered catalog products for a specific row
+  const getProductOptionsForRow = (filterQuery: string) => {
     const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
-    console.log("MaterialRequestsPage: projectProducts mapped list:", projectProducts);
-    const filtered = projectProducts
-      .filter((p: any) => !productFilter || p.name.toLowerCase().includes(productFilter.toLowerCase()))
+    return projectProducts
+      .filter((p: any) => !filterQuery || p.name.toLowerCase().includes(filterQuery.toLowerCase()))
       .map((p: any) => ({ id: p.id, label: p.name }));
-    console.log("MaterialRequestsPage: Final options list:", filtered);
-    return filtered;
-  }, [fullSelectedProject, productFilter]);
+  };
+
+  // Actions for item rows
+  const addItemRow = () => {
+    setItems((prev) => [
+      ...prev,
+      { id: Date.now().toString() + Math.random().toString().slice(2, 5), selectedProductId: "", materialName: "", productFilter: "", quantity: "" },
+    ]);
+  };
+
+  const removeItemRow = (id: string) => {
+    if (items.length <= 1) {
+      toast({ title: "At least one item required", description: "You cannot remove all material rows.", variant: "destructive" });
+      return;
+    }
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const updateItemRow = (id: string, updates: Partial<MaterialItemRow>) => {
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+  };
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
@@ -119,46 +152,78 @@ export default function MaterialRequestsPage() {
       toast({ title: "Validation Error", description: "Please select a site/project.", variant: "destructive" });
       return;
     }
-    const finalMaterial = materialName.trim();
-    if (!finalMaterial) {
-      toast({ title: "Validation Error", description: "Please select or type a material.", variant: "destructive" });
-      return;
-    }
-    if (!quantity.trim()) {
-      toast({ title: "Validation Error", description: "Please enter quantity.", variant: "destructive" });
+
+    const validItems = items.filter((item) => item.materialName.trim() && item.quantity.trim());
+
+    if (validItems.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please specify at least one material and quantity.",
+        variant: "destructive",
+      });
       return;
     }
 
+    // Check if any row has incomplete data
+    const incompleteItem = items.find(
+      (item) => (item.materialName.trim() && !item.quantity.trim()) || (!item.materialName.trim() && item.quantity.trim())
+    );
+    if (incompleteItem) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in both material name and quantity for all material rows.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      create({
+      const dateISO = new Date(requestDate).toISOString();
+      
+      const finalMaterialString =
+        validItems.length === 1
+          ? validItems[0].materialName.trim()
+          : validItems.map((item, i) => `${i + 1}. ${item.materialName.trim()}`).join("\n");
+
+      const finalQuantityString =
+        validItems.length === 1
+          ? validItems[0].quantity.trim()
+          : validItems.map((item, i) => `${i + 1}. ${item.quantity.trim()}`).join("\n");
+
+      // Create a SINGLE record containing all requested materials as a package
+      await create({
         projectId: selectedProjectId,
-        material: finalMaterial,
-        quantity: quantity.trim(),
-        date: new Date(requestDate).toISOString(),
+        material: finalMaterialString,
+        quantity: finalQuantityString,
+        date: dateISO,
         approved: false,
         delivered: false,
       } as any);
 
-      toast({ title: "Request Added", description: "Material request added successfully." });
+      toast({
+        title: "Material Request Submitted",
+        description: `Successfully created material request package with ${validItems.length} item${validItems.length > 1 ? "s" : ""}.`,
+      });
+
       setIsOpen(false);
       // Reset Form
       setSelectedProjectId("");
       setProjectDisplay("");
       setProjectFilter("");
-      setSelectedProductId("");
-      setMaterialName("");
-      setProductFilter("");
-      setQuantity("");
-      setRequestDate(new Date().toISOString().split("T")[0]);
+      setItems([{ id: "1", selectedProductId: "", materialName: "", productFilter: "", quantity: "" }]);
+      setRequestDate(getTodayString());
     } catch (err: any) {
-      toast({ title: "Error creating request", description: err.message, variant: "destructive" });
+      toast({ title: "Error creating requests", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleApprove = (req: LowMaterial) => {
     update({
       id: req.id,
-      data: { approved: true } as any
+      data: { approved: true } as any,
     });
     toast({ title: "Request Approved", description: "Office approval recorded." });
   };
@@ -166,7 +231,7 @@ export default function MaterialRequestsPage() {
   const handleDeliver = (req: LowMaterial) => {
     update({
       id: req.id,
-      data: { delivered: true } as any
+      data: { delivered: true } as any,
     });
     toast({ title: "Request Delivered", description: "Material marked as delivered." });
   };
@@ -188,99 +253,186 @@ export default function MaterialRequestsPage() {
           <DialogTrigger asChild>
             <Button className="font-bold flex items-center gap-1.5 shadow-sm">
               <Plus className="h-4.5 w-4.5" />
-              Add Request
+              Add Requests
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>New Material Request</DialogTitle>
+          <DialogContent className="max-w-xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
+            <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/50 dark:bg-zinc-900/50">
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <PackagePlus className="h-5 w-5 text-primary" />
+                <span>New Material Request</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Request single or multiple materials for a project site.
+              </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Site / Project *</label>
-                <SearchableSelect
-                  value={selectedProjectId}
-                  displayValue={projectDisplay}
-                  options={filteredProjectOptions}
-                  placeholder="Select site"
-                  onSearchChange={(q) => {
-                    // Only update the filter query — never clear the display label here.
-                    // onSearchChange("") is called internally by SearchableSelect on blur
-                    // and after selection; those should NOT clear the selection.
-                    setProjectFilter(q);
-                  }}
-                  onSelect={(id, label) => {
-                    setSelectedProjectId(id);
-                    setProjectDisplay(label);
-                    setProjectFilter(""); // clear search query, keep display label
-                  }}
-                  onClear={() => {
-                    setSelectedProjectId("");
-                    setProjectDisplay("");
-                    setProjectFilter("");
-                  }}
-                  onEnter={(val) => projectsData.forceServerSearch(val)}
-                  required
-                />
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Material Required *</label>
-                <SearchableSelect
-                  value={selectedProductId}
-                  displayValue={materialName}
-                  options={filteredProductOptions}
-                  placeholder={fetchingProject ? "Loading project products..." : "Search project products or type custom material"}
-                  onSearchChange={(q) => {
-                    setProductFilter(q);
-                    if (q) {
-                      // User is actively typing — update the free-type material name
-                      setMaterialName(q);
-                      if (selectedProductId) setSelectedProductId(""); // reset catalog pick
-                    }
-                    // q="" is called internally by SearchableSelect on blur/after-select — ignore it
-                  }}
-                  onSelect={(id, label) => {
-                    setSelectedProductId(id);
-                    setMaterialName(label);
-                    setProductFilter(""); // clear filter query, keep display
-                  }}
-                  onClear={() => {
-                    setSelectedProductId("");
-                    setMaterialName("");
-                    setProductFilter("");
-                  }}
-                  onEnter={(val) => {
-                    setMaterialName(val); // allow custom typed material on Enter
-                  }}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Quantity *</label>
-                  <Input
-                    placeholder="e.g. 50 Ltrs / 4 Buckets"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
+            <form onSubmit={handleSubmit} className="p-4 sm:p-5 overflow-y-auto max-h-[70vh] space-y-4">
+              {/* Site & Date Selection Header */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50/70 dark:bg-zinc-900/40 rounded-xl border border-slate-200/80 dark:border-zinc-800">
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Site / Project *</label>
+                  <SearchableSelect
+                    value={selectedProjectId}
+                    displayValue={projectDisplay}
+                    options={filteredProjectOptions}
+                    placeholder="Select site"
+                    inputHeight="h-10"
+                    onSearchChange={(q) => setProjectFilter(q)}
+                    onSelect={(id, label) => {
+                      setSelectedProjectId(id);
+                      setProjectDisplay(label);
+                      setProjectFilter("");
+                    }}
+                    onClear={() => {
+                      setSelectedProjectId("");
+                      setProjectDisplay("");
+                      setProjectFilter("");
+                    }}
+                    onEnter={(val) => projectsData.forceServerSearch(val)}
                     required
                   />
                 </div>
+
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Request Date *</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Request Date *</label>
                   <Input
                     type="date"
+                    max={getTodayString()}
                     value={requestDate}
-                    onChange={(e) => setRequestDate(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const today = getTodayString();
+                      if (val > today) setRequestDate(today);
+                      else setRequestDate(val);
+                    }}
+                    className="h-10 text-sm font-semibold"
                     required
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
-                <Button type="submit" className="font-bold">
-                  Submit Request
+              {/* Multi-Material Items Section */}
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Materials Required ({items.length})
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addItemRow}
+                    className="h-8 text-[11px] font-bold gap-1 text-primary hover:text-primary/80 border-primary/20 hover:bg-primary/5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add Another Material</span>
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {items.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 space-y-2 relative shadow-2xs group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                          Material #{index + 1}
+                        </span>
+                        {items.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeItemRow(item.id)}
+                            className="h-6 w-6 p-0 text-slate-400 hover:text-rose-500 transition-colors"
+                            title="Remove material row"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+                        <div className="sm:col-span-3 space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Material Name *
+                          </label>
+                          <SearchableSelect
+                            value={item.selectedProductId}
+                            displayValue={item.materialName}
+                            options={getProductOptionsForRow(item.productFilter)}
+                            placeholder={fetchingProject ? "Loading project products..." : "Search product or type material name"}
+                            inputHeight="h-10"
+                            onSearchChange={(q) => {
+                              updateItemRow(item.id, {
+                                productFilter: q,
+                                materialName: q ? q : item.materialName,
+                                selectedProductId: q ? "" : item.selectedProductId,
+                              });
+                            }}
+                            onSelect={(id, label) => {
+                              updateItemRow(item.id, {
+                                selectedProductId: id,
+                                materialName: label,
+                                productFilter: "",
+                              });
+                            }}
+                            onClear={() => {
+                              updateItemRow(item.id, {
+                                selectedProductId: "",
+                                materialName: "",
+                                productFilter: "",
+                              });
+                            }}
+                            onEnter={(val) => {
+                              updateItemRow(item.id, { materialName: val });
+                            }}
+                            required
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Quantity *
+                          </label>
+                          <Input
+                            placeholder="e.g. 50 Ltrs / 4 Ltr bucket"
+                            value={item.quantity}
+                            onChange={(e) => updateItemRow(item.id, { quantity: e.target.value })}
+                            className="h-10 text-sm font-semibold"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Form Footer */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addItemRow}
+                  className="h-9 text-xs font-bold gap-1"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Add More</span>
+                </Button>
+
+                <Button type="submit" disabled={submitting} className="font-bold h-10 px-5">
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <span>Submit {items.length > 1 ? `${items.length} Requests` : "Request"}</span>
+                  )}
                 </Button>
               </div>
             </form>
@@ -334,8 +486,8 @@ export default function MaterialRequestsPage() {
                   <TableRow key={req.id}>
                     <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
                     <TableCell className="font-bold text-xs">{req.project?.name || "—"}</TableCell>
-                    <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400">{req.material}</TableCell>
-                    <TableCell className="font-medium text-xs">{req.quantity}</TableCell>
+                    <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400 whitespace-pre-line leading-relaxed">{req.material}</TableCell>
+                    <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">{req.quantity}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Badge

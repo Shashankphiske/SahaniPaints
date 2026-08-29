@@ -30,6 +30,14 @@ import {
 } from "lucide-react";
 
 // Format date helper: "dd MMM yyyy"
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const formatDate = (dateStr: any) => {
   if (!dateStr) return "—";
   try {
@@ -684,8 +692,22 @@ export default function LabourAttendancePage() {
                     </label>
                     <Input
                       type="date"
+                      max={getTodayString()}
                       value={currentDate}
-                      onChange={(e) => setCurrentDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const today = getTodayString();
+                        if (val > today) {
+                          toast({
+                            title: "Future date not allowed",
+                            description: "Attendance cannot be marked for future dates.",
+                            variant: "destructive",
+                          });
+                          setCurrentDate(today);
+                        } else {
+                          setCurrentDate(val);
+                        }
+                      }}
                       className="h-10"
                     />
                   </div>
@@ -801,8 +823,22 @@ export default function LabourAttendancePage() {
                   </span>
                   <Input
                     type="date"
+                    max={getTodayString()}
                     value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const today = getTodayString();
+                      if (val > today) {
+                        toast({
+                          title: "Future date not allowed",
+                          description: "Cannot filter logs by future dates.",
+                          variant: "destructive",
+                        });
+                        setFilterDate(today);
+                      } else {
+                        setFilterDate(val);
+                      }
+                    }}
                     className="h-10"
                   />
                 </div>
@@ -1167,8 +1203,22 @@ export default function LabourAttendancePage() {
                     </label>
                     <Input
                       type="date"
+                      max={getTodayString()}
                       value={copyFromDate}
-                      onChange={(e) => setCopyFromDate(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const today = getTodayString();
+                        if (val > today) {
+                          toast({
+                            title: "Future date not allowed",
+                            description: "Cannot copy attendance from future dates.",
+                            variant: "destructive",
+                          });
+                          setCopyFromDate(today);
+                        } else {
+                          setCopyFromDate(val);
+                        }
+                      }}
                       className="h-10"
                     />
                   </div>

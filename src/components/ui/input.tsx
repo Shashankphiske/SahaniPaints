@@ -24,6 +24,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const hasValue = currentVal.length > 0;
 
     const isClearableType =
+      type !== "date" &&
+      type !== "datetime-local" &&
+      type !== "time" &&
+      type !== "month" &&
+      type !== "week" &&
       type !== "file" &&
       type !== "checkbox" &&
       type !== "radio" &&

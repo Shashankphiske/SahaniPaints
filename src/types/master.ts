@@ -367,3 +367,21 @@ export interface LowMaterial {
     name: string;
   };
 }
+
+export interface ActivityLog {
+  id: string;
+  userId?: string | null;
+  userName?: string | null;
+  userRole?: string | null;
+  action: string;
+  entity: string;
+  details: string;
+  ipAddress?: string | null;
+  createdAt: string;
+  user?: {
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+  } | null;
+}

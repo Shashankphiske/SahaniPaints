@@ -20,7 +20,8 @@ import {
   Coins,
   Briefcase,
   BookOpen,
-  BarChart3
+  BarChart3,
+  Activity
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "../NavLink";
@@ -90,6 +91,7 @@ const mastersItems = [
 const bottomItems = [
   { title: "Tasks", url: "/tasks", icon: ListChecks },
   { title: "Stores", url: "/masters/stores", icon: Store },
+  { title: "Activity Logs", url: "/activity-logs", icon: Activity },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
@@ -102,7 +104,7 @@ export function AppSidebar() {
 
   const filterByAccess = <T extends { url: string }>(items: T[]) =>
     items.filter((i) => {
-      if ((i.url === "/payments" || i.url === "/contractor-payments") && user?.role !== "ADMIN") {
+      if ((i.url === "/payments" || i.url === "/contractor-payments" || i.url === "/activity-logs") && user?.role !== "ADMIN") {
         return false;
       }
       const key = getAccessKeyForPath(i.url);
