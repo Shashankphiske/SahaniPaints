@@ -97,6 +97,7 @@ export function GlobalSearchBar() {
         category: "site" as Category,
         route: `/projects?projectId=${p.id}&tab=products`,
       },
+
       {
         id: `${p.id}-quotation`,
         label: `${p.name} - Quotation`,

@@ -109,7 +109,7 @@ export function DataTable<T extends { id: string | number }>({
                             onClick={() => onDownload(item)}
                           >
                             <Download className="mr-2 h-4 w-4 text-primary" />
-                            <span>Download Quotation</span>
+                            <span>Download</span>
                           </DropdownMenuItem>
                         )}
 

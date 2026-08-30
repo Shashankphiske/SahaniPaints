@@ -48,9 +48,7 @@ import {
   Paintbrush,
   MapPin,
   CheckCircle2,
-  Edit
 } from "lucide-react";
-import { generateQuotationPDF } from "../utils/quotationPdfGenerator";
 import TasksPage from "./TasksPage";
 
 // Format currency
@@ -620,15 +618,6 @@ export default function ProjectsPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                                onClick={() => downloadQuotationPDFHelper(project, products)}
-                                title="Download Quotation PDF"
-                              >
-                                <Download className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
                                 className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                                 onClick={() => handleDeleteProject(project.id)}
                                 title="Delete Project"
@@ -698,18 +687,6 @@ export default function ProjectsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 w-8 p-0"
-                                onClick={() => {
-                                  // Quick quotation download
-                                  downloadQuotationPDFHelper(project, products);
-                                }}
-                                title="Download Quotation PDF"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -917,53 +894,6 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleDownloadQuotation = () => {
-    const cust = customers.find((c) => c.id === customerId);
-    if (!cust) {
-      alert("Please select a customer first.");
-      return;
-    }
-    const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
-    if (filteredRows.length === 0) {
-      alert("Please add product selections to generate quotation.");
-      return;
-    }
-
-    const productsForPDF = filteredRows.map((r) => {
-      const prod = products.find((p) => p.id === r.productId);
-      return {
-        productName: prod?.name || "Paint Product",
-        brandName: prod?.brand?.name,
-        area: Number(r.area || 0),
-        unit: r.unit,
-        rate: Number(r.rate || 0),
-        total: Number(r.rate || 0) * Number(r.area || 0),
-      };
-    });
-
-    generateQuotationPDF({
-      projectName: name || "Paint Contract Quotation",
-      projectDate,
-      customer: {
-        name: cust.name,
-        phonenumber: cust.phonenumber,
-        email: cust.email,
-        address: cust.address,
-      },
-      creatorName: "Sales Associate",
-      products: productsForPDF,
-      summary: {
-        subtotal,
-        tax: Number(taxRate || 0),
-        taxAmount,
-        discount: Number(discount || 0),
-        discountType,
-        discountAmount,
-        agreedPrice: finalPrice,
-      },
-    });
   };
 
   return (
@@ -1273,15 +1203,6 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
               <Button type="submit" disabled={saving} className="w-full font-semibold">
                 {saving ? "Creating Project..." : "Add Project"}
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleDownloadQuotation}
-                className="w-full flex items-center justify-center gap-1.5 font-medium"
-              >
-                <Download className="h-4 w-4" />
-                Download Quotation
-              </Button>
               <Button type="button" variant="ghost" onClick={onCancel} className="w-full">
                 Cancel
               </Button>
@@ -1416,51 +1337,6 @@ function ProjectDetailView({
               Customer: {fullProject.customer?.name} | Deadline: {formatDate(fullProject.projectDate)}
             </p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              // Convert projectProducts to matching options structure
-              const productsForPDF = (fullProject.projectProducts ?? []).map((pp: any) => ({
-                productName: pp.product?.name || "Paint Product",
-                brandName: pp.product?.brand?.name,
-                area: Number(pp.area),
-                unit: pp.unit,
-                rate: Number(pp.rate),
-                total: Number(pp.rate) * Number(pp.area),
-              }));
-
-              generateQuotationPDF({
-                projectName: fullProject.name,
-                projectDate: fullProject.projectDate,
-                customer: {
-                  name: fullProject.customer?.name || "Client",
-                  phonenumber: fullProject.customer?.phonenumber,
-                  email: fullProject.customer?.email,
-                  address: fullProject.customer?.address,
-                },
-                creatorName: fullProject.creator?.username || "Sales Associate",
-                products: productsForPDF,
-                summary: {
-                  subtotal: Number(fullProject.totalAmount),
-                  tax: Number(fullProject.tax || 0),
-                  taxAmount: (Number(fullProject.totalAmount) * Number(fullProject.tax || 0)) / 100,
-                  discount: Number(fullProject.discount || 0),
-                  discountType: (fullProject.discountType || "amount") as any,
-                  discountAmount: fullProject.discountType === "percent"
-                    ? (Number(fullProject.totalAmount) * Number(fullProject.discount || 0)) / 100
-                    : Number(fullProject.discount || 0),
-                  agreedPrice: Number(fullProject.agreedPrice || fullProject.totalAmount),
-                },
-              });
-            }}
-            className="flex items-center gap-1 text-xs"
-          >
-            <Download className="h-4 w-4" />
-            Quotation
-          </Button>
         </div>
       </div>
 
@@ -3981,67 +3857,6 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
     </div>
   );
 }
-
-/* ──────────────────────────────────────────────────────── */
-/* ── QUICK DOWNLOAD QUOTATION PDF HELPER ────────────────── */
-/* ──────────────────────────────────────────────────────── */
-const downloadQuotationPDFHelper = (project: Project, products: Product[]) => {
-  // Reconstruct nested options
-  const projectProducts = project.projectProducts ?? [];
-
-  const subtotal = projectProducts.reduce((sum, pp) => {
-    return sum + (Number(pp.rate) * Number(pp.area) || 0);
-  }, 0);
-
-  const taxRate = Number(project.tax || 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-
-  const discountVal = Number(project.discount || 0);
-  const discountAmount = project.discountType === "percent"
-    ? (subtotal * discountVal) / 100
-    : discountVal;
-
-  const finalPrice = Number(project.agreedPrice || subtotal + taxAmount - discountAmount);
-
-  const pdfProducts = projectProducts.map((pp) => {
-    const matched = products.find((p) => p.id === pp.productId);
-    return {
-      productName: matched?.name || "Paint Product",
-      brandName: matched?.brand?.name,
-      area: Number(pp.area),
-      unit: pp.unit,
-      rate: Number(pp.rate),
-      total: Number(pp.rate) * Number(pp.area),
-    };
-  });
-
-  generateQuotationPDF({
-    projectName: project.name,
-    projectDate: project.projectDate ? new Date(project.projectDate).toISOString().split("T")[0] : undefined,
-    customer: {
-      name: project.customer?.name || "Customer",
-      phonenumber: project.customer?.phonenumber || null,
-      email: project.customer?.email || null,
-      address: project.customer?.address || null,
-    },
-    creatorName: project.creator?.username || "Sales Associate",
-    products: pdfProducts,
-    summary: {
-      subtotal,
-      tax: taxRate,
-      taxAmount,
-      discount: discountVal,
-      discountType: (project.discountType || "amount") as any,
-      discountAmount,
-      agreedPrice: finalPrice,
-    },
-  });
-
-  toast({
-    title: "Quotation Generated",
-    description: `PDF Quotation downloaded for "${project.name}"`,
-  });
-};
 
 /* ──────────────────────────────────────────────────────── */
 /* ── TAB CONTENT: AREA STATUS PROGRESS ──────────────────── */
