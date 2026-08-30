@@ -168,62 +168,61 @@ export function LowMaterialsSection() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto pr-1">
           {materials.map((item) => (
             <Card key={item.id} className="relative hover:shadow-md transition-all duration-200 border border-border overflow-hidden">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-bold text-foreground leading-snug text-sm">
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-foreground leading-snug text-sm truncate">
                       {item.material}
                     </h4>
-                    <p className="text-[11px] text-muted-foreground font-semibold">
+                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
                       Qty Required: <span className="text-foreground font-bold">{item.quantity}</span>
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                      item.delivered
-                        ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                        : "bg-amber-50 text-amber-600 border-amber-200"
-                    }`}
-                  >
-                    {item.delivered ? "Delivered" : "Pending"}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                        item.delivered
+                          ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                          : "bg-amber-50 text-amber-600 border-amber-200"
+                      }`}
+                    >
+                      {item.delivered ? "Delivered" : "Pending"}
+                    </Badge>
+                    {!item.delivered && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 p-0"
+                        onClick={() => handleMarkDelivered(item)}
+                        title="Mark Delivered"
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-0 transition-colors"
+                      onClick={() => handleDelete(item.id)}
+                      title="Delete Alert"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-muted-foreground pt-1.5 border-t border-border/50">
-                  <div className="flex justify-between">
+                <div className="space-y-1 text-xs text-muted-foreground pt-2 border-t border-border/40">
+                  <div className="flex justify-between items-center">
                     <span>Site/Project</span>
                     <span className="font-semibold text-primary truncate max-w-[65%]" title={item.project?.name}>
                       {item.project?.name || "—"}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span>Logged Date</span>
                     <span className="font-semibold text-foreground">{formatDate(item.createdAt)}</span>
                   </div>
-                </div>
-
-                <div className="flex justify-end gap-1.5 pt-2 border-t border-border/50">
-                  {!item.delivered && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-250"
-                      onClick={() => handleMarkDelivered(item)}
-                      title="Mark Delivered"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
-                    onClick={() => handleDelete(item.id)}
-                    title="Delete Alert"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </CardContent>
             </Card>

@@ -36,6 +36,7 @@ import {
   DollarSign,
   PackageCheck,
   ChevronDown,
+  ChevronRight,
   LayoutGrid,
   List,
   SlidersHorizontal,
@@ -1835,6 +1836,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
           projectId={fullProject.id}
           projectProducts={fullProject.projectProducts || []}
           materialLogs={fullProject.materialLogs || []}
+          setFullProject={setFullProject}
         />
       </div>
 
@@ -2555,18 +2557,132 @@ function QuotationTab({ fullProject, setFullProject, updateAllCaches }: Quotatio
 /* ──────────────────────────────────────────────────────── */
 /* ── TAB CONTENT: MATERIAL USED & COVERAGE ──────────────── */
 /* ──────────────────────────────────────────────────────── */
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 interface MaterialUsedTabProps {
   projectId: string;
   projectProducts: any[];
   materialLogs: any[];
+  setFullProject?: React.Dispatch<React.SetStateAction<any>>;
 }
 
-function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialUsedTabProps) {
+function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProject }: MaterialUsedTabProps) {
+  const [selectedPP, setSelectedPP] = useState<any | null>(null);
+  const [isAddingLog, setIsAddingLog] = useState(false);
+  const [newLogQuantity, setNewLogQuantity] = useState("");
+  const [newLogDate, setNewLogDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [isSubmittingLog, setIsSubmittingLog] = useState(false);
+
+  // Compute matched logs for selected product
+  const matchedLogs = useMemo(() => {
+    if (!selectedPP) return [];
+    return materialLogs.filter((log: any) => log.productId === selectedPP.productId);
+  }, [selectedPP, materialLogs]);
+
+  // Compute metrics for selected product
+  const selectedMetrics = useMemo(() => {
+    if (!selectedPP) return null;
+
+    const packSizeL = getProductSizeInLitres(selectedPP.product?.size);
+    const totalPacks = matchedLogs.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
+    const litresNum = totalPacks * packSizeL;
+
+    const coverageSqFtL = selectedPP.product?.coverageSqFt != null ? Number(selectedPP.product.coverageSqFt) : 0;
+    const coverageRnFtL = selectedPP.product?.coverageRnFt != null ? Number(selectedPP.product.coverageRnFt) : 0;
+
+    const actualCoverage = selectedPP.unit === "sq.ft" ? litresNum * coverageSqFtL : litresNum * coverageRnFtL;
+    const designatedArea = Number(selectedPP.area || 0);
+
+    const isExceeding = actualCoverage > designatedArea;
+    const diff = isExceeding ? actualCoverage - designatedArea : 0;
+
+    return {
+      packSizeL,
+      totalPacks,
+      litresNum,
+      coverageSqFtL,
+      coverageRnFtL,
+      actualCoverage,
+      designatedArea,
+      isExceeding,
+      diff,
+      coveragePerL: selectedPP.unit === "sq.ft" ? coverageSqFtL : coverageRnFtL,
+    };
+  }, [selectedPP, matchedLogs]);
+
+  const handleAddMaterialLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPP) return;
+    const qtyNum = parseFloat(newLogQuantity);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      toast({ title: "Invalid Quantity", description: "Please enter a valid positive quantity.", variant: "destructive" });
+      return;
+    }
+
+    setIsSubmittingLog(true);
+    try {
+      const createdLog = await apiRequest.create<any>("project-material-logs", {
+        projectId,
+        productId: selectedPP.productId,
+        quantity: qtyNum,
+        date: new Date(newLogDate).toISOString(),
+      });
+
+      toast({ title: "Material Log Added", description: `Added ${qtyNum} pack(s) of ${selectedPP.product?.name}.` });
+
+      // Update state live
+      if (setFullProject) {
+        setFullProject((prev: any) => {
+          if (!prev) return prev;
+          const updatedLogs = [createdLog, ...(prev.materialLogs || [])];
+          return { ...prev, materialLogs: updatedLogs };
+        });
+      }
+
+      setNewLogQuantity("");
+      setIsAddingLog(false);
+    } catch (err: any) {
+      toast({ title: "Error logging material", description: err.message || "Failed to save log.", variant: "destructive" });
+    } finally {
+      setIsSubmittingLog(false);
+    }
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    if (!window.confirm("Are you sure you want to delete this material log entry?")) return;
+    try {
+      await apiRequest.delete("project-material-logs", logId);
+      toast({ title: "Log Removed", description: "Material log entry deleted." });
+
+      if (setFullProject) {
+        setFullProject((prev: any) => {
+          if (!prev) return prev;
+          const updatedLogs = (prev.materialLogs || []).filter((l: any) => l.id !== logId);
+          return { ...prev, materialLogs: updatedLogs };
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Error removing log", description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Material Usage</h3>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Package className="h-4.5 w-4.5 text-primary" />
+            Material Usage & Coverage
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Click any product row below to inspect detailed material logs & consumption history.
+          </p>
         </div>
         <Button asChild size="sm" className="font-bold">
           <Link to="/material-usage">
@@ -2576,10 +2692,10 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialU
         </Button>
       </div>
 
-      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm">
+      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-slate-50 dark:bg-zinc-900/50">
               <TableHead>Product</TableHead>
               <TableHead>Area</TableHead>
               <TableHead>Litres Logged</TableHead>
@@ -2589,7 +2705,6 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialU
           </TableHeader>
           <TableBody>
             {projectProducts.map((pp) => {
-              // Calculate logged quantity from project materialLogs matching productId
               const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
               const packSizeL = getProductSizeInLitres(pp.product?.size);
               const litresNum = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0) * packSizeL;
@@ -2604,16 +2719,38 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialU
               const diff = isExceeding ? actualCoverage - designatedArea : 0;
 
               return (
-                <TableRow key={pp.id}>
-                  <TableCell className="font-semibold">{pp.product?.name || "Paint Product"}</TableCell>
-                  <TableCell>
+                <TableRow
+                  key={pp.id}
+                  onClick={() => {
+                    setSelectedPP(pp);
+                    setIsAddingLog(false);
+                  }}
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-colors group"
+                >
+                  <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span>{pp.product?.name || "Paint Product"}</span>
+                        {pp.product?.brand?.name && (
+                          <span className="text-[10px] text-muted-foreground font-medium block">
+                            Brand: {pp.product.brand.name} {pp.product.size ? `(${pp.product.size})` : ""}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-2" />
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium text-xs">
                     {fmt(pp.area)} {pp.unit}
                   </TableCell>
-                  <TableCell className="font-semibold text-slate-800 dark:text-slate-200">
+                  <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
                     {fmt(litresNum)} L
+                    <span className="text-[10px] text-muted-foreground block font-normal">
+                      {loggedProducts.length} log entry{loggedProducts.length !== 1 ? "ies" : ""}
+                    </span>
                   </TableCell>
                   <TableCell>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{fmt(actualCoverage)}</span>
+                    <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{fmt(actualCoverage)}</span>
                     <span className="text-[10px] text-muted-foreground ml-1">{pp.unit}</span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -2644,6 +2781,212 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs }: MaterialU
           </TableBody>
         </Table>
       </Card>
+
+      {/* Detailed Material Usage Dialog */}
+      <Dialog open={Boolean(selectedPP)} onOpenChange={(open) => !open && setSelectedPP(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 border-slate-200 dark:border-zinc-800">
+          {selectedPP && selectedMetrics && (
+            <>
+              <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/80 dark:bg-zinc-900/80">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                      <Package className="h-5 w-5 text-primary" />
+                      <span>{selectedPP.product?.name || "Product Material Logs"}</span>
+                    </DialogTitle>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
+                      {selectedPP.product?.brand?.name && (
+                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                          Brand: {selectedPP.product.brand.name}
+                        </Badge>
+                      )}
+                      {selectedPP.product?.category && (
+                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                          Category: {selectedPP.product.category}
+                        </Badge>
+                      )}
+                      {selectedPP.product?.size && (
+                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                          Pack Size: {selectedPP.product.size}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant={isAddingLog ? "outline" : "default"}
+                    onClick={() => setIsAddingLog((prev) => !prev)}
+                    className="font-bold shrink-0 h-9 gap-1.5"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>{isAddingLog ? "Cancel Logging" : "Log Material"}</span>
+                  </Button>
+                </div>
+
+                {/* Inline Add Material Log Form */}
+                {isAddingLog && (
+                  <form onSubmit={handleAddMaterialLog} className="mt-4 p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5 text-primary" />
+                      Add Usage Log Entry for {selectedPP.product?.name}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Log Date *</label>
+                        <Input
+                          type="date"
+                          max={getTodayString()}
+                          value={newLogDate}
+                          onChange={(e) => setNewLogDate(e.target.value)}
+                          className="h-9 text-xs"
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Quantity (Packs/Buckets) *</label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0.1"
+                          placeholder="e.g. 2"
+                          value={newLogQuantity}
+                          onChange={(e) => setNewLogQuantity(e.target.value)}
+                          className="h-9 text-xs font-semibold"
+                          required
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <Button type="submit" disabled={isSubmittingLog} className="h-9 w-full font-bold text-xs">
+                          {isSubmittingLog ? "Saving..." : "Save Material Log"}
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                )}
+              </DialogHeader>
+
+              {/* Modal Body with KPI Cards & Logs Table */}
+              <div className="p-4 sm:p-5 overflow-y-auto max-h-[60vh] space-y-5">
+                {/* Metric Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Designated Area</span>
+                    <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
+                      {fmt(selectedPP.area)} {selectedPP.unit}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Total Volume Logged</span>
+                    <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
+                      {fmt(selectedMetrics.litresNum)} L
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">({selectedMetrics.totalPacks} Packs)</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Est. Coverage Achieved</span>
+                    <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
+                      {fmt(selectedMetrics.actualCoverage)} {selectedPP.unit}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Usage Status</span>
+                    <div className="mt-1">
+                      {selectedMetrics.litresNum === 0 ? (
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mt-1">
+                          No Usage Logged
+                        </span>
+                      ) : selectedMetrics.isExceeding ? (
+                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400 block mt-1">
+                          Exceeding by {fmt(selectedMetrics.diff)} {selectedPP.unit}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block mt-1">
+                          Within Limits
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed Logs List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <ClipboardList className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                      Material Usage Log Entries ({matchedLogs.length})
+                    </h4>
+                  </div>
+
+                  {matchedLogs.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-muted-foreground italic border border-dashed rounded-xl p-6 flex flex-col items-center gap-2">
+                      <Package className="h-8 w-8 text-slate-300 dark:text-zinc-700" />
+                      <span>No material logs recorded for {selectedPP.product?.name} yet.</span>
+                      <Button size="sm" variant="outline" onClick={() => setIsAddingLog(true)} className="mt-1 font-bold text-xs">
+                        + Add First Log Entry
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 dark:border-zinc-800 overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
+                          <TableRow>
+                            <TableHead className="text-xs">Log Date</TableHead>
+                            <TableHead className="text-xs">Packs Logged</TableHead>
+                            <TableHead className="text-xs">Volume (Litres)</TableHead>
+                            <TableHead className="text-xs">Coverage Contribution</TableHead>
+                            <TableHead className="text-xs text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {matchedLogs.map((log: any) => {
+                            const entryLitres = Number(log.quantity || 0) * selectedMetrics.packSizeL;
+                            const entryCoverage = entryLitres * selectedMetrics.coveragePerL;
+
+                            return (
+                              <TableRow key={log.id}>
+                                <TableCell className="font-mono text-xs font-semibold">
+                                  {formatDate(log.date)}
+                                </TableCell>
+                                <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                                  {log.quantity} Pack{Number(log.quantity) > 1 ? "s" : ""}
+                                </TableCell>
+                                <TableCell className="font-semibold text-xs text-slate-900 dark:text-slate-100">
+                                  {fmt(entryLitres)} L
+                                </TableCell>
+                                <TableCell className="font-semibold text-xs">
+                                  +{fmt(entryCoverage)} {selectedPP.unit}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteLog(log.id)}
+                                    className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                                    title="Delete material log"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

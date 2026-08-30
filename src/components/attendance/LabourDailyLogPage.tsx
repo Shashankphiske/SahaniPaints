@@ -222,64 +222,64 @@ export default function LabourDailyLogPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         <Card
           onClick={() => { setActiveDetailModal("WORKFORCE"); setModalSearchQuery(""); }}
-          className="p-4 flex items-center justify-between border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm cursor-pointer hover:border-blue-400 dark:hover:border-blue-700 hover:shadow-md transition-all active:scale-[0.99] group"
+          className="p-4 flex items-center justify-between border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all active:scale-[0.99] group"
         >
           <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
               Total Workforce <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-zinc-200">{totalCount}</h3>
-            <p className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold">Click to view directory</p>
+            <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{totalCount}</h3>
+            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Click to view directory</p>
           </div>
-          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-slate-400 group-hover:bg-slate-100 transition-colors">
             <Users className="h-5 w-5" />
           </div>
         </Card>
 
         <Card
           onClick={() => { setActiveDetailModal("PRESENT"); setModalSearchQuery(""); }}
-          className="p-4 flex items-center justify-between border-emerald-100 dark:border-emerald-950 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-sm cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-700 hover:shadow-md transition-all active:scale-[0.99] group"
+          className="p-4 flex items-center justify-between border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all active:scale-[0.99] group"
         >
           <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
               Present Today <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
-            <h3 className="text-xl font-bold text-emerald-950 dark:text-emerald-200">{presentCount}</h3>
-            <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold">Click to view present</p>
+            <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{presentCount}</h3>
+            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Click to view present</p>
           </div>
-          <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/25 text-emerald-600 dark:text-emerald-450 group-hover:bg-emerald-100 transition-colors">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-slate-400 group-hover:bg-slate-100 transition-colors">
             <UserCheck className="h-5 w-5" />
           </div>
         </Card>
 
         <Card
           onClick={() => { setActiveDetailModal("ABSENT"); setModalSearchQuery(""); }}
-          className="p-4 flex items-center justify-between border-rose-100 dark:border-rose-950 bg-rose-50/20 dark:bg-rose-950/10 shadow-sm cursor-pointer hover:border-rose-400 dark:hover:border-rose-700 hover:shadow-md transition-all active:scale-[0.99] group"
+          className="p-4 flex items-center justify-between border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all active:scale-[0.99] group"
         >
           <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300 flex items-center gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
               Absent Today <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
-            <h3 className="text-xl font-bold text-rose-950 dark:text-rose-200">{absentCount}</h3>
-            <p className="text-[9px] text-rose-600 dark:text-rose-400 font-semibold">Click to view absent</p>
+            <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{absentCount}</h3>
+            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Click to view absent</p>
           </div>
-          <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/25 text-rose-600 dark:text-rose-450 group-hover:bg-rose-100 transition-colors">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-slate-400 group-hover:bg-slate-100 transition-colors">
             <UserX className="h-5 w-5" />
           </div>
         </Card>
 
         <Card
           onClick={() => { setActiveDetailModal("SITES"); setModalSearchQuery(""); }}
-          className="p-4 flex items-center justify-between border-blue-100 dark:border-blue-950 bg-blue-50/20 dark:bg-blue-950/10 shadow-sm cursor-pointer hover:border-blue-400 dark:hover:border-blue-700 hover:shadow-md transition-all active:scale-[0.99] group"
+          className="p-4 flex items-center justify-between border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-md transition-all active:scale-[0.99] group"
         >
           <div className="space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-800 dark:text-blue-300 flex items-center gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1 group-hover:text-slate-900 dark:group-hover:text-slate-100 transition-colors">
               Active Sites <ChevronRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
-            <h3 className="text-xl font-bold text-blue-950 dark:text-blue-200">{activeSitesCount}</h3>
-            <p className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold">Click to view sites</p>
+            <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">{activeSitesCount}</h3>
+            <p className="text-[9px] text-slate-500 dark:text-slate-400 font-medium">Click to view sites</p>
           </div>
-          <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/25 text-blue-600 dark:text-blue-450 group-hover:bg-blue-100 transition-colors">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 text-slate-600 dark:text-slate-400 group-hover:bg-slate-100 transition-colors">
             <Building className="h-5 w-5" />
           </div>
         </Card>
