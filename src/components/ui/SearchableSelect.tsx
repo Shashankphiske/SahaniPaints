@@ -42,7 +42,7 @@ interface SearchableSelectProps {
 
 /**
  * Reusable searchable input + dropdown for entity lookups.
- * Replaces native <select> for lists like projects, labours, contractors.
+ * Fully interactive and styled with high z-index overlay so it displays on top of surrounding cards.
  */
 export function SearchableSelect({
   value,
@@ -81,7 +81,10 @@ export function SearchableSelect({
     const handler = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setOpen(false);
-        onSearchChange(originalDisplayValueRef.current || "");
+        setIsFocused(false);
+        if (originalDisplayValueRef.current !== undefined) {
+          onSearchChange(originalDisplayValueRef.current);
+        }
       }
     };
     document.addEventListener("mousedown", handler);
@@ -97,11 +100,11 @@ export function SearchableSelect({
 
   const handleSelect = (opt: SearchableSelectOption) => {
     originalDisplayValueRef.current = opt.label;
-    onSelect(opt.id, opt.label);
     setTypedValue(opt.label);
-    onSearchChange(opt.label);
     setIsFocused(false);
     setOpen(false);
+    onSelect(opt.id, opt.label);
+    onSearchChange(opt.label);
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -123,7 +126,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div ref={wrapperRef} className={`relative ${className}`}>
+    <div ref={wrapperRef} className={`relative ${open ? "z-[9999]" : "z-10"} ${className}`}>
       <div className="relative">
         {value && onClear && (
           <button
@@ -150,7 +153,9 @@ export function SearchableSelect({
             setTimeout(() => {
               setIsFocused(false);
               setOpen(false);
-              onSearchChange(originalDisplayValueRef.current || "");
+              if (originalDisplayValueRef.current !== undefined) {
+                onSearchChange(originalDisplayValueRef.current || "");
+              }
             }, 200);
           }}
           onKeyDown={(e) => {
@@ -179,12 +184,19 @@ export function SearchableSelect({
       </div>
 
       {open && (
-        <div className={`absolute z-[999] w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl max-h-52 overflow-y-auto duration-150 animate-in fade-in-50 ${
-          direction === "up" ? "bottom-full mb-1 slide-in-from-bottom-1" : "mt-1 slide-in-from-top-1"
-        }`}>
+        <div
+          className={`absolute left-0 w-full z-[9999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto duration-150 animate-in fade-in-50 ${
+            direction === "up"
+              ? "bottom-full mb-1.5 slide-in-from-bottom-1"
+              : "top-full mt-1.5 slide-in-from-top-1"
+          }`}
+        >
           {allLabel !== undefined && (
             <div
-              onMouseDown={handleAllOption}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleAllOption();
+              }}
               className="px-3 py-2.5 text-sm text-muted-foreground italic cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors"
             >
               {allLabel}
@@ -198,7 +210,10 @@ export function SearchableSelect({
             options.map((opt) => (
               <div
                 key={opt.id}
-                onMouseDown={() => handleSelect(opt)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(opt);
+                }}
                 className={`px-3 py-2.5 cursor-pointer text-sm font-semibold transition-colors hover:bg-slate-50 dark:hover:bg-zinc-900 ${
                   opt.id === value
                     ? "bg-primary/5 text-primary"

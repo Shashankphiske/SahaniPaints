@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/context/AuthContext";
 import { Plus, Trash2, Search, ClipboardList, Loader2, PackagePlus } from "lucide-react";
-import type { LowMaterial, Project } from "@/types/master";
+import type { LowMaterial, Project, Product } from "@/types/master";
 
 const getTodayString = () => {
   const d = new Date();
@@ -49,6 +49,7 @@ export default function MaterialRequestsPage() {
 
   const { data: requestsRaw, isLoading, create, update, remove } = useMasterData<LowMaterial>("low-materials");
   const projectsData = useMasterData<Project>("projects");
+  const productsData = useMasterData<Product>("products");
 
   const [isOpen, setIsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +94,7 @@ export default function MaterialRequestsPage() {
 
   const requests = useMemo(() => (Array.isArray(requestsRaw) ? requestsRaw : []), [requestsRaw]);
   const projectsList = useMemo(() => (Array.isArray(projectsData.data) ? projectsData.data : []), [projectsData.data]);
+  const productsList = useMemo(() => (Array.isArray(productsData.data) ? productsData.data : []), [productsData.data]);
 
   // Project options filtered by typed query
   const filteredProjectOptions = useMemo(
@@ -104,12 +106,29 @@ export default function MaterialRequestsPage() {
     [projectsList, projectFilter]
   );
 
-  // Helper to get filtered catalog products for a specific row
+  // Helper to get filtered catalog and project products for a specific row
   const getProductOptionsForRow = (filterQuery: string) => {
+    const q = (filterQuery || "").toLowerCase().trim();
     const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
-    return projectProducts
-      .filter((p: any) => !filterQuery || p.name.toLowerCase().includes(filterQuery.toLowerCase()))
-      .map((p: any) => ({ id: p.id, label: p.name }));
+
+    if (projectProducts.length > 0) {
+      const projFiltered = projectProducts
+        .filter((p: any) => !q || p.name.toLowerCase().includes(q))
+        .map((p: any) => ({ id: p.id, label: `${p.name} (Project)` }));
+
+      const projIds = new Set(projectProducts.map((p: any) => p.id));
+      const catalogFiltered = productsList
+        .filter((p) => !projIds.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
+        .slice(0, 15)
+        .map((p) => ({ id: p.id, label: p.name }));
+
+      return [...projFiltered, ...catalogFiltered];
+    }
+
+    return productsList
+      .filter((p) => !q || p.name.toLowerCase().includes(q))
+      .slice(0, 15)
+      .map((p) => ({ id: p.id, label: p.name }));
   };
 
   // Actions for item rows
@@ -194,6 +213,7 @@ export default function MaterialRequestsPage() {
       // Create a SINGLE record containing all requested materials as a package
       await create({
         projectId: selectedProjectId,
+        _projectName: projectDisplay,
         material: finalMaterialString,
         quantity: finalQuantityString,
         date: dateISO,
@@ -256,8 +276,8 @@ export default function MaterialRequestsPage() {
               Add Requests
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0">
-            <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/50 dark:bg-zinc-900/50">
+          <DialogContent className="max-w-xl max-h-[90vh]">
+            <DialogHeader className="pb-3 border-b border-border/60">
               <DialogTitle className="text-base font-bold flex items-center gap-2">
                 <PackagePlus className="h-5 w-5 text-primary" />
                 <span>New Material Request</span>
@@ -267,7 +287,7 @@ export default function MaterialRequestsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="p-4 sm:p-5 overflow-y-auto max-h-[70vh] space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4 pt-2">
               {/* Site & Date Selection Header */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50/70 dark:bg-zinc-900/40 rounded-xl border border-slate-200/80 dark:border-zinc-800">
                 <div className="sm:col-span-2 space-y-1">
@@ -335,6 +355,7 @@ export default function MaterialRequestsPage() {
                     <div
                       key={item.id}
                       className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 space-y-2 relative shadow-2xs group"
+                      style={{ zIndex: items.length + 10 - index }}
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -360,7 +381,7 @@ export default function MaterialRequestsPage() {
                             Material Name *
                           </label>
                           <SearchableSelect
-                            value={item.selectedProductId}
+                            value={item.selectedProductId || item.materialName}
                             displayValue={item.materialName}
                             options={getProductOptionsForRow(item.productFilter)}
                             placeholder={fetchingProject ? "Loading project products..." : "Search product or type material name"}
@@ -373,9 +394,10 @@ export default function MaterialRequestsPage() {
                               });
                             }}
                             onSelect={(id, label) => {
+                              const cleanName = label.replace(/\s*\(Project\)$/, "");
                               updateItemRow(item.id, {
                                 selectedProductId: id,
-                                materialName: label,
+                                materialName: cleanName,
                                 productFilter: "",
                               });
                             }}

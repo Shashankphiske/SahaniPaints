@@ -22,6 +22,9 @@ interface DataTableProps<T> {
   isLoading?: boolean;
   onEdit?: (item: T) => void;
   onDelete?: (item: T) => void;
+  deleteLabel?: string;
+  deleteIcon?: ReactNode;
+  deleteClassName?: string;
   onDownload?: (item: T) => void;
   onRowClick?: (item: T) => void;
 }
@@ -33,6 +36,9 @@ export function DataTable<T extends { id: string | number }>({
   isLoading,
   onEdit,
   onDelete,
+  deleteLabel = "Delete",
+  deleteIcon,
+  deleteClassName,
   onDownload,
   onRowClick
 }: DataTableProps<T>) {
@@ -125,10 +131,10 @@ export function DataTable<T extends { id: string | number }>({
                         {onDelete && (
                           <DropdownMenuItem
                             onClick={() => onDelete(item)}
-                            className="text-destructive focus:text-destructive"
+                            className={deleteClassName || "text-destructive focus:text-destructive"}
                           >
-                            <Trash2 className="mr-2 h-4 w-4 text-destructive" />
-                            <span>Delete</span>
+                            {deleteIcon || <Trash2 className="mr-2 h-4 w-4 text-destructive" />}
+                            <span>{deleteLabel}</span>
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>

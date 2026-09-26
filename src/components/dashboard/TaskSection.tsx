@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, MoreVertical, Pencil, Trash2, Calendar, Flag, CircleDot } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, Calendar, Flag, CircleDot, CheckCircle2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -62,7 +62,7 @@ export function TaskSection() {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this task?")) {
+    if (window.confirm("Are you sure you want to mark this task as done?")) {
       remove(id);
     }
   };
@@ -157,14 +157,16 @@ export function TaskSection() {
                   Edit Task
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="outline"
                   size="sm"
+                  className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 font-semibold"
                   onClick={() => {
                     handleDelete(viewItem.id);
                     setViewItem(null);
                   }}
                 >
-                  Delete
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  Done
                 </Button>
               </div>
             </div>
@@ -231,9 +233,9 @@ function TaskCard({ task, onView, onEdit, onDelete }: TaskCardProps) {
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={onDelete}
-              className="text-destructive focus:text-destructive"
+              className="text-emerald-600 focus:text-emerald-600 cursor-pointer"
             >
-              <Trash2 className="h-3.5 w-3.5 mr-2 text-destructive" /> Delete
+              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" /> Done
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

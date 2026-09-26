@@ -72,13 +72,13 @@ export default function CustomerDashboard({
     let total = 0;
     let received = 0;
     projects.forEach((p) => {
-      total += Number(p.totalAmount) || 0;
+      total += Number(p.agreedPrice ?? p.totalAmount) || 0;
       received += Number(p.paid) || 0;
     });
     return {
       total,
       received,
-      due: total - received,
+      due: Math.max(0, total - received),
     };
   }, [projects]);
 
@@ -111,7 +111,7 @@ export default function CustomerDashboard({
       {
         key: "totalAmount",
         header: "Amount",
-        render: (p) => fmt(Number(p.totalAmount) || 0),
+        render: (p) => fmt(Number(p.agreedPrice ?? p.totalAmount) || 0),
       },
       {
         key: "paid",
@@ -126,7 +126,7 @@ export default function CustomerDashboard({
         key: "due",
         header: "Due",
         render: (p) => {
-          const due = (Number(p.totalAmount) || 0) - (Number(p.paid) || 0);
+          const due = Math.max(0, (Number(p.agreedPrice ?? p.totalAmount) || 0) - (Number(p.paid) || 0));
           return (
             <span className={`font-semibold ${due > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
               {fmt(due)}

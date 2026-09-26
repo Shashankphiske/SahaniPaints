@@ -141,9 +141,14 @@ export function ProjectSection() {
         <div className="max-h-[500px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {runningProjects.map((project) => {
-              const total = Number(project.totalAmount ?? 0);
+              const finalTotal = Number(project.agreedPrice ?? project.totalAmount ?? 0);
+              const originalTotal = Number(project.totalAmount ?? 0);
+              const hasDiscount = Boolean(
+                (project.discount && Number(project.discount) > 0) ||
+                (project.agreedPrice != null && originalTotal > 0 && Number(project.agreedPrice) < originalTotal)
+              );
               const paid = Number(project.paid ?? 0);
-              const due = total - paid;
+              const due = Math.max(0, finalTotal - paid);
               
               return (
                 <Card
@@ -204,10 +209,24 @@ export function ProjectSection() {
                     {/* Vertical Financial Pills with Simple Light Colors */}
                     <div className="flex flex-col gap-1.5 text-xs">
                       <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                        <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
-                        <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                          ₹{fmt(total)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                          {hasDiscount && (
+                            <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
+                              Discounted
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {hasDiscount && (
+                            <span className="text-[10px] line-through text-slate-400 font-medium">
+                              ₹{fmt(originalTotal)}
+                            </span>
+                          )}
+                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                            ₹{fmt(finalTotal)}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
                         <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
@@ -271,31 +290,58 @@ export function ProjectSection() {
               </div>
 
               <div className="border-t border-border pt-3 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground font-semibold">Project Date</span>
-                  <span className="font-semibold text-foreground">{formatDate(viewItem.projectDate)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground font-semibold">Total Cost</span>
-                  <span className="font-semibold text-foreground flex items-center">
-                    <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                    {fmt(Number(viewItem.totalAmount ?? 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground font-semibold">Amount Paid</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center">
-                    <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                    {fmt(Number(viewItem.paid ?? 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-border/60 pt-2 font-bold">
-                  <span className="text-muted-foreground">Due Balance</span>
-                  <span className={`flex items-center ${(Number(viewItem.totalAmount ?? 0) - Number(viewItem.paid ?? 0)) > 0 ? "text-rose-600" : "text-emerald-600 dark:text-emerald-400"}`}>
-                    <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                    {fmt(Number(viewItem.totalAmount ?? 0) - Number(viewItem.paid ?? 0))}
-                  </span>
-                </div>
+                {(() => {
+                  const itemFinalTotal = Number(viewItem.agreedPrice ?? viewItem.totalAmount ?? 0);
+                  const itemOriginalTotal = Number(viewItem.totalAmount ?? 0);
+                  const itemHasDiscount = Boolean(
+                    (viewItem.discount && Number(viewItem.discount) > 0) ||
+                    (viewItem.agreedPrice != null && itemOriginalTotal > 0 && Number(viewItem.agreedPrice) < itemOriginalTotal)
+                  );
+                  const itemPaid = Number(viewItem.paid ?? 0);
+                  const itemDue = Math.max(0, itemFinalTotal - itemPaid);
+
+                  return (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground font-semibold">Project Date</span>
+                        <span className="font-semibold text-foreground">{formatDate(viewItem.projectDate)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground font-semibold">Total Cost</span>
+                        <div className="text-right flex items-center gap-1.5">
+                          {itemHasDiscount && (
+                            <span className="text-xs line-through text-slate-400 font-medium">
+                              ₹{fmt(itemOriginalTotal)}
+                            </span>
+                          )}
+                          <span className="font-semibold text-foreground flex items-center">
+                            <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                            {fmt(itemFinalTotal)}
+                          </span>
+                          {itemHasDiscount && (
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                              (Discounted)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground font-semibold">Amount Paid</span>
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center">
+                          <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                          {fmt(itemPaid)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-border/60 pt-2 font-bold">
+                        <span className="text-muted-foreground">Due Balance</span>
+                        <span className={`flex items-center ${itemDue > 0 ? "text-rose-600" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                          {fmt(itemDue)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-border">

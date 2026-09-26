@@ -8,20 +8,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Calendar,
   Building,
   PackagePlus,
   X,
   Plus,
+  Minus,
   Loader2,
   Trash2,
   Package,
   ChevronDown,
   ClipboardList,
   SlidersHorizontal,
-  ArrowLeft
+  ArrowLeft,
+  CheckCircle2,
+  Search,
+  Check,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import type { Project, Product, ProjectMaterialLog } from "@/types/master";
 import { supabase } from "@/lib/realtime";
@@ -33,7 +38,7 @@ const getProductSizeInLitres = (sizeStr?: string): number => {
     const val = parseFloat(normalized);
     return isNaN(val) ? 1 : val / 1000;
   }
-  if (normalized.endsWith("ltr")) {
+  if (normalized.endsWith("ltr") || normalized.endsWith("l") || normalized.endsWith("lt")) {
     const val = parseFloat(normalized);
     return isNaN(val) ? 1 : val;
   }
@@ -51,29 +56,51 @@ interface QueuedMaterial {
 
 export default function MaterialLogsPage() {
   const { data: projectsData } = useMasterData<Project>("projects");
-  // ── Material logs — cached in React Query so navigating away and back
-  //    does not trigger a full refetch (staleTime = 5 min).
+  const { data: allProductsData } = useMasterData<Product>("products");
+
   const queryClient = useQueryClient();
   const { data: logsList = [], isLoading: loadingLogs } = useQuery<ProjectMaterialLog[]>({
     queryKey: ["material-logs"],
     queryFn: () => apiRequest.fetchAll<ProjectMaterialLog>("project-material-logs"),
     staleTime: Infinity,
   });
-  const [selectedDetailGroup, setSelectedDetailGroup] = useState<{ date: string; projectId: string; projectName: string } | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const { toast } = useToast();
+
+  const projectsList = useMemo(() => (Array.isArray(projectsData) ? projectsData : []), [projectsData]);
+  const allProducts = useMemo(() => (Array.isArray(allProductsData) ? allProductsData : []), [allProductsData]);
+
+  // Main navigation modes: "ledger" (default list), "detail" (view date group), or "add" (direct add view)
+  const [isAddMode, setIsAddMode] = useState(false);
+  const [selectedDetailGroup, setSelectedDetailGroup] = useState<{
+    date: string;
+    projectId: string;
+    projectName: string;
+  } | null>(null);
 
   // Form Fields State
   const [currentDate, setCurrentDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectSelectDisplay, setProjectSelectDisplay] = useState("");
   const [fullSelectedProject, setFullSelectedProject] = useState<Project | null>(null);
   const [fetchingProject, setFetchingProject] = useState(false);
 
-  
-  // Temporary queue states before submitting
+  // Staged materials queue before submitting
   const [tempSelectedMaterials, setTempSelectedMaterials] = useState<QueuedMaterial[]>([]);
   const [submittingLogs, setSubmittingLogs] = useState(false);
+
+  // Product searchable dropdown states for adding materials
+  const [productSelectId, setProductSelectId] = useState("");
+  const [productSelectDisplay, setProductSelectDisplay] = useState("");
+
+  // Filters state for ledger table
+  const [showFilterCard, setShowFilterCard] = useState(false);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
+  const [filterDate, setFilterDate] = useState("");
 
   // Fetch full project details when selecting a site to get allocated products
   const fetchFullProjectDetails = async (projectId: string) => {
@@ -92,35 +119,51 @@ export default function MaterialLogsPage() {
     }
   };
 
-  // Site (Project) search dropdown states
-  const [projectSearch, setProjectSearch] = useState("");
-  const [projectOpen, setProjectOpen] = useState(false);
-  const [projectSearching, setProjectSearching] = useState(false);
-  const [localProjectsList, setLocalProjectsList] = useState<Project[]>([]);
-  const projectRef = useRef<HTMLDivElement>(null);
+  // Products available in the dropdown (site-allocated products appear first with a tag, followed by entire catalog)
+  const productOptions = useMemo(() => {
+    const query = productSelectDisplay.toLowerCase().trim();
 
-  // Product search dropdown states
-  const [productSearch, setProductSearch] = useState("");
-  const [productOpen, setProductOpen] = useState(false);
-  const productRef = useRef<HTMLDivElement>(null);
+    // Set of product IDs allocated to the selected project
+    const allocatedProductIds = new Set(
+      (fullSelectedProject?.projectProducts || [])
+        .map((pp: any) => pp?.product?.id || pp?.productId)
+        .filter(Boolean)
+    );
 
-  // Listings filtration states
-  const [filterSearch, setFilterSearch] = useState("");
-  const [filterProjectId, setFilterProjectId] = useState("");
-  const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
-  const [filterDate, setFilterDate] = useState("");
+    // Filter products by search query
+    const matched = allProducts.filter((p) => {
+      if (!query) return true;
+      return (
+        p.name?.toLowerCase().includes(query) ||
+        p.category?.toLowerCase().includes(query) ||
+        p.brand?.name?.toLowerCase().includes(query) ||
+        p.size?.toLowerCase().includes(query)
+      );
+    });
 
-  const { toast } = useToast();
+    // Sort matched: project allocated products first, then others alphabetically
+    const sorted = [...matched].sort((a, b) => {
+      const aInProject = allocatedProductIds.has(a.id) ? 1 : 0;
+      const bInProject = allocatedProductIds.has(b.id) ? 1 : 0;
+      if (aInProject !== bInProject) {
+        return bInProject - aInProject; // allocated first
+      }
+      return (a.name || "").localeCompare(b.name || "");
+    });
 
-  const projectsList = useMemo(() => Array.isArray(projectsData) ? projectsData : [], [projectsData]);
+    return sorted.slice(0, 30).map((p) => {
+      const isAllocated = allocatedProductIds.has(p.id);
+      const badge = isAllocated ? " (Project)" : "";
+      const priceVal = Number(p.price || 0);
+      const priceStr = priceVal > 0 ? ` • ₹${priceVal.toLocaleString("en-IN")}` : "";
+      return {
+        id: p.id,
+        label: `${p.name}${badge}${priceStr}`,
+      };
+    });
+  }, [allProducts, productSelectDisplay, fullSelectedProject]);
 
-  // Sync server list with local options
-  useEffect(() => {
-    setLocalProjectsList(projectsList);
-  }, [projectsList]);
-
-  // Realtime: keep the React Query cache live for changes from other users.
-  // We DON'T do a full refetch — we patch the cache in-place.
+  // Realtime: keep the React Query cache live for changes from other users
   useEffect(() => {
     const channel = supabase
       .channel("db-material-logs-sync")
@@ -133,12 +176,10 @@ export default function MaterialLogsPage() {
               `/project-material-logs/${payload.new.id}`
             );
             queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) => {
-              // Skip if already in cache (our own optimistic update added it)
               if (prev.some((r) => r.id === newRecord.id)) return prev;
               return [newRecord, ...prev];
             });
           } catch {
-            // Fallback: invalidate so React Query refetches
             queryClient.invalidateQueries({ queryKey: ["material-logs"] });
           }
         }
@@ -168,37 +209,7 @@ export default function MaterialLogsPage() {
     };
   }, [queryClient]);
 
-  // Handle outside clicks to close dropdown lists
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (projectRef.current && !projectRef.current.contains(e.target as Node)) {
-        setProjectOpen(false);
-      }
-      if (productRef.current && !productRef.current.contains(e.target as Node)) {
-        setProductOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
-
-  // Search projects on server
-  const searchProjectsFromServer = async (query: string) => {
-    if (!query.trim()) return;
-    setProjectSearching(true);
-    try {
-      const res = await apiRequest.fetchAll<Project>("projects", { search: query });
-      setLocalProjectsList(res);
-    } catch (err: any) {
-      console.error(err);
-    } finally {
-      setProjectSearching(false);
-    }
-  };
-
-
-
-  // Queue product locally before saving
+  // Add a product to the staging queue (or increment if already queued)
   const handleQueueProduct = (product: Product & { allocatedArea?: number; unit?: string }) => {
     if (!selectedProject) {
       toast({
@@ -209,18 +220,41 @@ export default function MaterialLogsPage() {
       return;
     }
 
-    setTempSelectedMaterials((prev) => [
-      ...prev,
-      {
-        queueId: Math.random().toString(36).substring(2, 9),
-        product,
-        quantity: 1.0,
-        allocatedArea: product.allocatedArea || 0,
-        unit: product.unit || "sq.ft"
+    setTempSelectedMaterials((prev) => {
+      const existing = prev.find((item) => item.product?.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product?.id === product.id
+            ? { ...item, quantity: Number((item.quantity + 1).toFixed(2)) }
+            : item
+        );
       }
-    ]);
-    setProductOpen(false);
-    setProductSearch("");
+      return [
+        ...prev,
+        {
+          queueId: Math.random().toString(36).substring(2, 9),
+          product,
+          quantity: 1,
+          allocatedArea: product.allocatedArea || 0,
+          unit: product.unit || "sq.ft",
+        },
+      ];
+    });
+
+    toast({
+      title: "Added to Log",
+      description: `${product.name} staged for logging.`,
+    });
+  };
+
+  const handleSelectProductFromDropdown = (id: string, label: string) => {
+    if (!id) return;
+    const match = allProducts.find((p) => p.id === id);
+    if (match) {
+      handleQueueProduct(match);
+      setProductSelectId("");
+      setProductSelectDisplay("");
+    }
   };
 
   const handleRemoveFromQueue = (queueId: string) => {
@@ -233,16 +267,41 @@ export default function MaterialLogsPage() {
     );
   };
 
+  // Check if any queued item has quantity <= 0 or is invalid
+  const hasInvalidQuantity = useMemo(() => {
+    return (
+      tempSelectedMaterials.length === 0 ||
+      tempSelectedMaterials.some(
+        (item) => Number(item.quantity) <= 0 || isNaN(Number(item.quantity))
+      )
+    );
+  }, [tempSelectedMaterials]);
+
   // Save queued materials to database
-  const handleSaveLogs = async () => {
-    const activeProject = selectedProject || (selectedDetailGroup && projectsList.find(p => p.id === selectedDetailGroup.projectId));
-    if (!activeProject || tempSelectedMaterials.length === 0) return;
+  const handleSaveLogs = async (keepOpen = false) => {
+    const activeProject = selectedProject;
+    if (!activeProject || tempSelectedMaterials.length === 0) {
+      toast({
+        title: "Cannot save",
+        description: "Please select a site and add at least one material to log.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (tempSelectedMaterials.some((item) => Number(item.quantity) <= 0 || isNaN(Number(item.quantity)))) {
+      toast({
+        title: "Invalid quantity",
+        description: "All quantities must be greater than 0 to save.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSubmittingLogs(true);
     let successCount = 0;
     const newRecords: ProjectMaterialLog[] = [];
-
-    const activeDate = selectedDetailGroup ? selectedDetailGroup.date : currentDate;
+    const activeDate = currentDate;
 
     for (const item of tempSelectedMaterials) {
       try {
@@ -277,17 +336,18 @@ export default function MaterialLogsPage() {
     }
 
     if (successCount > 0) {
-      // Update the React Query cache directly — no refetch needed
       queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) => [
         ...newRecords,
         ...prev,
       ]);
       toast({
-        title: "Materials logged",
-        description: `Successfully added ${successCount} material logs to "${activeProject.name}".`,
+        title: "Materials logged successfully",
+        description: `Successfully logged ${successCount} material(s) for "${activeProject.name}".`,
       });
       setTempSelectedMaterials([]);
-      setIsModalOpen(false);
+      if (!keepOpen) {
+        setIsAddMode(false);
+      }
     }
     setSubmittingLogs(false);
   };
@@ -298,7 +358,6 @@ export default function MaterialLogsPage() {
 
     try {
       await apiRequest.delete("project-material-logs", id);
-      // Update cache directly — no refetch needed
       queryClient.setQueryData<ProjectMaterialLog[]>(["material-logs"], (prev = []) =>
         prev.filter((item) => item.id !== id)
       );
@@ -315,38 +374,14 @@ export default function MaterialLogsPage() {
     }
   };
 
-
-
-  // Filter projects local list
-  const filteredProjects = useMemo(() => {
-    const term = projectSearch.toLowerCase().trim();
-    if (!term) return localProjectsList.slice(0, 10);
-    return localProjectsList.filter((p) => p.name?.toLowerCase().includes(term));
-  }, [localProjectsList, projectSearch]);
-
-  // Filter products added to the selected project site
-  const filteredProducts = useMemo(() => {
-    const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
-    const term = productSearch.toLowerCase().trim();
-    if (!term) return projectProducts;
-    return projectProducts.filter(
-      (p: any) =>
-        p.name?.toLowerCase().includes(term) ||
-        p.category?.toLowerCase().includes(term)
-    );
-  }, [fullSelectedProject, productSearch]);
-
-  // Apply UI Filters for Listings
+  // Filtered logs for ledger view
   const filteredLogs = useMemo(() => {
     return logsList.filter((log) => {
-      // Product name search
       if (filterSearch.trim()) {
         const term = filterSearch.toLowerCase().trim();
         if (!log.product?.name?.toLowerCase().includes(term)) return false;
       }
-      // Project filter
       if (filterProjectId && log.projectId !== filterProjectId) return false;
-      // Date filter
       if (filterDate) {
         const start = new Date(filterDate);
         start.setHours(0, 0, 0, 0);
@@ -361,7 +396,10 @@ export default function MaterialLogsPage() {
 
   // Group logs by Date + Project
   const groupedLogs = useMemo(() => {
-    const groups: Record<string, { date: string; projectId: string; projectName: string; records: ProjectMaterialLog[] }> = {};
+    const groups: Record<
+      string,
+      { date: string; projectId: string; projectName: string; records: ProjectMaterialLog[] }
+    > = {};
 
     filteredLogs.forEach((log) => {
       const parsedDate = new Date(log.date);
@@ -382,16 +420,6 @@ export default function MaterialLogsPage() {
     return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [filteredLogs]);
 
-  // Separate today's logs from historical logs
-  const todayStr = new Date().toISOString().split("T")[0];
-  const todaysGroups = useMemo(() => {
-    return groupedLogs.filter((g) => g.date === currentDate);
-  }, [groupedLogs, currentDate]);
-
-  const historyGroups = useMemo(() => {
-    return groupedLogs.filter((g) => g.date !== currentDate);
-  }, [groupedLogs, currentDate]);
-
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "—";
     try {
@@ -407,6 +435,7 @@ export default function MaterialLogsPage() {
     }
   };
 
+  // Detailed group records
   const activeDetailRecords = useMemo(() => {
     if (!selectedDetailGroup) return [];
     return logsList.filter((r) => {
@@ -414,9 +443,8 @@ export default function MaterialLogsPage() {
       try {
         const parsed = new Date(r.date);
         if (isNaN(parsed.getTime())) return false;
-        const offset = parsed.getTimezoneOffset();
-        const local = new Date(parsed.getTime() - (offset * 60 * 1000));
-        return local.toISOString().split("T")[0] === selectedDetailGroup.date;
+        const dStr = parsed.toISOString().split("T")[0];
+        return dStr === selectedDetailGroup.date;
       } catch {
         return false;
       }
@@ -425,17 +453,382 @@ export default function MaterialLogsPage() {
 
   const handleBackToLedger = () => {
     setSelectedDetailGroup(null);
-    setSelectedProject(null);
-    setFullSelectedProject(null);
+    setIsAddMode(false);
     setTempSelectedMaterials([]);
   };
 
-  // Toggle card states
-  const [showAddCard, setShowAddCard] = useState(false);
-  const [showFilterCard, setShowFilterCard] = useState(false);  return (
+  // Total quantity staged in current queue
+  const totalStagedQuantity = useMemo(() => {
+    return tempSelectedMaterials.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  }, [tempSelectedMaterials]);
+
+  // Total estimated amount staged in current queue
+  const totalStagedAmount = useMemo(() => {
+    return tempSelectedMaterials.reduce(
+      (sum, item) => sum + (Number(item.quantity) || 0) * Number(item.product?.price || 0),
+      0
+    );
+  }, [tempSelectedMaterials]);
+
+  return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Ledger Mode */}
-      {!selectedDetailGroup && (
+      {/* ─────────────────────────────────────────────────────────────
+          MODE 1: DIRECT ADD MATERIAL USAGE PAGE / CARD
+      ───────────────────────────────────────────────────────────── */}
+      {isAddMode && (
+        <div className="space-y-6 max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-zinc-800/80 pb-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsAddMode(false);
+                  setTempSelectedMaterials([]);
+                  setProductSelectId("");
+                  setProductSelectDisplay("");
+                }}
+                className="h-9 px-3 gap-1.5 font-semibold text-xs rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Ledger
+              </Button>
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-800 dark:text-slate-100 font-display flex items-center gap-2">
+                  <PackagePlus className="h-6 w-6 text-primary" />
+                  Log Material Usage
+                </h2>
+                <p className="text-xs text-muted-foreground font-medium">
+                  Record paints and materials consumed on site directly
+                </p>
+              </div>
+            </div>
+
+            {selectedProject && (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
+                  <Building className="h-3 w-3 mr-1 inline" />
+                  {selectedProject.name}
+                </Badge>
+                <Badge variant="secondary" className="font-semibold text-xs px-3 py-1 rounded-full">
+                  <Calendar className="h-3 w-3 mr-1 inline" />
+                  {formatDate(currentDate)}
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Unified Card for Logging Material Usage */}
+          <Card className="border border-slate-200/80 bg-white dark:bg-zinc-950 shadow-md rounded-2xl overflow-visible">
+            <CardHeader className="py-4 px-6 border-b bg-slate-50/50 dark:bg-zinc-900/20">
+              <CardTitle className="text-sm font-extrabold tracking-tight flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                <ClipboardList className="h-4 w-4 text-primary" />
+                Material Usage Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6 overflow-visible">
+              {/* Step 1: Work Date & Project Site */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Work Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    Work Date *
+                  </label>
+                  <Input
+                    type="date"
+                    value={currentDate}
+                    onChange={(e) => setCurrentDate(e.target.value)}
+                    className="font-medium h-10 pl-3"
+                  />
+                </div>
+
+                {/* Project Site Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building className="h-3.5 w-3.5 text-primary" />
+                    Project Site *
+                  </label>
+                  <SearchableSelect
+                    value={selectedProject?.id || ""}
+                    displayValue={projectSelectDisplay}
+                    options={projectsList
+                      .filter(
+                        (p) =>
+                          !projectSelectDisplay ||
+                          p.name.toLowerCase().includes(projectSelectDisplay.toLowerCase())
+                      )
+                      .slice(0, 15)
+                      .map((p) => ({ id: p.id, label: p.name }))}
+                    placeholder="Search project site..."
+                    allLabel="Select a project site"
+                    onSearchChange={setProjectSelectDisplay}
+                    onSelect={(id, label) => {
+                      const match = projectsList.find((p) => p.id === id);
+                      if (match) {
+                        setSelectedProject(match);
+                        setProjectSelectDisplay(label);
+                        fetchFullProjectDetails(id);
+                      }
+                    }}
+                    onClear={() => {
+                      setSelectedProject(null);
+                      setProjectSelectDisplay("");
+                      setFullSelectedProject(null);
+                      setTempSelectedMaterials([]);
+                      setProductSelectId("");
+                      setProductSelectDisplay("");
+                    }}
+                    inputHeight="h-10"
+                    textSize="text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Step 2: Product / Material Searchable Dropdown */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-primary" />
+                    Product / Material *
+                  </span>
+                  {selectedProject && (
+                    <span className="text-[11px] text-muted-foreground font-normal">
+                      (Site materials & all catalog products available)
+                    </span>
+                  )}
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+                  <div className="flex-1">
+                    <SearchableSelect
+                      value={productSelectId}
+                      displayValue={productSelectDisplay}
+                      options={productOptions}
+                      placeholder={
+                        !selectedProject
+                          ? "Select a project site first..."
+                          : "Search product from catalog by name, brand, or category..."
+                      }
+                      disabled={!selectedProject}
+                      onSearchChange={setProductSelectDisplay}
+                      onSelect={(id, label) => {
+                        handleSelectProductFromDropdown(id, label);
+                      }}
+                      onClear={() => {
+                        setProductSelectId("");
+                        setProductSelectDisplay("");
+                      }}
+                      inputHeight="h-10"
+                      textSize="text-sm font-medium"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={!selectedProject || !productSelectId}
+                    onClick={() => {
+                      handleSelectProductFromDropdown(productSelectId, productSelectDisplay);
+                    }}
+                    className="h-10 px-4 font-bold flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add to Log
+                  </Button>
+                </div>
+              </div>
+
+              {/* Step 3: Staged Materials List */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ClipboardList className="h-3.5 w-3.5 text-emerald-600" />
+                    Materials Being Logged ({tempSelectedMaterials.length})
+                  </h3>
+                  {tempSelectedMaterials.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTempSelectedMaterials([])}
+                      className="text-xs text-muted-foreground hover:text-destructive h-7 px-2"
+                    >
+                      Clear All
+                    </Button>
+                  )}
+                </div>
+
+                {tempSelectedMaterials.length === 0 ? (
+                  <div className="p-8 text-center border border-dashed border-slate-200 dark:border-zinc-800 rounded-xl space-y-2 bg-slate-50/40 dark:bg-zinc-900/20">
+                    <PackagePlus className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+                    <p className="text-xs font-bold text-foreground">No materials added yet</p>
+                    <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                      {!selectedProject
+                        ? "Select a project site first, then search and choose products from the dropdown above."
+                        : "Use the searchable dropdown above to select products from the catalog or site materials to log for this date."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="divide-y border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-xs">
+                      {tempSelectedMaterials.map(
+                        ({ queueId, product: p, quantity }) => {
+                          if (!p) return null;
+                          const isInvalid = Number(quantity) <= 0 || isNaN(Number(quantity));
+
+                          return (
+                            <div
+                              key={queueId}
+                              className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-bold text-xs text-slate-800 dark:text-slate-100">
+                                    {p.name}
+                                  </p>
+                                  {p.brand?.name && (
+                                    <span className="text-[10px] text-muted-foreground font-medium">
+                                      ({p.brand.name})
+                                    </span>
+                                  )}
+                                  {Number(p.price || 0) > 0 && (
+                                    <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-1.5 py-0.5 rounded">
+                                      ₹{Number(p.price).toLocaleString("en-IN")} / unit
+                                    </span>
+                                  )}
+                                </div>
+                                {Number(p.price || 0) > 0 && Number(quantity) > 0 && (
+                                  <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                                    Total: <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{(Number(quantity) * Number(p.price)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-4 self-end sm:self-center">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                                    Quantity:
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      showClear={false}
+                                      value={quantity === 0 ? "0" : (quantity ?? "")}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        handleUpdateQueueQuantity(
+                                          queueId,
+                                          raw === "" ? 0 : parseFloat(raw)
+                                        );
+                                      }}
+                                      className={`h-8 w-20 text-xs font-bold text-center px-2 ${
+                                        isInvalid
+                                          ? "border-destructive focus-visible:ring-destructive text-destructive"
+                                          : ""
+                                      }`}
+                                      placeholder="0"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQueueQuantity(queueId, 0)}
+                                      tabIndex={-1}
+                                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-full focus:outline-none ml-1.5"
+                                      title="Clear value"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                    {isInvalid && (
+                                      <span className="text-[10px] text-destructive font-semibold ml-2 whitespace-nowrap">
+                                        Must be &gt; 0
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFromQueue(queueId)}
+                                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                                  title="Remove from log"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    {/* Summary Bar */}
+                    <div className="p-3.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 rounded-xl flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <span className="text-muted-foreground font-medium">
+                          Total Products:{" "}
+                          <strong className="text-foreground">{tempSelectedMaterials.length}</strong>
+                        </span>
+                        <span className="text-muted-foreground font-medium">
+                          Total Quantity:{" "}
+                          <strong className="text-foreground font-mono">{totalStagedQuantity} Packs</strong>
+                        </span>
+                        {totalStagedAmount > 0 && (
+                          <span className="text-muted-foreground font-medium">
+                            Total Value:{" "}
+                            <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+                              ₹{totalStagedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                      <Button
+                        type="button"
+                        onClick={() => handleSaveLogs(false)}
+                        disabled={submittingLogs || hasInvalidQuantity}
+                        className="flex-1 font-bold h-10 shadow-md"
+                      >
+                        {submittingLogs ? "Saving..." : "Save"}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={submittingLogs || hasInvalidQuantity}
+                        onClick={() => handleSaveLogs(true)}
+                        className="sm:w-auto font-semibold h-10 px-4"
+                      >
+                        Save & Log Another Site
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setTempSelectedMaterials([]);
+                          setIsAddMode(false);
+                          setProductSelectId("");
+                          setProductSelectDisplay("");
+                        }}
+                        className="sm:w-auto text-xs text-muted-foreground h-10 px-4"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODE 2: LEDGER VIEW (DEFAULT)
+      ───────────────────────────────────────────────────────────── */}
+      {!isAddMode && !selectedDetailGroup && (
         <>
           {/* PAGE HEADER */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
@@ -454,7 +847,7 @@ export default function MaterialLogsPage() {
               >
                 <SlidersHorizontal className="h-4 w-4" />
                 Filters
-                {(filterSearch || filterDate || filterProjectId) ? (
+                {filterSearch || filterDate || filterProjectId ? (
                   <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
                     !
                   </span>
@@ -462,8 +855,10 @@ export default function MaterialLogsPage() {
               </Button>
 
               <Button
-                variant={showAddCard ? "default" : "outline"}
-                onClick={() => setShowAddCard(!showAddCard)}
+                onClick={() => {
+                  setIsAddMode(true);
+                  setSelectedDetailGroup(null);
+                }}
                 className="font-medium flex items-center gap-1.5 shadow-sm"
               >
                 <Plus className="h-4 w-4" />
@@ -471,126 +866,6 @@ export default function MaterialLogsPage() {
               </Button>
             </div>
           </div>
-
-          {/* ADD DAILY LOGS CARD */}
-          {showAddCard && (
-            <Card className="border border-slate-200/80 bg-white dark:bg-zinc-950 shadow-sm rounded-2xl overflow-visible">
-              <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/10">
-                <CardTitle className="text-sm font-extrabold tracking-wide uppercase text-slate-700 dark:text-zinc-300 flex items-center gap-2">
-                  <Package className="h-4 w-4 text-primary animate-pulse" />
-                  Start Material Logging
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4 overflow-visible">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Date Input */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Select Work Date *
-                    </label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input
-                        type="date"
-                        className="pl-9 font-medium"
-                        value={currentDate}
-                        onChange={(e) => {
-                          setCurrentDate(e.target.value);
-                          setTempSelectedMaterials([]);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Site Selection Input */}
-                  <div ref={projectRef} className="space-y-1 relative overflow-visible">
-                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Select Project Site *
-                    </label>
-                    <div className="relative">
-                      <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input
-                        showClear={false}
-                        className="pl-9 pr-8 font-medium"
-                        placeholder="Type project name... (Enter to search server)"
-                        value={projectSearch}
-                        onFocus={() => setProjectOpen(true)}
-                        onChange={(e) => {
-                          setProjectSearch(e.target.value);
-                          setProjectOpen(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            searchProjectsFromServer(projectSearch);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setProjectOpen(!projectOpen);
-                        }}
-                        onMouseDown={(e) => e.preventDefault()}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    {projectOpen && (
-                      <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                        {projectSearching && (
-                          <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
-                            <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                            Searching server...
-                          </div>
-                        )}
-                        {filteredProjects.map((p) => (
-                          <div
-                            key={p.id}
-                            className="px-4 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors"
-                            onMouseDown={() => {
-                              setSelectedProject(p);
-                              setProjectSearch(p.name);
-                              setProjectOpen(false);
-                              setTempSelectedMaterials([]);
-                            }}
-                          >
-                            {p.name}
-                          </div>
-                        ))}
-                        {!projectSearching && filteredProjects.length === 0 && (
-                          <div className="px-4 py-2 text-xs text-muted-foreground">
-                            No matches. Press Enter to search server.
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full font-bold shadow-md h-10 mt-2"
-                  disabled={!selectedProject}
-                  onClick={() => {
-                    if (selectedProject) {
-                      setSelectedDetailGroup({
-                        date: currentDate,
-                        projectId: selectedProject.id,
-                        projectName: selectedProject.name
-                      });
-                      fetchFullProjectDetails(selectedProject.id);
-                      setShowAddCard(false);
-                    }
-                  }}
-                >
-                  Start Logging Materials
-                </Button>
-              </CardContent>
-            </Card>
-          )}
 
           {/* FILTER CONTROLS FOR TABLE LISTINGS */}
           {showFilterCard && (
@@ -617,14 +892,24 @@ export default function MaterialLogsPage() {
                     value={filterProjectId}
                     displayValue={filterProjectDisplay}
                     options={projectsList
-                      .filter((p) => !filterProjectDisplay || p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase()))
+                      .filter(
+                        (p) =>
+                          !filterProjectDisplay ||
+                          p.name.toLowerCase().includes(filterProjectDisplay.toLowerCase())
+                      )
                       .slice(0, 10)
                       .map((p) => ({ id: p.id, label: p.name }))}
                     placeholder="All Projects"
                     allLabel="All Projects"
                     onSearchChange={setFilterProjectDisplay}
-                    onSelect={(id, label) => { setFilterProjectId(id); setFilterProjectDisplay(id ? label : ""); }}
-                    onClear={() => { setFilterProjectId(""); setFilterProjectDisplay(""); }}
+                    onSelect={(id, label) => {
+                      setFilterProjectId(id);
+                      setFilterProjectDisplay(id ? label : "");
+                    }}
+                    onClear={() => {
+                      setFilterProjectId("");
+                      setFilterProjectDisplay("");
+                    }}
                     inputHeight="h-9"
                     textSize="text-xs"
                   />
@@ -654,7 +939,7 @@ export default function MaterialLogsPage() {
             </Card>
           )}
 
-          {/* GROUPED LEDGER LOGS AND TIMELINE */}
+          {/* GROUPED LEDGER LOGS TABLE */}
           <div className="space-y-6">
             {loadingLogs ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white/40 dark:bg-zinc-950/40 rounded-2xl border border-slate-200 dark:border-zinc-800">
@@ -671,7 +956,7 @@ export default function MaterialLogsPage() {
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Date</th>
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Project Site</th>
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Items Logged</th>
-                      <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Volume</th>
+                      <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Value</th>
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                     </tr>
                   </thead>
@@ -679,13 +964,16 @@ export default function MaterialLogsPage() {
                     {groupedLogs.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="h-24 text-center text-muted-foreground align-middle">
-                          No results found.
+                          No material logs found. Click "Log Material Usage" above to start logging.
                         </td>
                       </tr>
                     ) : (
                       groupedLogs.map((g) => {
-                        const totalVolume = g.records.reduce((sum, r) => {
-                          return sum + (Number(r.quantity || 0) * getProductSizeInLitres(r.product?.size));
+                        const totalAmount = g.records.reduce((sum, r) => {
+                          return (
+                            sum +
+                            Number(r.quantity || 0) * Number(r.product?.price || 0)
+                          );
                         }, 0);
                         return (
                           <tr
@@ -693,26 +981,30 @@ export default function MaterialLogsPage() {
                             className="border-b transition-colors hover:bg-muted/30 cursor-pointer"
                             onClick={() => {
                               setSelectedDetailGroup(g);
-                              const matchProj = projectsList.find(p => p.id === g.projectId);
+                              const matchProj = projectsList.find((p) => p.id === g.projectId);
                               if (matchProj) {
                                 setSelectedProject(matchProj);
+                                setProjectSelectDisplay(matchProj.name);
                                 fetchFullProjectDetails(matchProj.id);
                               }
                             }}
                           >
-                            <td className="p-4 align-middle">
-                              {formatDate(g.date)}
-                            </td>
+                            <td className="p-4 align-middle font-medium">{formatDate(g.date)}</td>
                             <td className="p-4 align-middle font-bold text-foreground">
                               {g.projectName}
                             </td>
                             <td className="p-4 align-middle text-center">
-                              <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 font-semibold text-xs px-2.5 py-0.5 rounded-full border border-slate-200/20">
+                              <Badge
+                                variant="secondary"
+                                className="bg-slate-100 dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 font-semibold text-xs px-2.5 py-0.5 rounded-full border border-slate-200/20"
+                              >
                                 {g.records.length} Item{g.records.length > 1 ? "s" : ""}
                               </Badge>
                             </td>
-                            <td className="p-4 align-middle text-right font-mono font-bold">
-                              {totalVolume.toFixed(1)} Litres
+                            <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              {totalAmount > 0
+                                ? `₹${totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : "—"}
                             </td>
                             <td className="p-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                               <Button
@@ -720,15 +1012,16 @@ export default function MaterialLogsPage() {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedDetailGroup(g);
-                                  const matchProj = projectsList.find(p => p.id === g.projectId);
+                                  const matchProj = projectsList.find((p) => p.id === g.projectId);
                                   if (matchProj) {
                                     setSelectedProject(matchProj);
+                                    setProjectSelectDisplay(matchProj.name);
                                     fetchFullProjectDetails(matchProj.id);
                                   }
                                 }}
                                 className="font-bold text-xs text-primary hover:text-primary hover:bg-primary/5 rounded-lg"
                               >
-                                View & Log
+                                View Sheet
                               </Button>
                             </td>
                           </tr>
@@ -743,8 +1036,10 @@ export default function MaterialLogsPage() {
         </>
       )}
 
-      {/* Detailed View Mode */}
-      {selectedDetailGroup && (
+      {/* ─────────────────────────────────────────────────────────────
+          MODE 3: DETAILED VIEW MODE (VIEW SPECIFIC SHEET)
+      ───────────────────────────────────────────────────────────── */}
+      {selectedDetailGroup && !isAddMode && (
         <div className="space-y-6">
           {/* Back Button and Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-zinc-800/60 pb-4">
@@ -771,12 +1066,36 @@ export default function MaterialLogsPage() {
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
                 {activeDetailRecords.length} Items Logged
               </Badge>
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
-                Volume: {activeDetailRecords.reduce((sum, r) => sum + (Number(r.quantity || 0) * getProductSizeInLitres(r.product?.size)), 0).toFixed(1)} L
-              </Badge>
-              <Button size="sm" className="font-bold h-8 ml-2" onClick={() => setIsModalOpen(true)}>
+              {activeDetailRecords.reduce((sum, r) => sum + Number(r.quantity || 0) * Number(r.product?.price || 0), 0) > 0 && (
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
+                  Total Value: ₹{activeDetailRecords
+                    .reduce(
+                      (sum, r) =>
+                        sum + Number(r.quantity || 0) * Number(r.product?.price || 0),
+                      0
+                    )
+                    .toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                className="font-bold h-8 ml-2"
+                onClick={() => {
+                  setCurrentDate(selectedDetailGroup.date);
+                  const matchProj =
+                    projectsList.find((p) => p.id === selectedDetailGroup.projectId) ||
+                    selectedProject;
+                  if (matchProj) {
+                    setSelectedProject(matchProj);
+                    setProjectSelectDisplay(matchProj.name);
+                    fetchFullProjectDetails(matchProj.id);
+                  }
+                  setIsAddMode(true);
+                  setSelectedDetailGroup(null);
+                }}
+              >
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Log Materials
+                Log More Materials
               </Button>
             </div>
           </div>
@@ -795,39 +1114,55 @@ export default function MaterialLogsPage() {
                   <div className="p-16 text-center text-muted-foreground flex flex-col items-center justify-center space-y-3">
                     <Package className="h-10 w-10 opacity-30 animate-pulse" />
                     <p className="text-sm font-semibold">No materials logged for this site yet.</p>
-                    <p className="text-xs opacity-70">Click "Log Materials" above to search and add paint products.</p>
+                    <p className="text-xs opacity-70">Click "Log More Materials" above to add paint products.</p>
                   </div>
                 ) : (
                   <div className="w-full overflow-x-auto no-scrollbar">
                     <table className="w-full min-w-max text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50 transition-colors">
-                          <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Product Name</th>
-                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Pack Quantity</th>
-                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Volume</th>
-                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
+                          <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">
+                            Product Name
+                          </th>
+                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
+                            Price / Unit
+                          </th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">
+                            Pack Quantity
+                          </th>
+                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
+                            Total Price
+                          </th>
+                          <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">
+                            Actions
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {activeDetailRecords.map((r) => {
-                          const litresPerPack = getProductSizeInLitres(r.product?.size);
-                          const totalLitres = Number(r.quantity) * litresPerPack;
+                          const unitPrice = Number(r.product?.price || 0);
+                          const totalPrice = Number(r.quantity || 0) * unitPrice;
                           return (
                             <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
                               <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
                                 {r.product?.name}
-                                <span className="text-[10px] text-muted-foreground font-normal ml-2">({r.product?.size || "1ltr"})</span>
+                              </td>
+                              <td className="p-4 align-middle text-right font-mono text-slate-700 dark:text-slate-300">
+                                {unitPrice > 0 ? `₹${unitPrice.toLocaleString("en-IN")}` : "—"}
                               </td>
                               <td className="p-4 align-middle text-center font-semibold">
                                 {Number(r.quantity)} Pack{Number(r.quantity) > 1 ? "s" : ""}
                               </td>
                               <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                {totalLitres.toFixed(1)} Litres
+                                {totalPrice > 0
+                                  ? `₹${totalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : "—"}
                               </td>
                               <td className="p-4 align-middle text-center">
                                 <button
                                   onClick={() => handleDeleteLog(r.id, r.product?.name || "Product")}
                                   className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all"
+                                  title="Delete Log"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -842,181 +1177,6 @@ export default function MaterialLogsPage() {
               </CardContent>
             </Card>
           </div>
-
-          {/* Form Entry Dialog Modal */}
-          <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-            <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-visible">
-              <DialogHeader>
-                <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary" />
-                  Log Materials Added
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="space-y-4 pt-2 overflow-visible">
-                {/* Search Products */}
-                <div ref={productRef} className="space-y-1.5 relative overflow-visible">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Search & Select Product *
-                  </label>
-                  <div className="relative">
-                    <PackagePlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input
-                      showClear={false}
-                      className="pl-9 pr-8"
-                      placeholder="Search products added to this project..."
-                      value={productSearch}
-                      onFocus={() => setProductOpen(true)}
-                      onChange={(e) => {
-                        setProductSearch(e.target.value);
-                        setProductOpen(true);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setProductOpen(!productOpen);
-                      }}
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {productOpen && (
-                    <div className="absolute z-[999] bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-xl shadow-xl max-h-48 overflow-y-auto mt-2 animate-in fade-in-50 slide-in-from-top-1 duration-150">
-                      {fetchingProject && (
-                        <div className="px-4 py-2 text-xs text-muted-foreground italic flex items-center gap-2">
-                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                          Loading project products...
-                        </div>
-                      )}
-                      {!fetchingProject && filteredProducts.map((prod) => (
-                        <div
-                          key={prod.id}
-                          className="px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm font-semibold transition-colors flex items-center justify-between"
-                          onMouseDown={() => handleQueueProduct(prod)}
-                        >
-                          <div>
-                            <span>{prod.name}</span>
-                            {prod.category && (
-                              <span className="text-[10px] text-muted-foreground ml-2 px-1.5 py-0.5 bg-slate-100 dark:bg-zinc-800 rounded font-normal">
-                                {prod.category}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {prod.size || "1ltr"}
-                          </span>
-                        </div>
-                      ))}
-                      {!fetchingProject && filteredProducts.length === 0 && (
-                        <div className="px-4 py-2 text-xs text-muted-foreground text-center py-4">
-                          No matching products added to this project.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Queued Materials List */}
-                {tempSelectedMaterials.length > 0 && (
-                  <div className="space-y-4 pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase text-slate-600 dark:text-zinc-400 tracking-wider">
-                        Queue ({tempSelectedMaterials.length})
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleSaveLogs}
-                        disabled={submittingLogs}
-                        className="font-bold text-xs shadow-md"
-                      >
-                        {submittingLogs ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <PackagePlus className="h-3.5 w-3.5 mr-1.5" />
-                            Log Entry
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {tempSelectedMaterials.map(({ queueId, product: p, quantity, allocatedArea, unit }) => {
-                        const litresPerPack = getProductSizeInLitres(p.size);
-                        const totalLitresLogged = quantity * litresPerPack;
-                        const coveragePerLitre = Number(p.coverageSqFt || p.coverageRnFt || 0);
-                        const actualCoverage = totalLitresLogged * coveragePerLitre;
-                        const isExceeding = allocatedArea > 0 && actualCoverage > allocatedArea;
-
-                        return (
-                          <div
-                            key={queueId}
-                            className="p-3 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2 shadow-sm"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{p.name}</span>
-                                <Badge variant="outline" className="text-[9px] px-1 py-0 rounded">
-                                  {p.size || "1ltr"}
-                                </Badge>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleQueueProduct(p)} // toggles remove from queue
-                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pt-0.5 items-center">
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  type="number"
-                                  min="0.01"
-                                  step="0.01"
-                                  value={quantity}
-                                  onChange={(e) => handleUpdateQueueQuantity(queueId, Number(e.target.value))}
-                                  className="h-7 w-16 text-xs text-center px-1"
-                                />
-                                <span className="text-[10px] text-slate-400 font-bold">Packs</span>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-[10px] text-slate-400 block font-semibold">Coverage:</span>
-                                <span className={`text-[11px] font-bold ${isExceeding ? "text-rose-600" : "text-emerald-600"}`}>
-                                  {actualCoverage.toFixed(1)} {unit}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsModalOpen(false)}
-                    className="h-9 text-xs font-bold"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ import { useMasterData } from "../hooks/use-master-data";
 import type { Task } from "../types/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { MasterForm } from "../components/masters/MasterForm";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, CheckCircle2 } from "lucide-react";
 
 // Format date helper: "dd MMM yyyy"
 const formatDate = (dateStr: any) => {
@@ -205,8 +205,11 @@ export default function TasksPage({ projectId }: { projectId?: string }) {
             setEditingItem(item);
             setIsModalOpen(true);
           }}
+          deleteLabel="Done"
+          deleteIcon={<CheckCircle2 className="mr-2 h-4 w-4 text-emerald-600" />}
+          deleteClassName="text-emerald-600 focus:text-emerald-600 cursor-pointer"
           onDelete={(item) => {
-            if (window.confirm("Are you sure you want to delete this task?")) {
+            if (window.confirm("Are you sure you want to mark this task as done?")) {
               remove(item.id);
             }
           }}

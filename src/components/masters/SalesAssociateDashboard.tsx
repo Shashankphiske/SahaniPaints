@@ -46,7 +46,7 @@ export default function SalesAssociateDashboard({
 
   const stats = useMemo(() => {
     const totalValue = projects.reduce(
-      (sum, p) => sum + (Number(p.totalAmount) || 0),
+      (sum, p) => sum + (Number(p.agreedPrice ?? p.totalAmount) || 0),
       0
     );
     const completed = projects.filter((p) => p.status === "COMPLETED").length;
@@ -83,7 +83,7 @@ export default function SalesAssociateDashboard({
       {
         key: "totalAmount",
         header: "Amount",
-        render: (p) => fmt(Number(p.totalAmount) || 0),
+        render: (p) => fmt(Number(p.agreedPrice ?? p.totalAmount) || 0),
       },
       {
         key: "projectDate",

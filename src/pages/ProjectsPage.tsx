@@ -48,6 +48,7 @@ import {
   Paintbrush,
   MapPin,
   CheckCircle2,
+  Edit,
 } from "lucide-react";
 import TasksPage from "./TasksPage";
 
@@ -531,9 +532,14 @@ export default function ProjectsPage() {
               ) : viewMode === "cards" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredProjects.map((project) => {
-                    const total = Number(project.totalAmount || project.agreedPrice || 0);
+                    const finalTotal = Number(project.agreedPrice ?? project.totalAmount ?? 0);
+                    const originalTotal = Number(project.totalAmount ?? 0);
+                    const hasDiscount = Boolean(
+                      (project.discount && Number(project.discount) > 0) ||
+                      (project.agreedPrice != null && originalTotal > 0 && Number(project.agreedPrice) < originalTotal)
+                    );
                     const paid = Number(project.paid || 0);
-                    const due = Math.max(0, total - paid);
+                    const due = Math.max(0, finalTotal - paid);
 
                     return (
                       <Card
@@ -585,10 +591,24 @@ export default function ProjectsPage() {
                           {/* Vertical Financial Pills with Simple Light Colors */}
                           <div className="flex flex-col gap-1.5 text-xs">
                             <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                              <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
-                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                                ₹{fmt(total)}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                                {hasDiscount && (
+                                  <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
+                                    Discounted
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {hasDiscount && (
+                                  <span className="text-[10px] line-through text-slate-400 font-medium">
+                                    ₹{fmt(originalTotal)}
+                                  </span>
+                                )}
+                                <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                                  ₹{fmt(finalTotal)}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
                               <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
@@ -2461,6 +2481,15 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     return materialLogs.filter((log: any) => log.productId === selectedPP.productId);
   }, [selectedPP, materialLogs]);
 
+  // Total cost across all logged materials for this project
+  const totalProjectMaterialCost = useMemo(() => {
+    return materialLogs.reduce((sum: number, log: any) => {
+      const matchPP = projectProducts.find((pp) => pp.productId === log.productId);
+      const unitPrice = Number(matchPP?.product?.price ?? matchPP?.rate ?? matchPP?.price ?? log.product?.price ?? 0);
+      return sum + Number(log.quantity || 0) * unitPrice;
+    }, 0);
+  }, [materialLogs, projectProducts]);
+
   // Compute metrics for selected product
   const selectedMetrics = useMemo(() => {
     if (!selectedPP) return null;
@@ -2468,6 +2497,9 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     const packSizeL = getProductSizeInLitres(selectedPP.product?.size);
     const totalPacks = matchedLogs.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
     const litresNum = totalPacks * packSizeL;
+
+    const unitPrice = Number(selectedPP.product?.price ?? selectedPP.rate ?? selectedPP.price ?? 0);
+    const totalCost = totalPacks * unitPrice;
 
     const coverageSqFtL = selectedPP.product?.coverageSqFt != null ? Number(selectedPP.product.coverageSqFt) : 0;
     const coverageRnFtL = selectedPP.product?.coverageRnFt != null ? Number(selectedPP.product.coverageRnFt) : 0;
@@ -2482,6 +2514,8 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
       packSizeL,
       totalPacks,
       litresNum,
+      unitPrice,
+      totalCost,
       coverageSqFtL,
       coverageRnFtL,
       actualCoverage,
@@ -2550,7 +2584,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Package className="h-4.5 w-4.5 text-primary" />
@@ -2560,12 +2594,19 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             Click any product row below to inspect detailed material logs & consumption history.
           </p>
         </div>
-        <Button asChild size="sm" className="font-bold">
-          <Link to="/material-usage">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Log Materials
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {totalProjectMaterialCost > 0 && (
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 font-mono font-bold px-3 py-1 text-xs">
+              Total Logged: ₹{fmt(totalProjectMaterialCost)}
+            </Badge>
+          )}
+          <Button asChild size="sm" className="font-bold">
+            <Link to="/material-usage">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Log Materials
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
@@ -2573,8 +2614,10 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
           <TableHeader>
             <TableRow className="bg-slate-50 dark:bg-zinc-900/50">
               <TableHead>Product</TableHead>
+              <TableHead className="text-right">Unit Price</TableHead>
               <TableHead>Area</TableHead>
-              <TableHead>Litres Logged</TableHead>
+              <TableHead>Quantity Logged</TableHead>
+              <TableHead className="text-right">Total Cost</TableHead>
               <TableHead>Coverage</TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
@@ -2583,7 +2626,11 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             {projectProducts.map((pp) => {
               const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
               const packSizeL = getProductSizeInLitres(pp.product?.size);
-              const litresNum = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0) * packSizeL;
+              const totalPacks = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
+              const litresNum = totalPacks * packSizeL;
+
+              const unitPrice = Number(pp.product?.price ?? pp.rate ?? pp.price ?? 0);
+              const totalCost = totalPacks * unitPrice;
 
               const coverageSqFtL = pp.product?.coverageSqFt != null ? Number(pp.product.coverageSqFt) : 0;
               const coverageRnFtL = pp.product?.coverageRnFt != null ? Number(pp.product.coverageRnFt) : 0;
@@ -2609,28 +2656,39 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                         <span>{pp.product?.name || "Paint Product"}</span>
                         {pp.product?.brand?.name && (
                           <span className="text-[10px] text-muted-foreground font-medium block">
-                            Brand: {pp.product.brand.name} {pp.product.size ? `(${pp.product.size})` : ""}
+                            Brand: {pp.product.brand.name}
                           </span>
                         )}
                       </div>
                       <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-2" />
                     </div>
                   </TableCell>
+                  <TableCell className="text-right font-mono font-medium text-xs text-slate-700 dark:text-slate-300">
+                    {unitPrice > 0 ? `₹${fmt(unitPrice)}` : "—"}
+                  </TableCell>
                   <TableCell className="font-medium text-xs">
                     {fmt(pp.area)} {pp.unit}
                   </TableCell>
                   <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
-                    {fmt(litresNum)} L
+                    {totalPacks} Pack{totalPacks !== 1 ? "s" : ""}
+                    {litresNum > 0 && (
+                      <span className="text-[11px] text-muted-foreground font-normal ml-1">
+                        ({fmt(litresNum)} L)
+                      </span>
+                    )}
                     <span className="text-[10px] text-muted-foreground block font-normal">
                       {loggedProducts.length} log entry{loggedProducts.length !== 1 ? "ies" : ""}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                    {totalCost > 0 ? `₹${fmt(totalCost)}` : "—"}
                   </TableCell>
                   <TableCell>
                     <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{fmt(actualCoverage)}</span>
                     <span className="text-[10px] text-muted-foreground ml-1">{pp.unit}</span>
                   </TableCell>
                   <TableCell className="text-right">
-                    {litresNum === 0 ? (
+                    {litresNum === 0 && totalPacks === 0 ? (
                       <Badge variant="outline" className="bg-slate-50 text-slate-400">
                         No Usage Logged
                       </Badge>
@@ -2684,6 +2742,11 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       {selectedPP.product?.size && (
                         <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
                           Pack Size: {selectedPP.product.size}
+                        </Badge>
+                      )}
+                      {selectedMetrics.unitPrice > 0 && (
+                        <Badge variant="outline" className="text-[10px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200">
+                          Unit Price: ₹{fmt(selectedMetrics.unitPrice)}
                         </Badge>
                       )}
                     </div>
@@ -2748,7 +2811,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               {/* Modal Body with KPI Cards & Logs Table */}
               <div className="p-4 sm:p-5 overflow-y-auto max-h-[60vh] space-y-5">
                 {/* Metric Summary Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Designated Area</span>
                     <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
@@ -2768,6 +2831,16 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Est. Coverage Achieved</span>
                     <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
                       {fmt(selectedMetrics.actualCoverage)} {selectedPP.unit}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Total Material Cost</span>
+                    <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 mt-1 block">
+                      ₹{fmt(selectedMetrics.totalCost)}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {selectedMetrics.unitPrice > 0 ? `@ ₹${fmt(selectedMetrics.unitPrice)}/pack` : "Price not set"}
                     </span>
                   </div>
 
@@ -2817,6 +2890,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                             <TableHead className="text-xs">Packs Logged</TableHead>
                             <TableHead className="text-xs">Volume (Litres)</TableHead>
                             <TableHead className="text-xs">Coverage Contribution</TableHead>
+                            <TableHead className="text-xs text-right">Cost</TableHead>
                             <TableHead className="text-xs text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2824,6 +2898,8 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                           {matchedLogs.map((log: any) => {
                             const entryLitres = Number(log.quantity || 0) * selectedMetrics.packSizeL;
                             const entryCoverage = entryLitres * selectedMetrics.coveragePerL;
+                            const entryUnitPrice = Number(log.price ?? log.rate ?? selectedMetrics.unitPrice ?? 0);
+                            const entryCost = Number(log.quantity || 0) * entryUnitPrice;
 
                             return (
                               <TableRow key={log.id}>
@@ -2838,6 +2914,9 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                                 </TableCell>
                                 <TableCell className="font-semibold text-xs">
                                   +{fmt(entryCoverage)} {selectedPP.unit}
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                                  {entryCost > 0 ? `₹${fmt(entryCost)}` : "—"}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <Button
@@ -4108,7 +4187,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-7 w-7 text-slate-400 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                          className="h-7 w-7 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-zinc-900"
                           onClick={() => handleOpenEditModal(mapping)}
                         >
                           <Edit className="h-3.5 w-3.5" />
@@ -4149,7 +4228,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Room Progress Stepper
                       </span>
-                      <Badge className="bg-blue-650 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                      <Badge className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
                         <CheckCircle2 className="h-3 w-3" />
                         Current: {mapping.stage || "Putty"}
                       </Badge>
@@ -4184,7 +4263,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                                   isActive
                                     ? "bg-blue-600 text-white border-blue-700 scale-110 shadow-md"
                                     : isCompleted
-                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-450 dark:border-emerald-900"
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900"
                                     : "bg-white text-slate-400 border-slate-200 dark:bg-zinc-900 dark:border-zinc-800 hover:border-slate-400"
                                 }`}
                               >
@@ -4195,7 +4274,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                                   isActive
                                     ? "text-blue-600 dark:text-blue-400 font-extrabold"
                                     : isCompleted
-                                    ? "text-emerald-650 dark:text-emerald-500"
+                                    ? "text-emerald-600 dark:text-emerald-500"
                                     : "text-slate-400 group-hover:text-slate-600"
                                 }`}
                               >
@@ -4213,7 +4292,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-655 hover:bg-slate-50 dark:hover:bg-zinc-900 justify-start"
+                      className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-zinc-900 justify-start"
                       onClick={() => handleOpenEditModal(mapping)}
                     >
                       <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit
