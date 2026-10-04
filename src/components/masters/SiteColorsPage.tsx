@@ -55,17 +55,12 @@ export default function SiteColorsPage() {
   // Modal states for mapping colors
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
-  const [selectedColor, setSelectedColor] = useState<Color | null>(null);
+  const [modalColorName, setModalColorName] = useState("");
+  const [modalShade, setModalShade] = useState("");
   const [modalAreaSearch, setModalAreaSearch] = useState("");
-  const [modalColorSearch, setModalColorSearch] = useState("");
   const [modalAreaOpen, setModalAreaOpen] = useState(false);
-  const [modalColorOpen, setModalColorOpen] = useState(false);
   const modalAreaRef = useRef<HTMLDivElement>(null);
-  const modalColorRef = useRef<HTMLDivElement>(null);
   const [creatingArea, setCreatingArea] = useState(false);
-  const [hasSearchedArea, setHasSearchedArea] = useState(false);
-  const [hasSearchedColor, setHasSearchedColor] = useState(false);
-  const [creatingColor, setCreatingColor] = useState(false);
   const [modalDescription, setModalDescription] = useState("");
 
   // Modal states for duplicating mappings from another project
@@ -81,9 +76,6 @@ export default function SiteColorsPage() {
     const handleOutsideClick = (e: MouseEvent) => {
       if (modalAreaRef.current && !modalAreaRef.current.contains(e.target as Node)) {
         setModalAreaOpen(false);
-      }
-      if (modalColorRef.current && !modalColorRef.current.contains(e.target as Node)) {
-        setModalColorOpen(false);
       }
       if (modalDupProjectRef.current && !modalDupProjectRef.current.contains(e.target as Node)) {
         setModalDupProjectOpen(false);
@@ -122,14 +114,11 @@ export default function SiteColorsPage() {
 
   const openAddModal = () => {
     setSelectedArea(null);
-    setSelectedColor(null);
     setModalAreaSearch("");
-    setModalColorSearch("");
+    setModalColorName("");
+    setModalShade("");
     setModalDescription("");
     setModalAreaOpen(false);
-    setModalColorOpen(false);
-    setHasSearchedArea(false);
-    setHasSearchedColor(false);
     setIsAddModalOpen(true);
   };
 
@@ -172,69 +161,64 @@ export default function SiteColorsPage() {
       setCreatingArea(false);
     }
   };
-  // Create global color inline
-  const handleCreateGlobalColorInline = async (name: string) => {
-    if (!name.trim()) return;
-    setCreatingColor(true);
-    try {
-      const created = await apiRequest.create<Color>("colors", { name: name.trim() });
-      const fullCreated = { ...created, name: name.trim() };
-      setSelectedColor(fullCreated);
-      setModalColorSearch(name.trim());
-      setModalColorOpen(false);
-      toast({
-        title: "Color created",
-        description: `Created global color "${name.trim()}".`,
-      });
-    } catch (err: any) {
-      toast({
-        title: "Failed to create color",
-        description: err.message || "An error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setCreatingColor(false);
-    }
-  };
+
   // Save color-area mapping to project
   const handleSaveMapping = async () => {
     if (!selectedProject) return;
     if (!selectedArea) {
       toast({
         title: "Area required",
-        description: "Please select a workspace area.",
+        description: "Please select or create a site room area.",
         variant: "destructive",
       });
       return;
     }
-    if (!selectedColor) {
+    const shadeVal = modalShade.trim();
+    if (!shadeVal) {
       toast({
-        title: "Color required",
-        description: "Please select a paint color.",
+        title: "Shade number required",
+        description: "Shade number is compulsory.",
         variant: "destructive",
       });
       return;
     }
 
-    // Check duplicate
-    const isDuplicate = mappings.some(
-      (m) => m.areaId === selectedArea.id && m.colorId === selectedColor.id
-    );
-    if (isDuplicate) {
-      toast({
-        title: "Mapping already exists",
-        description: `"${selectedColor.name}" is already assigned to "${selectedArea.name}".`,
-        variant: "destructive",
-      });
-      return;
-    }
+    const colorNameVal = modalColorName.trim() || shadeVal;
 
     setCreatingArea(true);
     try {
+      // Find or create color in colors catalog
+      let colorRecord: Color | undefined = colorsData?.find(
+        (c) =>
+          c.shade?.toLowerCase().trim() === shadeVal.toLowerCase() &&
+          c.name?.toLowerCase().trim() === colorNameVal.toLowerCase()
+      );
+
+      if (!colorRecord) {
+        colorRecord = await apiRequest.create<Color>("colors", {
+          name: colorNameVal,
+          shade: shadeVal,
+        });
+      }
+
+      // Check duplicate
+      const isDuplicate = mappings.some(
+        (m) => m.areaId === selectedArea.id && m.colorId === colorRecord!.id
+      );
+      if (isDuplicate) {
+        toast({
+          title: "Mapping already exists",
+          description: `"${colorNameVal}" (${shadeVal}) is already assigned to "${selectedArea.name}".`,
+          variant: "destructive",
+        });
+        setCreatingArea(false);
+        return;
+      }
+
       const payload = {
         projectId: selectedProject.id,
         areaId: selectedArea.id,
-        colorId: selectedColor.id,
+        colorId: colorRecord.id,
         description: modalDescription.trim() || null,
       };
       const result = await apiRequest.create<ProjectAreaColor>("project-area-colors", payload);
@@ -243,17 +227,17 @@ export default function SiteColorsPage() {
         ...result,
         projectId: selectedProject.id,
         areaId: selectedArea.id,
-        colorId: selectedColor.id,
+        colorId: colorRecord.id,
         description: modalDescription.trim() || null,
         area: selectedArea,
-        color: selectedColor,
+        color: colorRecord,
       };
 
       setMappings((prev) => [mappingWithColor, ...prev]);
       setIsAddModalOpen(false);
       toast({
         title: "Mapping created",
-        description: `Successfully mapped "${selectedColor.name}" to "${selectedArea.name}".`,
+        description: `Successfully mapped Color "${colorNameVal}" and Shade "${shadeVal}" to "${selectedArea.name}".`,
       });
     } catch (err: any) {
       toast({
@@ -369,15 +353,6 @@ export default function SiteColorsPage() {
     return list.filter((p) => p.name?.toLowerCase().includes(term) || p.customer?.name?.toLowerCase().includes(term));
   }, [projectsData, projectSearch]);
 
-  // Filter colors by search query
-  const filteredColors = useMemo(() => {
-    const list = Array.isArray(colorsData) ? colorsData : [];
-    const term = modalColorSearch.toLowerCase().trim();
-    if (!term) return list.slice(0, 8);
-    return list.filter(
-      (c) => c.name?.toLowerCase().includes(term) || c.shade?.toLowerCase().includes(term)
-    );
-  }, [colorsData, modalColorSearch]);
 
   // Filter project dropdown list to duplicate from
   const filteredDupSourceProjects = useMemo(() => {
@@ -589,7 +564,8 @@ export default function SiteColorsPage() {
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-zinc-900/60 bg-slate-50/50 dark:bg-zinc-900/10">
                     <th className="p-4 pl-6 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Site Area</th>
-                    <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Mapped Color & Shade</th>
+                    <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Color</th>
+                    <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Shade</th>
                     <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Description</th>
                     <th className="p-4 text-[10px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest text-right pr-6">Action</th>
                   </tr>
@@ -598,17 +574,19 @@ export default function SiteColorsPage() {
                   {mappings.map((m) => (
                     <tr key={m.id} className="hover:bg-slate-50/30 dark:hover:bg-zinc-900/10 transition-colors">
                       <td className="p-4 pl-6 text-sm font-bold text-slate-800 dark:text-slate-100">
-                        {m.area?.name}
+                        {m.area?.name || "—"}
+                      </td>
+                      <td className="p-4 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {m.color?.name || "—"}
                       </td>
                       <td className="p-4">
-                        <Badge variant="secondary" className="pl-3 pr-2.5 py-1 flex items-center w-fit gap-2 rounded-full border border-slate-200/50 dark:border-zinc-800 bg-slate-100/50 dark:bg-zinc-900/30 font-semibold text-xs text-slate-800 dark:text-slate-300">
-                          <span>{m.color?.name}</span>
-                          {m.color?.shade && (
-                            <span className="text-xs text-slate-900 dark:text-slate-50 font-mono font-extrabold border-l border-slate-200 dark:border-zinc-800 pl-2">
-                              {m.color.shade}
-                            </span>
-                          )}
-                        </Badge>
+                        {m.color?.shade ? (
+                          <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-100/70 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-slate-100 px-2.5 py-0.5">
+                            {m.color.shade}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground italic text-xs font-normal">—</span>
+                        )}
                       </td>
                       <td className="p-4 text-xs text-slate-600 dark:text-zinc-400 font-semibold max-w-[220px] truncate">
                         {m.description || <span className="text-muted-foreground italic font-normal">—</span>}
@@ -676,46 +654,38 @@ export default function SiteColorsPage() {
               )}
             </div>
 
-            {/* Select Paint Color Dropdown */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-                Select Paint Color *
-              </label>
-              <SearchableSelect
-                value={selectedColor?.id || ""}
-                displayValue={modalColorSearch}
-                options={filteredColors.map((c) => ({ id: c.id, label: c.shade ? `${c.name} (${c.shade})` : c.name }))}
-                placeholder="Search paint colors by name or shade..."
-                onSearchChange={(val) => {
-                  setModalColorSearch(val);
-                  if (!val) setSelectedColor(null);
-                }}
-                onSelect={(id, label) => {
-                  const color = colorsData?.find((c) => c.id === id);
-                  setSelectedColor(color || null);
-                  setModalColorSearch(label);
-                }}
-                onClear={() => {
-                  setSelectedColor(null);
-                  setModalColorSearch("");
-                }}
-                onEnter={(val) => colorsQuery.forceServerSearch(val)}
-              />
-              {modalColorSearch.trim() && !filteredColors.some((c) => c.name.toLowerCase() === modalColorSearch.toLowerCase().trim()) && (
-                <button
-                  type="button"
-                  onClick={() => handleCreateGlobalColorInline(modalColorSearch)}
-                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global color: "{modalColorSearch}"
-                </button>
-              )}
+            {/* Direct Color & Compulsory Shade Inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                  Color
+                </label>
+                <Input
+                  className="rounded-xl border-slate-200 dark:border-zinc-800 text-sm font-semibold"
+                  placeholder="e.g. Royal Blue / Off White"
+                  value={modalColorName}
+                  onChange={(e) => setModalColorName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                  Shade * <span className="text-rose-500 font-bold">(Compulsory)</span>
+                </label>
+                <Input
+                  className="rounded-xl border-slate-200 dark:border-zinc-800 text-sm font-semibold font-mono"
+                  placeholder="e.g. 8214 / L102"
+                  value={modalShade}
+                  onChange={(e) => setModalShade(e.target.value)}
+                  required
+                />
+              </div>
             </div>
 
             {/* Description Input */}
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-                Description / Remarks
+                Description / Remarks (Optional)
               </label>
               <Input
                 className="rounded-xl border-slate-200 dark:border-zinc-800 focus:ring-primary/20 focus:border-primary text-sm font-semibold"

@@ -21,7 +21,6 @@ import BrandsPage from "./components/masters/BrandsPage";
 import ProductsPage from "./components/masters/ProductsPage";
 import InteriorsPage from "./components/masters/InteriorsPage";
 import SalesAssociatePage from "./components/masters/SalesAssociatePage";
-import ColorsPage from "./components/masters/ColorsPage";
 import SiteColorsPage from "./components/masters/SiteColorsPage";
 import LaboursPage from "./components/masters/LaboursPage";
 import AreasPage from "./components/masters/AreasPage";
@@ -34,6 +33,7 @@ import WeeklyDiaryPage from "./components/payments/WeeklyDiaryPage";
 import StoresPage from "./components/masters/StoresPage";
 import ContractorsPage from "./components/masters/ContractorsPage";
 import MaterialRequestsPage from "./components/materials/MaterialRequestsPage";
+import WastageMaterialLogsPage from "./components/materials/WastageMaterialLogsPage";
 import ActivityLogsPage from "./components/admin/ActivityLogsPage";
 
 const queryClient = new QueryClient({
@@ -94,6 +94,7 @@ export default function App() {
               <Route path="/labour-daily-log" element={<Protected><LabourDailyLogPage /></Protected>} />
               <Route path="/material-usage" element={<Protected><MaterialLogsPage /></Protected>} />
               <Route path="/material-requests" element={<Protected><MaterialRequestsPage /></Protected>} />
+              <Route path="/material-wastage" element={<Protected><WastageMaterialLogsPage /></Protected>} />
               <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />
               <Route path="/contractor-payments" element={<AdminProtected><ContractorPaymentsPage /></AdminProtected>} />
               <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
@@ -120,7 +121,6 @@ export default function App() {
               <Route path="/masters/products" element={<Protected><ProductsPage /></Protected>} />
               <Route path="/masters/interiors" element={<Protected><InteriorsPage /></Protected>} />
               <Route path="/masters/users" element={<Protected><SalesAssociatePage /></Protected>} />
-              <Route path="/masters/colors" element={<Protected><ColorsPage /></Protected>} />
               <Route path="/masters/site-colors" element={<Protected><SiteColorsPage /></Protected>} />
               <Route path="/masters/areas" element={<Protected><AreasPage /></Protected>} />
               <Route path="/masters/labours" element={<Protected><LaboursPage /></Protected>} />

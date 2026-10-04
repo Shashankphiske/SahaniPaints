@@ -40,8 +40,39 @@ interface MaterialItemRow {
   selectedProductId: string;
   materialName: string;
   productFilter: string;
+  color: string;
+  shade: string;
   quantity: string;
 }
+
+interface ParsedMaterialItem {
+  material: string;
+  color: string;
+  shade: string;
+}
+
+const parseMaterialEntry = (rawMaterial: string): ParsedMaterialItem[] => {
+  if (!rawMaterial) return [];
+  const lines = rawMaterial.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+
+  return lines.map((line) => {
+    const cleanLine = line.replace(/^\d+\.\s*/, "");
+    const match = cleanLine.match(/^(.*?)(?:\s*\[(?:Color:\s*([^|\]]+?)\s*\|\s*)?Shade:\s*([^\]]+)\])?$/i);
+    if (match && (match[2] !== undefined || match[3] !== undefined)) {
+      return {
+        material: match[1].trim() || cleanLine,
+        color: (match[2] || "").trim() || "—",
+        shade: (match[3] || "").trim() || "—",
+      };
+    }
+    return {
+      material: cleanLine,
+      color: "—",
+      shade: "—",
+    };
+  });
+};
 
 export default function MaterialRequestsPage() {
   const { user } = useAuth();
@@ -61,7 +92,7 @@ export default function MaterialRequestsPage() {
 
   // Multi-material item rows
   const [items, setItems] = useState<MaterialItemRow[]>([
-    { id: "1", selectedProductId: "", materialName: "", productFilter: "", quantity: "" },
+    { id: "1", selectedProductId: "", materialName: "", productFilter: "", color: "", shade: "", quantity: "" },
   ]);
 
   const [fullSelectedProject, setFullSelectedProject] = useState<Project | null>(null);
@@ -135,7 +166,7 @@ export default function MaterialRequestsPage() {
   const addItemRow = () => {
     setItems((prev) => [
       ...prev,
-      { id: Date.now().toString() + Math.random().toString().slice(2, 5), selectedProductId: "", materialName: "", productFilter: "", quantity: "" },
+      { id: Date.now().toString() + Math.random().toString().slice(2, 5), selectedProductId: "", materialName: "", productFilter: "", color: "", shade: "", quantity: "" },
     ]);
   };
 
@@ -153,14 +184,20 @@ export default function MaterialRequestsPage() {
 
   const filteredRequests = useMemo(() => {
     return requests.filter((r) => {
+      // Exclude wastage material logs
+      if (r.material?.startsWith("[WASTAGE]")) return false;
+
       // Hide requests that are both approved AND delivered on the main page
       if (r.approved && r.delivered) return false;
 
       const projName = r.project?.name || "";
       const matName = r.material || "";
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+
       return (
-        projName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        matName.toLowerCase().includes(searchQuery.toLowerCase())
+        projName.toLowerCase().includes(q) ||
+        matName.toLowerCase().includes(q)
       );
     });
   }, [requests, searchQuery]);
@@ -183,14 +220,27 @@ export default function MaterialRequestsPage() {
       return;
     }
 
+    // Check if any row has missing shade (Shade is compulsory)
+    const missingShade = items.find((item) => (item.materialName.trim() || item.quantity.trim()) && !item.shade.trim());
+    if (missingShade) {
+      toast({
+        title: "Validation Error",
+        description: "Shade number is compulsory for all requested materials.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check if any row has incomplete data
     const incompleteItem = items.find(
-      (item) => (item.materialName.trim() && !item.quantity.trim()) || (!item.materialName.trim() && item.quantity.trim())
+      (item) =>
+        (item.materialName.trim() && (!item.quantity.trim() || !item.shade.trim())) ||
+        (!item.materialName.trim() && (item.quantity.trim() || item.shade.trim() || item.color.trim()))
     );
     if (incompleteItem) {
       toast({
         title: "Validation Error",
-        description: "Please fill in both material name and quantity for all material rows.",
+        description: "Please fill in material name, shade number, and quantity for all material rows.",
         variant: "destructive",
       });
       return;
@@ -202,8 +252,13 @@ export default function MaterialRequestsPage() {
       
       const finalMaterialString =
         validItems.length === 1
-          ? validItems[0].materialName.trim()
-          : validItems.map((item, i) => `${i + 1}. ${item.materialName.trim()}`).join("\n");
+          ? `${validItems[0].materialName.trim()} [Color: ${validItems[0].color.trim() || "—"} | Shade: ${validItems[0].shade.trim()}]`
+          : validItems
+              .map(
+                (item, i) =>
+                  `${i + 1}. ${item.materialName.trim()} [Color: ${item.color.trim() || "—"} | Shade: ${item.shade.trim()}]`
+              )
+              .join("\n");
 
       const finalQuantityString =
         validItems.length === 1
@@ -231,7 +286,7 @@ export default function MaterialRequestsPage() {
       setSelectedProjectId("");
       setProjectDisplay("");
       setProjectFilter("");
-      setItems([{ id: "1", selectedProductId: "", materialName: "", productFilter: "", quantity: "" }]);
+      setItems([{ id: "1", selectedProductId: "", materialName: "", productFilter: "", color: "", shade: "", quantity: "" }]);
       setRequestDate(getTodayString());
     } catch (err: any) {
       toast({ title: "Error creating requests", description: err.message, variant: "destructive" });
@@ -276,7 +331,7 @@ export default function MaterialRequestsPage() {
               Add Requests
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-xl max-h-[90vh]">
+          <DialogContent className="max-w-2xl max-h-[90vh]">
             <DialogHeader className="pb-3 border-b border-border/60">
               <DialogTitle className="text-base font-bold flex items-center gap-2">
                 <PackagePlus className="h-5 w-5 text-primary" />
@@ -375,8 +430,8 @@ export default function MaterialRequestsPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
-                        <div className="sm:col-span-3 space-y-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                        <div className="sm:col-span-4 space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                             Material Name *
                           </label>
@@ -384,7 +439,7 @@ export default function MaterialRequestsPage() {
                             value={item.selectedProductId || item.materialName}
                             displayValue={item.materialName}
                             options={getProductOptionsForRow(item.productFilter)}
-                            placeholder={fetchingProject ? "Loading project products..." : "Search product or type material name"}
+                            placeholder={fetchingProject ? "Loading..." : "Search product / material"}
                             inputHeight="h-10"
                             onSearchChange={(q) => {
                               updateItemRow(item.id, {
@@ -415,12 +470,37 @@ export default function MaterialRequestsPage() {
                           />
                         </div>
 
+                        <div className="sm:col-span-3 space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Color
+                          </label>
+                          <Input
+                            placeholder="e.g. Royal Blue"
+                            value={item.color}
+                            onChange={(e) => updateItemRow(item.id, { color: e.target.value })}
+                            className="h-10 text-sm font-semibold"
+                          />
+                        </div>
+
                         <div className="sm:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Shade * <span className="text-rose-500 font-bold">*</span>
+                          </label>
+                          <Input
+                            placeholder="e.g. 8214"
+                            value={item.shade}
+                            onChange={(e) => updateItemRow(item.id, { shade: e.target.value })}
+                            className="h-10 text-sm font-semibold font-mono"
+                            required
+                          />
+                        </div>
+
+                        <div className="sm:col-span-3 space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                             Quantity *
                           </label>
                           <Input
-                            placeholder="e.g. 50 Ltrs / 4 Ltr bucket"
+                            placeholder="e.g. 50 Ltrs"
                             value={item.quantity}
                             onChange={(e) => updateItemRow(item.id, { quantity: e.target.value })}
                             className="h-10 text-sm font-semibold"
@@ -483,6 +563,8 @@ export default function MaterialRequestsPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Site / Project</TableHead>
                 <TableHead>Material</TableHead>
+                <TableHead>Color</TableHead>
+                <TableHead>Shade</TableHead>
                 <TableHead>Quantity</TableHead>
                 <TableHead>Approved by Office</TableHead>
                 <TableHead>Delivered</TableHead>
@@ -492,89 +574,129 @@ export default function MaterialRequestsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                     <span className="text-xs text-muted-foreground mt-2 block">Loading requests...</span>
                   </TableCell>
                 </TableRow>
               ) : filteredRequests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-xs italic">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-xs italic">
                     No material requests found.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredRequests.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
-                    <TableCell className="font-bold text-xs">{req.project?.name || "—"}</TableCell>
-                    <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400 whitespace-pre-line leading-relaxed">{req.material}</TableCell>
-                    <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">{req.quantity}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            req.approved
-                              ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450 border-emerald-200"
-                              : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-450 border-amber-200"
-                          }`}
-                        >
-                          {req.approved ? "Approved" : "Pending"}
-                        </Badge>
-                        {isAdmin && !req.approved && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleApprove(req)}
-                            className="h-6 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-bold px-2"
-                          >
-                            Approve
-                          </Button>
+                filteredRequests.map((req) => {
+                  const parsed = parseMaterialEntry(req.material);
+                  return (
+                    <TableRow key={req.id}>
+                      <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
+                      <TableCell className="font-bold text-xs">{req.project?.name || "—"}</TableCell>
+                      <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400 whitespace-pre-line leading-relaxed">
+                        {parsed.length > 0
+                          ? parsed.map((p, idx) => (
+                              <div key={idx}>
+                                {parsed.length > 1 ? `${idx + 1}. ` : ""}
+                                {p.material}
+                              </div>
+                            ))
+                          : req.material}
+                      </TableCell>
+                      <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">
+                        {parsed.length > 0 ? (
+                          parsed.map((p, idx) => (
+                            <div key={idx} className="text-slate-800 dark:text-slate-200">
+                              {p.color}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground italic">—</span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            req.delivered
-                              ? "bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-450 border-blue-200"
-                              : "bg-slate-50 dark:bg-zinc-900 text-slate-500 border-slate-200"
-                          }`}
-                        >
-                          {req.delivered ? "Delivered" : "Pending"}
-                        </Badge>
-                        {isAdmin && !req.delivered && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDeliver(req)}
-                            className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-bold px-2"
-                          >
-                            Mark Delivered
-                          </Button>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs font-bold whitespace-pre-line leading-relaxed">
+                        {parsed.length > 0 ? (
+                          parsed.map((p, idx) => (
+                            <div key={idx}>
+                              {p.shade !== "—" ? (
+                                <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800">
+                                  {p.shade}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground italic font-normal">—</span>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-muted-foreground italic font-normal">—</span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          if (window.confirm("Are you sure you want to delete this request?")) {
-                            remove(req.id);
-                            toast({ title: "Request Removed", description: "Material request deleted." });
-                          }
-                        }}
-                        className="h-8 w-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">{req.quantity}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              req.approved
+                                ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-450 border-emerald-200"
+                                : "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-450 border-amber-200"
+                            }`}
+                          >
+                            {req.approved ? "Approved" : "Pending"}
+                          </Badge>
+                          {isAdmin && !req.approved && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleApprove(req)}
+                              className="h-6 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 font-bold px-2"
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              req.delivered
+                                ? "bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-450 border-blue-200"
+                                : "bg-slate-50 dark:bg-zinc-900 text-slate-500 border-slate-200"
+                            }`}
+                          >
+                            {req.delivered ? "Delivered" : "Pending"}
+                          </Badge>
+                          {isAdmin && !req.delivered && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeliver(req)}
+                              className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-bold px-2"
+                            >
+                              Mark Delivered
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to delete this request?")) {
+                              remove(req.id);
+                              toast({ title: "Request Removed", description: "Material request deleted." });
+                            }
+                          }}
+                          className="h-8 w-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

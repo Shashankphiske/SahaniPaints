@@ -104,12 +104,20 @@ const STATUS_STYLES: Record<string, string> = {
 
 interface PaintProductRow {
   productId: string;
-  area: number | "";
-  unit: "sq.ft" | "rn.ft";
-  rate: number | "";
+  area: number | string;
+  unit: "sq.ft" | "rn.ft" | string;
+  rate: number | string;
   litresUsed?: number | null;
   _search?: string;
 }
+
+const createEmptyProductRow = (): PaintProductRow => ({
+  productId: "",
+  area: "",
+  unit: "sq.ft",
+  rate: "",
+  _search: "",
+});
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -813,7 +821,7 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
 
   // Selected products rows
   const [rows, setRows] = useState<PaintProductRow[]>([
-    { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" },
+    createEmptyProductRow(),
   ]);
 
   // Tax and Discount
@@ -843,12 +851,12 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
   const finalPrice = agreedPrice !== "" ? Number(agreedPrice) : computedAgreedPrice;
 
   const handleAddRow = () => {
-    setRows((prev) => [...prev, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
+    setRows((prev) => [...prev, createEmptyProductRow()]);
   };
 
   const handleRemoveRow = (index: number) => {
     if (rows.length === 1) {
-      setRows([{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }]);
+      setRows([createEmptyProductRow()]);
     } else {
       setRows((prev) => prev.filter((_, i) => i !== index));
     }
@@ -1925,7 +1933,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
   }, [fullProject.projectProducts, products]);
 
   const handleAddRow = () => {
-    const updated = [...rows, { productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }];
+    const updated: PaintProductRow[] = [...rows, createEmptyProductRow()];
     setRows(updated);
     setIsDirty(checkIfDirty(updated));
   };
@@ -1933,7 +1941,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
   const handleRemoveRow = async (index: number) => {
     let updatedRows: PaintProductRow[] = [];
     if (rows.length === 1) {
-      updatedRows = [{ productId: "", area: "", unit: "sq.ft", rate: "", _search: "" }];
+      updatedRows = [createEmptyProductRow()];
     } else {
       updatedRows = rows.filter((_, i) => i !== index);
     }
@@ -3564,20 +3572,17 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
   // Total Site Expenditure (materials + contractors)
   const siteExpenditure = productCost + contractorCost;
 
-  // Labour workers breakdown from attendance and payments
+  // Labour workers breakdown from attendance
   const labourSummaryList = useMemo(() => {
     const attendance = fullProject.attendance ?? [];
-    const payments = fullProject.labourPayments ?? [];
     const map = new Map<string, {
       labourId: string;
       labour: any;
       daysWorked: number;
       paymentPerDay: number;
       totalEarned: number;
-      totalPaid: number;
     }>();
 
-    // From attendance
     attendance.forEach((att: any) => {
       const lId = att.labourId;
       const rate = Number(att.labour?.paymentPerDay || 0);
@@ -3590,7 +3595,6 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
           daysWorked: 0,
           paymentPerDay: rate,
           totalEarned: 0,
-          totalPaid: 0,
         });
       }
       const item = map.get(lId)!;
@@ -3598,41 +3602,13 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
       item.totalEarned += val * rate;
     });
 
-    // From labour payments
-    payments.forEach((p: any) => {
-      const lId = p.labourId;
-      const amt = Number(p.amount || 0);
-      if (!map.has(lId)) {
-        map.set(lId, {
-          labourId: lId,
-          labour: p.labour,
-          daysWorked: 0,
-          paymentPerDay: Number(p.labour?.paymentPerDay || 0),
-          totalEarned: 0,
-          totalPaid: 0,
-        });
-      }
-      const item = map.get(lId)!;
-      item.totalPaid += amt;
-    });
-
     return Array.from(map.values()).sort((a, b) => b.totalEarned - a.totalEarned);
-  }, [fullProject.attendance, fullProject.labourPayments]);
+  }, [fullProject.attendance]);
 
   // Total labour wage cost earned
   const labourCost = useMemo(() => {
     return labourSummaryList.reduce((sum, item) => sum + item.totalEarned, 0);
   }, [labourSummaryList]);
-
-  // Total labour payments made
-  const totalLabourPaid = useMemo(() => {
-    return (fullProject.labourPayments || []).reduce(
-      (sum: number, p: any) => sum + Number(p.amount || 0),
-      0
-    );
-  }, [fullProject.labourPayments]);
-
-  const totalLabourBalance = labourCost - totalLabourPaid;
 
   // Grand totals
   const totalCost = siteExpenditure + labourCost;
@@ -3926,25 +3902,13 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
 
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-400 border-indigo-200 font-mono font-bold text-xs px-3 py-1">
-              Wages Earned: ₹{fmt(labourCost)}
+              Total Labour Expenses: ₹{fmt(labourCost)}
             </Badge>
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 font-mono font-bold text-xs px-3 py-1">
-              Paid Out: ₹{fmt(totalLabourPaid)}
-            </Badge>
-            {totalLabourBalance > 0 ? (
-              <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border-amber-200 font-mono font-bold text-xs px-3 py-1">
-                Balance Due: ₹{fmt(totalLabourBalance)}
-              </Badge>
-            ) : labourCost > 0 ? (
-              <Badge className="bg-emerald-600 text-white font-mono font-bold text-xs px-3 py-1 shadow-sm">
-                Fully Settled
-              </Badge>
-            ) : null}
           </div>
         </CardHeader>
 
         <CardContent className="p-5 space-y-6">
-          {/* Sub-section 2A: Worker Wage Breakdown */}
+          {/* Worker Wage & Attendance Breakdown */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
@@ -3970,109 +3934,29 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
                       <TableHead className="font-bold text-right">Daily Rate</TableHead>
                       <TableHead className="font-bold text-center">Days Worked</TableHead>
                       <TableHead className="font-bold text-right">Total Wages</TableHead>
-                      <TableHead className="font-bold text-right">Amount Paid</TableHead>
-                      <TableHead className="font-bold text-right">Balance Due</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {labourSummaryList.map((w) => {
-                      const balance = w.totalEarned - w.totalPaid;
-                      return (
-                        <TableRow key={w.labourId} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
-                          <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
-                            <div>
-                              <span>{w.labour?.name || "Worker"}</span>
-                              {w.labour?.phonenumber && (
-                                <span className="text-[10px] text-muted-foreground block">
-                                  {w.labour.phonenumber}
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            ₹{fmt(w.paymentPerDay)}/day
-                          </TableCell>
-                          <TableCell className="text-center font-mono font-bold">
-                            {w.daysWorked} Day{w.daysWorked > 1 ? "s" : ""}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
-                            ₹{fmt(w.totalEarned)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                            ₹{fmt(w.totalPaid)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {balance > 0 ? (
-                              <span className="font-bold text-amber-600 dark:text-amber-400">
-                                ₹{fmt(balance)}
-                              </span>
-                            ) : balance === 0 ? (
-                              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                Settled
-                              </span>
-                            ) : (
-                              <span className="font-semibold text-sky-600 dark:text-sky-400">
-                                Advance ₹{fmt(Math.abs(balance))}
+                    {labourSummaryList.map((w) => (
+                      <TableRow key={w.labourId} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                          <div>
+                            <span>{w.labour?.name || "Worker"}</span>
+                            {w.labour?.phonenumber && (
+                              <span className="text-[10px] text-muted-foreground block">
+                                {w.labour.phonenumber}
                               </span>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-
-          {/* Sub-section 2B: Labour Payments Disbursed */}
-          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" />
-                Labour Payment Records ({(fullProject.labourPayments || []).length})
-              </h4>
-              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-                Total Paid: ₹{fmt(totalLabourPaid)}
-              </span>
-            </div>
-
-            {(fullProject.labourPayments || []).length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
-                <ClipboardCheck className="h-7 w-7 opacity-30 mx-auto mb-2" />
-                <p className="text-xs font-semibold">No payments recorded to labours on this site yet.</p>
-              </div>
-            ) : (
-              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
-                <Table className="text-xs">
-                  <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
-                    <TableRow>
-                      <TableHead className="font-bold">Worker Name</TableHead>
-                      <TableHead className="font-bold">Payment Date</TableHead>
-                      <TableHead className="font-bold">Mode</TableHead>
-                      <TableHead className="font-bold">Remarks</TableHead>
-                      <TableHead className="font-bold text-right">Amount Paid</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(fullProject.labourPayments || []).map((p: any) => (
-                      <TableRow key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
-                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
-                          {p.labour?.name || "Worker"}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground font-mono text-[11px]">
-                          {formatDate(p.paymentDate)}
+                        <TableCell className="text-right font-mono">
+                          ₹{fmt(w.paymentPerDay)}/day
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] font-semibold uppercase">
-                            {p.paymentMode || "Cash"}
-                          </Badge>
+                        <TableCell className="text-center font-mono font-bold">
+                          {w.daysWorked} Day{w.daysWorked > 1 ? "s" : ""}
                         </TableCell>
-                        <TableCell className="text-slate-600 dark:text-zinc-400">
-                          {p.remarks || "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          ₹{fmt(p.amount)}
+                        <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                          ₹{fmt(w.totalEarned)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -4461,8 +4345,8 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
   const [editingMappingId, setEditingMappingId] = useState<string | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState("");
   const [areaSearch, setAreaSearch] = useState("");
-  const [selectedColorId, setSelectedColorId] = useState("");
-  const [colorSearch, setColorSearch] = useState("");
+  const [colorName, setColorName] = useState("");
+  const [shade, setShade] = useState("");
   const [description, setDescription] = useState("");
   const [savingMapping, setSavingMapping] = useState(false);
 
@@ -4530,25 +4414,12 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
     }
   };
 
-  const handleCreateColor = async (name: string) => {
-    if (!name.trim()) return;
-    try {
-      const created = await apiRequest.create<Color>("colors", { name: name.trim() });
-      setSelectedColorId(created.id);
-      setColorSearch(created.name);
-      toast({ title: "Color created", description: `Created global color "${created.name}".` });
-      colorsQuery.forceServerSearch(""); // refresh master data
-    } catch (err: any) {
-      toast({ title: "Failed to create color", description: err.message, variant: "destructive" });
-    }
-  };
-
   const handleOpenAddModal = () => {
     setEditingMappingId(null);
     setSelectedAreaId("");
     setAreaSearch("");
-    setSelectedColorId("");
-    setColorSearch("");
+    setColorName("");
+    setShade("");
     setDescription("");
     setDialogOpen(true);
   };
@@ -4557,8 +4428,8 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
     setEditingMappingId(m.id);
     setSelectedAreaId(m.areaId);
     setAreaSearch(m.area?.name || "");
-    setSelectedColorId(m.colorId);
-    setColorSearch(m.color?.shade ? `${m.color.name} (${m.color.shade})` : m.color?.name || "");
+    setColorName(m.color?.name || "");
+    setShade(m.color?.shade || "");
     setDescription(m.description || "");
     setDialogOpen(true);
   };
@@ -4568,17 +4439,34 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
       toast({ title: "Area required", description: "Please select or create an area.", variant: "destructive" });
       return;
     }
-    if (!selectedColorId) {
-      toast({ title: "Color required", description: "Please select or create a paint color.", variant: "destructive" });
+    const shadeVal = shade.trim();
+    if (!shadeVal) {
+      toast({ title: "Shade required", description: "Shade number is compulsory.", variant: "destructive" });
       return;
     }
 
+    const colorNameVal = colorName.trim() || shadeVal;
+
     setSavingMapping(true);
     try {
+      // Find or create color
+      let colorRecord = colors.find(
+        (c) =>
+          c.shade?.toLowerCase().trim() === shadeVal.toLowerCase() &&
+          c.name?.toLowerCase().trim() === colorNameVal.toLowerCase()
+      );
+
+      if (!colorRecord) {
+        colorRecord = await apiRequest.create<Color>("colors", {
+          name: colorNameVal,
+          shade: shadeVal,
+        });
+      }
+
       const payload = {
         projectId,
         areaId: selectedAreaId,
-        colorId: selectedColorId,
+        colorId: colorRecord.id,
         description: description.trim() || null,
       };
 
@@ -4864,38 +4752,32 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
               )}
             </div>
 
-            {/* Select Color */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-                Select Paint Color *
-              </span>
-              <SearchableSelect
-                value={selectedColorId}
-                displayValue={colorSearch}
-                options={colors
-                  .filter((c) => !colorSearch || c.name.toLowerCase().includes(colorSearch.toLowerCase()) || (c.shade && c.shade.toLowerCase().includes(colorSearch.toLowerCase())))
-                  .slice(0, 10)
-                  .map((c) => ({ id: c.id, label: c.shade ? `${c.name} (${c.shade})` : c.name }))}
-                placeholder="Search paint colors by name or shade..."
-                onSearchChange={setColorSearch}
-                onSelect={(id, label) => {
-                  setSelectedColorId(id);
-                  setColorSearch(label);
-                }}
-                onClear={() => {
-                  setSelectedColorId("");
-                  setColorSearch("");
-                }}
-              />
-              {colorSearch.trim() && !colors.some((c) => c.name.toLowerCase() === colorSearch.toLowerCase().trim()) && (
-                <button
-                  type="button"
-                  onClick={() => handleCreateColor(colorSearch)}
-                  className="mt-1 text-xs text-primary font-bold flex items-center gap-1 hover:underline text-left focus:outline-none"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-0.5" /> Create global color: "{colorSearch}"
-                </button>
-              )}
+            {/* Color and Shade */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                  Color Name
+                </span>
+                <Input
+                  value={colorName}
+                  onChange={(e) => setColorName(e.target.value)}
+                  placeholder="e.g. Royal Blue / Off White"
+                  className="rounded-xl border-slate-200 dark:border-zinc-800 text-sm font-semibold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                  Shade * <span className="text-rose-500 font-bold">(Compulsory)</span>
+                </span>
+                <Input
+                  value={shade}
+                  onChange={(e) => setShade(e.target.value)}
+                  placeholder="e.g. 8214 / L102"
+                  className="rounded-xl border-slate-200 dark:border-zinc-800 text-sm font-semibold font-mono"
+                  required
+                />
+              </div>
             </div>
 
             {/* Description */}

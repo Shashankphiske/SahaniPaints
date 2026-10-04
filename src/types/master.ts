@@ -385,3 +385,21 @@ export interface ActivityLog {
     role: string;
   } | null;
 }
+
+export interface WastageMaterialLog {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  project?: {
+    id: string;
+    name: string;
+  };
+  material: string;
+  color: string;
+  shade: string;
+  quantity: string;
+  remarks?: string;
+  date: string;
+  createdAt: string;
+}
+

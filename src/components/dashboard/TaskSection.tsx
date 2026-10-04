@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, MoreVertical, Pencil, Trash2, Calendar, Flag, CircleDot, CheckCircle2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -49,7 +49,11 @@ export function TaskSection() {
   const [editingItem, setEditingItem] = useState<Task | null>(null);
   const [viewItem, setViewItem] = useState<Task | null>(null);
 
-  const items = Array.isArray(data) ? data : [];
+  // Dashboard shows only active tasks; completed tasks remain in Tasks page
+  const items = useMemo(
+    () => (Array.isArray(data) ? data.filter((t) => t.status !== "COMPLETED") : []),
+    [data]
+  );
 
   const openCreate = () => {
     setEditingItem(null);
@@ -62,9 +66,13 @@ export function TaskSection() {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to mark this task as done?")) {
+    if (window.confirm("Are you sure you want to delete this task?")) {
       remove(id);
     }
+  };
+
+  const handleMarkDone = (id: string) => {
+    update({ id, data: { status: "COMPLETED" } });
   };
 
   return (
@@ -81,7 +89,7 @@ export function TaskSection() {
       {isLoading ? (
         <p className="text-muted-foreground text-sm font-semibold">Loading tasks...</p>
       ) : items.length === 0 ? (
-        <p className="text-muted-foreground text-sm font-semibold">No tasks scheduled yet.</p>
+        <p className="text-muted-foreground text-sm font-semibold">No active tasks scheduled.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto pr-1">
           {items.map((task) => (
@@ -91,6 +99,7 @@ export function TaskSection() {
               onView={() => setViewItem(task)}
               onEdit={() => openEdit(task)}
               onDelete={() => handleDelete(task.id)}
+              onMarkDone={() => handleMarkDone(task.id)}
             />
           ))}
         </div>
@@ -148,6 +157,18 @@ export function TaskSection() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    handleDelete(viewItem.id);
+                    setViewItem(null);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     const saved = viewItem;
                     setViewItem(null);
@@ -157,11 +178,10 @@ export function TaskSection() {
                   Edit Task
                 </Button>
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 font-semibold"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 font-semibold"
                   onClick={() => {
-                    handleDelete(viewItem.id);
+                    handleMarkDone(viewItem.id);
                     setViewItem(null);
                   }}
                 >
@@ -210,9 +230,10 @@ interface TaskCardProps {
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onMarkDone: () => void;
 }
 
-function TaskCard({ task, onView, onEdit, onDelete }: TaskCardProps) {
+function TaskCard({ task, onView, onEdit, onDelete, onMarkDone }: TaskCardProps) {
   return (
     <Card
       onClick={onView}
@@ -229,14 +250,20 @@ function TaskCard({ task, onView, onEdit, onDelete }: TaskCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={onMarkDone}
+              className="text-emerald-600 focus:text-emerald-600 cursor-pointer"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" /> Done
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={onEdit}>
               <Pencil className="h-3.5 w-3.5 mr-2 text-primary" /> Edit
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={onDelete}
-              className="text-emerald-600 focus:text-emerald-600 cursor-pointer"
+              className="text-destructive focus:text-destructive cursor-pointer"
             >
-              <CheckCircle2 className="h-3.5 w-3.5 mr-2 text-emerald-600" /> Done
+              <Trash2 className="h-3.5 w-3.5 mr-2 text-destructive" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -280,6 +307,22 @@ function TaskCard({ task, onView, onEdit, onDelete }: TaskCardProps) {
               {task.project.name}
             </span>
           )}
+        </div>
+
+        <div className="pt-1 flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2.5 text-xs text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800 dark:hover:bg-emerald-950/40 font-medium"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkDone();
+            }}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+            Done
+          </Button>
         </div>
       </CardContent>
     </Card>

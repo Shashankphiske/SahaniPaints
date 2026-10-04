@@ -29,7 +29,6 @@ const ALL_PAGES = [
   { key: "sales-associate", label: "Users" },
   { key: "tasks", label: "Tasks" },
   { key: "settings", label: "Settings" },
-  { key: "colors", label: "Colors" },
   { key: "site-colors", label: "Site Colors" },
   { key: "labours", label: "Labours" },
   { key: "labour-attendance", label: "Labour Attendance" },
