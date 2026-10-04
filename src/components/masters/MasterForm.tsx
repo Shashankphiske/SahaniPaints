@@ -133,12 +133,24 @@ export function MasterForm({
   const [prioritySearch, setPrioritySearch] = useState("");
   const [priorityOpen, setPriorityOpen] = useState(false);
   const priorityRef = useRef<HTMLDivElement>(null);
-  useClickOutside(priorityRef, () => setPriorityOpen(false));
+  useClickOutside(priorityRef, () => {
+    setPriorityOpen(false);
+    if (resource === "tasks" && formData.priority) {
+      const match = PRIORITIES.find(p => p.value === formData.priority);
+      if (match) setPrioritySearch(match.label);
+    }
+  });
 
   const [statusSearch, setStatusSearch] = useState("");
   const [statusOpen, setStatusOpen] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
-  useClickOutside(statusRef, () => setStatusOpen(false));
+  useClickOutside(statusRef, () => {
+    setStatusOpen(false);
+    if (resource === "tasks" && formData.status) {
+      const match = STATUSES.find(s => s.value === formData.status);
+      if (match) setStatusSearch(match.label);
+    }
+  });
 
   const [roleSearch, setRoleSearch] = useState("");
   const [roleOpen, setRoleOpen] = useState(false);
@@ -166,6 +178,16 @@ export function MasterForm({
       if (normalizedResource === "users") {
         delete formattedData.password;
       }
+
+      // Ensure tasks default Priority to MODERATE and Status to TODO
+      if (resource === "tasks") {
+        if (!formattedData.priority) {
+          formattedData.priority = "MODERATE";
+        }
+        if (!formattedData.status) {
+          formattedData.status = "TODO";
+        }
+      }
       
       setFormData(formattedData);
 
@@ -175,10 +197,13 @@ export function MasterForm({
         setCategorySearch(initialData.category || "");
       } else if (resource === "tasks") {
         setProjectSearch(initialData.project?.name || "");
-        const matchedPriority = PRIORITIES.find(p => p.value === initialData.priority);
-        setPrioritySearch(matchedPriority ? matchedPriority.label : "");
-        const matchedStatus = STATUSES.find(s => s.value === initialData.status);
-        setStatusSearch(matchedStatus ? matchedStatus.label : "");
+        const currentPriority = formattedData.priority || "MODERATE";
+        const matchedPriority = PRIORITIES.find(p => p.value === currentPriority);
+        setPrioritySearch(matchedPriority ? matchedPriority.label : "Moderate");
+
+        const currentStatus = formattedData.status || "TODO";
+        const matchedStatus = STATUSES.find(s => s.value === currentStatus);
+        setStatusSearch(matchedStatus ? matchedStatus.label : "To Do");
       } else if (normalizedResource === "users") {
         const matchedRole = ROLES.find(r => r.value === initialData.role);
         setRoleSearch(matchedRole ? matchedRole.label : "");
@@ -704,7 +729,10 @@ export function MasterForm({
                 <Input
                   placeholder="Search and select priority..."
                   value={prioritySearch}
-                  onFocus={() => setPriorityOpen(true)}
+                  onFocus={(e) => {
+                    setPriorityOpen(true);
+                    e.target.select();
+                  }}
                   onChange={(e) => {
                     setPrioritySearch(e.target.value);
                     setFormData(prev => ({ ...prev, priority: "" }));
@@ -713,20 +741,27 @@ export function MasterForm({
                 />
                 {priorityOpen && (
                   <div className="absolute z-50 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-                    {PRIORITIES.filter(p => p.label.toLowerCase().includes(prioritySearch.toLowerCase()))
-                      .map((p) => (
-                        <div
-                          key={p.value}
-                          className="px-3 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm text-slate-900 dark:text-slate-100 transition-colors duration-150"
-                          onMouseDown={() => {
-                            setFormData(prev => ({ ...prev, priority: p.value }));
-                            setPrioritySearch(p.label);
-                            setPriorityOpen(false);
-                          }}
-                        >
-                          {p.label}
-                        </div>
-                      ))}
+                    {PRIORITIES.filter(p => {
+                      if (!prioritySearch) return true;
+                      const selectedPriorityLabel = PRIORITIES.find(item => item.value === formData.priority)?.label;
+                      if (prioritySearch === selectedPriorityLabel) return true;
+                      return p.label.toLowerCase().includes(prioritySearch.toLowerCase());
+                    }).map((p) => (
+                      <div
+                        key={p.value}
+                        className="px-3 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm text-slate-900 dark:text-slate-100 transition-colors duration-150 flex items-center justify-between"
+                        onMouseDown={() => {
+                          setFormData(prev => ({ ...prev, priority: p.value }));
+                          setPrioritySearch(p.label);
+                          setPriorityOpen(false);
+                        }}
+                      >
+                        <span>{p.label}</span>
+                        {formData.priority === p.value && (
+                          <span className="text-xs text-primary font-medium">Selected</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {errors.priority && <p className="text-xs text-destructive font-semibold">{errors.priority}</p>}
@@ -737,7 +772,10 @@ export function MasterForm({
                 <Input
                   placeholder="Search and select status..."
                   value={statusSearch}
-                  onFocus={() => setStatusOpen(true)}
+                  onFocus={(e) => {
+                    setStatusOpen(true);
+                    e.target.select();
+                  }}
                   onChange={(e) => {
                     setStatusSearch(e.target.value);
                     setFormData(prev => ({ ...prev, status: "" }));
@@ -746,20 +784,27 @@ export function MasterForm({
                 />
                 {statusOpen && (
                   <div className="absolute z-50 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 w-full rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
-                    {STATUSES.filter(s => s.label.toLowerCase().includes(statusSearch.toLowerCase()))
-                      .map((s) => (
-                        <div
-                          key={s.value}
-                          className="px-3 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm text-slate-900 dark:text-slate-100 transition-colors duration-150"
-                          onMouseDown={() => {
-                            setFormData(prev => ({ ...prev, status: s.value }));
-                            setStatusSearch(s.label);
-                            setStatusOpen(false);
-                          }}
-                        >
-                          {s.label}
-                        </div>
-                      ))}
+                    {STATUSES.filter(s => {
+                      if (!statusSearch) return true;
+                      const selectedStatusLabel = STATUSES.find(item => item.value === formData.status)?.label;
+                      if (statusSearch === selectedStatusLabel) return true;
+                      return s.label.toLowerCase().includes(statusSearch.toLowerCase());
+                    }).map((s) => (
+                      <div
+                        key={s.value}
+                        className="px-3 py-2 hover:bg-slate-100 dark:hover:bg-zinc-900 cursor-pointer text-sm text-slate-900 dark:text-slate-100 transition-colors duration-150 flex items-center justify-between"
+                        onMouseDown={() => {
+                          setFormData(prev => ({ ...prev, status: s.value }));
+                          setStatusSearch(s.label);
+                          setStatusOpen(false);
+                        }}
+                      >
+                        <span>{s.label}</span>
+                        {formData.status === s.value && (
+                          <span className="text-xs text-primary font-medium">Selected</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {errors.status && <p className="text-xs text-destructive font-semibold">{errors.status}</p>}

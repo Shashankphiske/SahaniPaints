@@ -3467,115 +3467,622 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
   // Agreed price
   const agreedPrice = Number(fullProject.agreedPrice || fullProject.totalAmount || 0);
 
-  // Compute Product Cost
-  const productCost = useMemo(() => {
-    const projectProducts = fullProject.projectProducts ?? [];
+  // Group material consumption on site by product
+  const materialConsumptionList = useMemo(() => {
     const materialLogs = fullProject.materialLogs ?? [];
+    const projectProducts = fullProject.projectProducts ?? [];
 
-    return projectProducts.reduce((sum: number, pp: any) => {
-      const priceLitre = Number(pp.product?.price || 0);
+    const map = new Map<string, {
+      productId: string;
+      productName: string;
+      brandName: string;
+      size: string;
+      unitPrice: number;
+      totalQuantity: number;
+      totalCost: number;
+      logsCount: number;
+    }>();
 
-      // Find the logged litres used for this product in this project
-      const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
-      const totalLoggedQuantity = loggedProducts.reduce((s: number, log: any) => s + Number(log.quantity || 0), 0);
+    // 1. Process all material logs for this site
+    materialLogs.forEach((log: any) => {
+      const pId = log.productId;
+      const matchedPP = projectProducts.find((pp: any) => pp.productId === pId);
+      const prod = log.product || matchedPP?.product;
+      const unitPrice = Number(prod?.price || matchedPP?.rate || 0);
+      const qty = Number(log.quantity || 0);
+      const packSizeL = getProductSizeInLitres(prod?.size);
+      const cost = qty * packSizeL * unitPrice;
 
-      if (totalLoggedQuantity > 0) {
-        const packSizeL = getProductSizeInLitres(pp.product?.size);
-        return sum + (totalLoggedQuantity * packSizeL) * priceLitre;
+      if (!map.has(pId)) {
+        map.set(pId, {
+          productId: pId,
+          productName: prod?.name || "Paint Product",
+          brandName: prod?.brand?.name || "",
+          size: prod?.size || "1ltr",
+          unitPrice,
+          totalQuantity: 0,
+          totalCost: 0,
+          logsCount: 0,
+        });
       }
-
-      // Fallback: area * rate (which is rate * area = total row price)
-      return sum + Number(pp.rate) * Number(pp.area);
-    }, 0);
-  }, [fullProject.projectProducts, fullProject.materialLogs]);
-
-  // Compute Labour Cost from attendance ledger
-  const labourCost = useMemo(() => {
-    const attendance = fullProject.attendance ?? [];
-    const map: Record<string, { paymentPerDay: number; daysValueSum: number }> = {};
-
-    attendance.forEach((att: any) => {
-      const labourId = att.labourId;
-      const paymentRate = Number(att.labour?.paymentPerDay || 0);
-      const val = Number(att.workDayValue ?? 1.0);
-      
-      const parsedDate = new Date(att.date);
-      if (isNaN(parsedDate.getTime())) return;
-
-      if (!map[labourId]) {
-        map[labourId] = { paymentPerDay: paymentRate, daysValueSum: 0 };
-      }
-      map[labourId].daysValueSum += val;
+      const existing = map.get(pId)!;
+      existing.totalQuantity += qty;
+      existing.totalCost += cost;
+      existing.logsCount += 1;
     });
 
-    return Object.values(map).reduce((sum, item) => sum + item.daysValueSum * item.paymentPerDay, 0);
-  }, [fullProject.attendance]);
+    // 2. Also include any project products that have no material logs yet (fallback to allocated rate * area)
+    projectProducts.forEach((pp: any) => {
+      const pId = pp.productId;
+      if (!map.has(pId)) {
+        const prod = pp.product;
+        const rate = Number(pp.rate || prod?.price || 0);
+        const area = Number(pp.area || 0);
+        const cost = rate * area;
+        map.set(pId, {
+          productId: pId,
+          productName: prod?.name || "Paint Product",
+          brandName: prod?.brand?.name || "",
+          size: prod?.size || pp.unit || "sq.ft",
+          unitPrice: rate,
+          totalQuantity: 0,
+          totalCost: cost,
+          logsCount: 0,
+        });
+      }
+    });
 
-  // Compute Contractor Cost from work logs
-  const contractorCost = useMemo(() => {
-    const contractorWorkLogs = fullProject.contractorWorkLogs ?? [];
-    return contractorWorkLogs.reduce((sum: number, log: any) => {
+    return Array.from(map.values()).sort((a, b) => b.totalCost - a.totalCost);
+  }, [fullProject.materialLogs, fullProject.projectProducts]);
+
+  // Total product cost
+  const productCost = useMemo(() => {
+    return materialConsumptionList.reduce((sum, item) => sum + item.totalCost, 0);
+  }, [materialConsumptionList]);
+
+  // Contractor work logs breakdown
+  const contractorWorkList = useMemo(() => {
+    const logs = fullProject.contractorWorkLogs ?? [];
+    return logs.map((log: any) => {
       const rate = Number(log.pricePerSqFt ?? 0);
-      return sum + Number(log.sqFt || 0) * rate;
-    }, 0);
+      const sqFt = Number(log.sqFt || 0);
+      const total = sqFt * rate;
+      return {
+        ...log,
+        sqFt,
+        rate,
+        total,
+      };
+    }).sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   }, [fullProject.contractorWorkLogs]);
 
-  const totalCost = productCost + labourCost + contractorCost;
+  // Total contractor cost
+  const contractorCost = useMemo(() => {
+    return contractorWorkList.reduce((sum, item) => sum + item.total, 0);
+  }, [contractorWorkList]);
+
+  // Total Site Expenditure (materials + contractors)
+  const siteExpenditure = productCost + contractorCost;
+
+  // Labour workers breakdown from attendance and payments
+  const labourSummaryList = useMemo(() => {
+    const attendance = fullProject.attendance ?? [];
+    const payments = fullProject.labourPayments ?? [];
+    const map = new Map<string, {
+      labourId: string;
+      labour: any;
+      daysWorked: number;
+      paymentPerDay: number;
+      totalEarned: number;
+      totalPaid: number;
+    }>();
+
+    // From attendance
+    attendance.forEach((att: any) => {
+      const lId = att.labourId;
+      const rate = Number(att.labour?.paymentPerDay || 0);
+      const val = Number(att.workDayValue ?? 1.0);
+
+      if (!map.has(lId)) {
+        map.set(lId, {
+          labourId: lId,
+          labour: att.labour,
+          daysWorked: 0,
+          paymentPerDay: rate,
+          totalEarned: 0,
+          totalPaid: 0,
+        });
+      }
+      const item = map.get(lId)!;
+      item.daysWorked += val;
+      item.totalEarned += val * rate;
+    });
+
+    // From labour payments
+    payments.forEach((p: any) => {
+      const lId = p.labourId;
+      const amt = Number(p.amount || 0);
+      if (!map.has(lId)) {
+        map.set(lId, {
+          labourId: lId,
+          labour: p.labour,
+          daysWorked: 0,
+          paymentPerDay: Number(p.labour?.paymentPerDay || 0),
+          totalEarned: 0,
+          totalPaid: 0,
+        });
+      }
+      const item = map.get(lId)!;
+      item.totalPaid += amt;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.totalEarned - a.totalEarned);
+  }, [fullProject.attendance, fullProject.labourPayments]);
+
+  // Total labour wage cost earned
+  const labourCost = useMemo(() => {
+    return labourSummaryList.reduce((sum, item) => sum + item.totalEarned, 0);
+  }, [labourSummaryList]);
+
+  // Total labour payments made
+  const totalLabourPaid = useMemo(() => {
+    return (fullProject.labourPayments || []).reduce(
+      (sum: number, p: any) => sum + Number(p.amount || 0),
+      0
+    );
+  }, [fullProject.labourPayments]);
+
+  const totalLabourBalance = labourCost - totalLabourPaid;
+
+  // Grand totals
+  const totalCost = siteExpenditure + labourCost;
   const profitLoss = agreedPrice - totalCost;
   const isProfit = profitLoss >= 0;
+  const marginPercent = agreedPrice > 0 ? ((profitLoss / agreedPrice) * 100).toFixed(1) : "0.0";
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Profit & Loss</h3>
+    <div className="space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-zinc-800/60 pb-3">
+        <div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Profit & Loss Statement
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Real-time financial performance, site expenditures, and labour cost breakdown.
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className={`font-mono font-bold px-3 py-1 text-xs rounded-full self-start sm:self-auto ${
+            isProfit
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200"
+              : "bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 border-rose-200"
+          }`}
+        >
+          {isProfit ? `+${marginPercent}% Net Profit Margin` : `${marginPercent}% Operational Deficit`}
+        </Badge>
       </div>
 
+      {/* Primary KPI Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Metric Cards */}
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm-soft">
-          <div className="flex items-center gap-2 text-primary mb-1">
-            <DollarSign className="h-4.5 w-4.5" />
-            <span className="text-xs font-semibold text-slate-500">Revenue</span>
+        {/* Revenue Card */}
+        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm-soft bg-white dark:bg-zinc-950 rounded-2xl">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2 text-primary">
+              <DollarSign className="h-4.5 w-4.5" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">Total Revenue</span>
+            </div>
+            <Badge variant="secondary" className="text-[10px] font-semibold">Contract</Badge>
           </div>
           <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-200">₹{fmt(agreedPrice)}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Agreed price contract value.</p>
+          <div className="text-xs text-muted-foreground mt-2 space-y-1 pt-2 border-t border-slate-100 dark:border-zinc-900">
+            <div className="flex justify-between">
+              <span>Received from Client:</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{fmt(fullProject.paid || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Receivable Balance:</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                ₹{fmt(Math.max(0, agreedPrice - (Number(fullProject.paid) || 0)))}
+              </span>
+            </div>
+          </div>
         </Card>
 
-        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm-soft">
-          <div className="flex items-center gap-2 text-rose-500 mb-1">
-            <TrendingUp className="h-4.5 w-4.5" />
-            <span className="text-xs font-semibold text-slate-500">Expenses</span>
+        {/* Expenses Card */}
+        <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm-soft bg-white dark:bg-zinc-950 rounded-2xl">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2 text-rose-500">
+              <TrendingUp className="h-4.5 w-4.5" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">Total Project Expenses</span>
+            </div>
+            <Badge variant="secondary" className="text-[10px] font-semibold">Cost</Badge>
           </div>
           <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-200">₹{fmt(totalCost)}</p>
-          <div className="text-[10px] text-muted-foreground mt-1 space-y-0.5">
+          <div className="text-xs text-muted-foreground mt-2 space-y-1 pt-2 border-t border-slate-100 dark:border-zinc-900">
             <div className="flex justify-between">
-              <span>Materials (Paints):</span>
-              <span className="font-bold">₹{fmt(productCost)}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                Expenditure on Site:
+              </span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">₹{fmt(siteExpenditure)}</span>
             </div>
             <div className="flex justify-between">
-              <span>Labour Wages:</span>
-              <span className="font-bold">₹{fmt(labourCost)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Contractor Charges:</span>
-              <span className="font-bold">₹{fmt(contractorCost)}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                Labour Expenses:
+              </span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">₹{fmt(labourCost)}</span>
             </div>
           </div>
         </Card>
 
-        <Card className={`border p-5 shadow-sm-soft ${isProfit ? "bg-emerald-50/40 border-emerald-200/60 dark:bg-emerald-950/10" : "bg-red-50/40 border-red-200/60 dark:bg-red-950/10"}`}>
-          <div className={`flex items-center gap-2 mb-1 ${isProfit ? "text-emerald-600" : "text-rose-600"}`}>
-            <PackageCheck className="h-4.5 w-4.5" />
-            <span className="text-xs font-semibold text-slate-500">Net Margin</span>
+        {/* Net Margin Card */}
+        <Card
+          className={`border p-5 shadow-sm-soft rounded-2xl transition-all ${
+            isProfit
+              ? "bg-emerald-50/50 border-emerald-200/70 dark:bg-emerald-950/15 dark:border-emerald-900/40"
+              : "bg-rose-50/50 border-rose-200/70 dark:bg-rose-950/15 dark:border-rose-900/40"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className={`flex items-center gap-2 ${isProfit ? "text-emerald-600" : "text-rose-600"}`}>
+              <PackageCheck className="h-4.5 w-4.5" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
+                {isProfit ? "Net Profit" : "Net Deficit"}
+              </span>
+            </div>
+            <Badge
+              variant="outline"
+              className={`text-[10px] font-bold ${
+                isProfit
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400"
+                  : "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-900/30 dark:text-rose-400"
+              }`}
+            >
+              {isProfit ? "Positive" : "Negative"}
+            </Badge>
           </div>
-          <p className={`text-2xl font-extrabold ${isProfit ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+          <p
+            className={`text-2xl font-extrabold ${
+              isProfit ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+            }`}
+          >
             {isProfit ? "+" : ""}₹{fmt(profitLoss)}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            {isProfit ? "Representing project net positive margin." : "Contract current operational deficit."}
+          <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-slate-200/60 dark:border-zinc-800/60">
+            {isProfit
+              ? `Estimated profit represents ${marginPercent}% of contract value.`
+              : `Current costs exceed contract value by ${Math.abs(Number(marginPercent))}%.`}
           </p>
         </Card>
       </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          DETAILED SECTION 1: EXPENDITURE ON SITE
+      ───────────────────────────────────────────────────────────── */}
+      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
+        <CardHeader className="p-5 border-b bg-slate-50/50 dark:bg-zinc-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+              <Building className="h-4.5 w-4.5 text-amber-500" />
+              Expenditure on Site
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Breakdown of paint materials used on site and contractor services rendered.
+            </CardDescription>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border-amber-200 font-mono font-bold text-xs px-3 py-1">
+              Materials: ₹{fmt(productCost)}
+            </Badge>
+            <Badge variant="outline" className="bg-sky-50 text-sky-700 dark:bg-sky-950/20 dark:text-sky-400 border-sky-200 font-mono font-bold text-xs px-3 py-1">
+              Contractor: ₹{fmt(contractorCost)}
+            </Badge>
+            <Badge className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-mono font-bold text-xs px-3 py-1 shadow-sm">
+              Total Site: ₹{fmt(siteExpenditure)}
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-6">
+          {/* Sub-section 1A: Materials & Paints Consumed on Site */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5 text-amber-500" />
+                Material Usage & Consumption ({materialConsumptionList.length})
+              </h4>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                Subtotal: ₹{fmt(productCost)}
+              </span>
+            </div>
+
+            {materialConsumptionList.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
+                <Package className="h-7 w-7 opacity-30 mx-auto mb-2" />
+                <p className="text-xs font-semibold">No materials logged for this site yet.</p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
+                <Table className="text-xs">
+                  <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
+                    <TableRow>
+                      <TableHead className="font-bold">Product / Material</TableHead>
+                      <TableHead className="font-bold">Brand</TableHead>
+                      <TableHead className="font-bold text-center">Pack Size</TableHead>
+                      <TableHead className="font-bold text-right">Unit Rate</TableHead>
+                      <TableHead className="font-bold text-center">Quantity Logged</TableHead>
+                      <TableHead className="font-bold text-right">Total Cost</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {materialConsumptionList.map((m) => (
+                      <TableRow key={m.productId} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                          {m.productName}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {m.brandName || "—"}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-[11px]">
+                          {m.size}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {m.unitPrice > 0 ? `₹${fmt(m.unitPrice)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-center font-semibold">
+                          {m.totalQuantity > 0 ? `${m.totalQuantity} Packs` : (m.logsCount === 0 ? "Allocated" : "—")}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                          ₹{fmt(m.totalCost)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {/* Sub-section 1B: Contractor Work Charges */}
+          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <Paintbrush className="h-3.5 w-3.5 text-sky-500" />
+                Contractor Work Logs ({contractorWorkList.length})
+              </h4>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                Subtotal: ₹{fmt(contractorCost)}
+              </span>
+            </div>
+
+            {contractorWorkList.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
+                <Paintbrush className="h-7 w-7 opacity-30 mx-auto mb-2" />
+                <p className="text-xs font-semibold">No contractor work logs registered for this site.</p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
+                <Table className="text-xs">
+                  <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
+                    <TableRow>
+                      <TableHead className="font-bold">Contractor</TableHead>
+                      <TableHead className="font-bold">Log Date</TableHead>
+                      <TableHead className="font-bold">Material / Scope</TableHead>
+                      <TableHead className="font-bold text-center">Sq.Ft</TableHead>
+                      <TableHead className="font-bold text-right">Rate / Sq.Ft</TableHead>
+                      <TableHead className="font-bold text-right">Total Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contractorWorkList.map((cw: any) => (
+                      <TableRow key={cw.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                          {cw.contractor?.name || "Contractor"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono text-[11px]">
+                          {formatDate(cw.date)}
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-zinc-400">
+                          {cw.material || cw.remarks || "—"}
+                        </TableCell>
+                        <TableCell className="text-center font-mono font-semibold">
+                          {cw.sqFt.toLocaleString("en-IN")}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          ₹{fmt(cw.rate)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                          ₹{fmt(cw.total)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ─────────────────────────────────────────────────────────────
+          DETAILED SECTION 2: LABOUR EXPENSES ON SITE
+      ───────────────────────────────────────────────────────────── */}
+      <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
+        <CardHeader className="p-5 border-b bg-slate-50/50 dark:bg-zinc-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+              <Hammer className="h-4.5 w-4.5 text-indigo-500" />
+              Labour Expenses on Site
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Attendance records, shifts worked, wages earned, and payments disbursed to labours.
+            </CardDescription>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-400 border-indigo-200 font-mono font-bold text-xs px-3 py-1">
+              Wages Earned: ₹{fmt(labourCost)}
+            </Badge>
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 font-mono font-bold text-xs px-3 py-1">
+              Paid Out: ₹{fmt(totalLabourPaid)}
+            </Badge>
+            {totalLabourBalance > 0 ? (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 border-amber-200 font-mono font-bold text-xs px-3 py-1">
+                Balance Due: ₹{fmt(totalLabourBalance)}
+              </Badge>
+            ) : labourCost > 0 ? (
+              <Badge className="bg-emerald-600 text-white font-mono font-bold text-xs px-3 py-1 shadow-sm">
+                Fully Settled
+              </Badge>
+            ) : null}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-6">
+          {/* Sub-section 2A: Worker Wage Breakdown */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+                Worker Wage & Attendance Breakdown ({labourSummaryList.length})
+              </h4>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                Total Wages: ₹{fmt(labourCost)}
+              </span>
+            </div>
+
+            {labourSummaryList.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
+                <Hammer className="h-7 w-7 opacity-30 mx-auto mb-2" />
+                <p className="text-xs font-semibold">No labour attendance recorded for this project yet.</p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
+                <Table className="text-xs">
+                  <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
+                    <TableRow>
+                      <TableHead className="font-bold">Worker Name</TableHead>
+                      <TableHead className="font-bold text-right">Daily Rate</TableHead>
+                      <TableHead className="font-bold text-center">Days Worked</TableHead>
+                      <TableHead className="font-bold text-right">Total Wages</TableHead>
+                      <TableHead className="font-bold text-right">Amount Paid</TableHead>
+                      <TableHead className="font-bold text-right">Balance Due</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {labourSummaryList.map((w) => {
+                      const balance = w.totalEarned - w.totalPaid;
+                      return (
+                        <TableRow key={w.labourId} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                          <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                            <div>
+                              <span>{w.labour?.name || "Worker"}</span>
+                              {w.labour?.phonenumber && (
+                                <span className="text-[10px] text-muted-foreground block">
+                                  {w.labour.phonenumber}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            ₹{fmt(w.paymentPerDay)}/day
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold">
+                            {w.daysWorked} Day{w.daysWorked > 1 ? "s" : ""}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                            ₹{fmt(w.totalEarned)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                            ₹{fmt(w.totalPaid)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {balance > 0 ? (
+                              <span className="font-bold text-amber-600 dark:text-amber-400">
+                                ₹{fmt(balance)}
+                              </span>
+                            ) : balance === 0 ? (
+                              <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Settled
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-sky-600 dark:text-sky-400">
+                                Advance ₹{fmt(Math.abs(balance))}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {/* Sub-section 2B: Labour Payments Disbursed */}
+          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" />
+                Labour Payment Records ({(fullProject.labourPayments || []).length})
+              </h4>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                Total Paid: ₹{fmt(totalLabourPaid)}
+              </span>
+            </div>
+
+            {(fullProject.labourPayments || []).length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground border border-dashed rounded-xl bg-slate-50/50 dark:bg-zinc-900/20">
+                <ClipboardCheck className="h-7 w-7 opacity-30 mx-auto mb-2" />
+                <p className="text-xs font-semibold">No payments recorded to labours on this site yet.</p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
+                <Table className="text-xs">
+                  <TableHeader className="bg-slate-50 dark:bg-zinc-900/60">
+                    <TableRow>
+                      <TableHead className="font-bold">Worker Name</TableHead>
+                      <TableHead className="font-bold">Payment Date</TableHead>
+                      <TableHead className="font-bold">Mode</TableHead>
+                      <TableHead className="font-bold">Remarks</TableHead>
+                      <TableHead className="font-bold text-right">Amount Paid</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(fullProject.labourPayments || []).map((p: any) => (
+                      <TableRow key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                        <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                          {p.labour?.name || "Worker"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono text-[11px]">
+                          {formatDate(p.paymentDate)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] font-semibold uppercase">
+                            {p.paymentMode || "Cash"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-zinc-400">
+                          {p.remarks || "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          ₹{fmt(p.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

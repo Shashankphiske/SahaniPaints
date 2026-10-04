@@ -181,6 +181,7 @@ export function TaskSection() {
             <DialogTitle>{editingItem ? "Edit Task" : "Add Task"}</DialogTitle>
           </DialogHeader>
           <MasterForm
+            key={editingItem ? editingItem.id : "new-task"}
             resource="tasks"
             initialData={editingItem ?? undefined}
             editing={!!editingItem}

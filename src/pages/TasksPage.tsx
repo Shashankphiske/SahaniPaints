@@ -241,8 +241,9 @@ export default function TasksPage({ projectId }: { projectId?: string }) {
             <DialogTitle>{editingItem ? "Edit Task" : "Add New Task"}</DialogTitle>
           </DialogHeader>
           <MasterForm
+            key={editingItem ? editingItem.id : "new-task"}
             resource="tasks"
-            initialData={editingItem ?? { projectId }}
+            initialData={editingItem ?? (projectId ? { projectId } : undefined)}
             editing={!!editingItem}
             onSubmit={handleSave}
             onCancel={closeModal}

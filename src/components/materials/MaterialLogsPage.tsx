@@ -95,6 +95,10 @@ export default function MaterialLogsPage() {
   const [productSelectId, setProductSelectId] = useState("");
   const [productSelectDisplay, setProductSelectDisplay] = useState("");
 
+  // Search fields
+  const [siteSearch, setSiteSearch] = useState("");
+  const [detailProductSearch, setDetailProductSearch] = useState("");
+
   // Filters state for ledger table
   const [showFilterCard, setShowFilterCard] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
@@ -377,6 +381,12 @@ export default function MaterialLogsPage() {
   // Filtered logs for ledger view
   const filteredLogs = useMemo(() => {
     return logsList.filter((log) => {
+      if (siteSearch.trim()) {
+        const term = siteSearch.toLowerCase().trim();
+        const matchProj = projectsList.find((p) => p.id === log.projectId);
+        const projName = (log.project?.name || matchProj?.name || "").toLowerCase();
+        if (!projName.includes(term)) return false;
+      }
       if (filterSearch.trim()) {
         const term = filterSearch.toLowerCase().trim();
         if (!log.product?.name?.toLowerCase().includes(term)) return false;
@@ -392,7 +402,7 @@ export default function MaterialLogsPage() {
       }
       return true;
     });
-  }, [logsList, filterSearch, filterDate, filterProjectId]);
+  }, [logsList, siteSearch, filterSearch, filterDate, filterProjectId, projectsList]);
 
   // Group logs by Date + Project
   const groupedLogs = useMemo(() => {
@@ -407,10 +417,11 @@ export default function MaterialLogsPage() {
       const dStr = parsedDate.toISOString().split("T")[0];
       const groupKey = `${dStr}_${log.projectId}`;
       if (!groups[groupKey]) {
+        const matchProj = projectsList.find((p) => p.id === log.projectId);
         groups[groupKey] = {
           date: dStr,
           projectId: log.projectId,
-          projectName: log.project?.name || "Unknown Project",
+          projectName: log.project?.name || matchProj?.name || "Unknown Project",
           records: [],
         };
       }
@@ -418,7 +429,7 @@ export default function MaterialLogsPage() {
     });
 
     return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filteredLogs]);
+  }, [filteredLogs, projectsList]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "—";
@@ -451,8 +462,20 @@ export default function MaterialLogsPage() {
     });
   }, [logsList, selectedDetailGroup]);
 
+  // Filtered detailed group records when searching products
+  const filteredDetailRecords = useMemo(() => {
+    if (!detailProductSearch.trim()) return activeDetailRecords;
+    const term = detailProductSearch.toLowerCase().trim();
+    return activeDetailRecords.filter((r) => {
+      const name = r.product?.name?.toLowerCase() || "";
+      const size = r.product?.size?.toLowerCase() || "";
+      return name.includes(term) || size.includes(term);
+    });
+  }, [activeDetailRecords, detailProductSearch]);
+
   const handleBackToLedger = () => {
     setSelectedDetailGroup(null);
+    setDetailProductSearch("");
     setIsAddMode(false);
     setTempSelectedMaterials([]);
   };
@@ -839,13 +862,34 @@ export default function MaterialLogsPage() {
               </h2>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Quick Search for Project Site */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search project site..."
+                  value={siteSearch}
+                  onChange={(e) => setSiteSearch(e.target.value)}
+                  className="pl-9 pr-8 h-9 text-xs bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 rounded-lg shadow-sm font-medium"
+                />
+                {siteSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setSiteSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
               <Button
                 variant={showFilterCard ? "default" : "outline"}
                 onClick={() => setShowFilterCard(!showFilterCard)}
-                className="font-medium flex items-center gap-1.5 shadow-sm"
+                className="font-medium flex items-center gap-1.5 shadow-sm h-9 text-xs"
               >
-                <SlidersHorizontal className="h-4 w-4" />
+                <SlidersHorizontal className="h-3.5 w-3.5" />
                 Filters
                 {filterSearch || filterDate || filterProjectId ? (
                   <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-primary text-primary-foreground rounded-full font-medium">
@@ -859,9 +903,9 @@ export default function MaterialLogsPage() {
                   setIsAddMode(true);
                   setSelectedDetailGroup(null);
                 }}
-                className="font-medium flex items-center gap-1.5 shadow-sm"
+                className="font-medium flex items-center gap-1.5 shadow-sm h-9 text-xs"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
                 Log Material Usage
               </Button>
             </div>
@@ -963,8 +1007,46 @@ export default function MaterialLogsPage() {
                   <tbody>
                     {groupedLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="h-24 text-center text-muted-foreground align-middle">
-                          No material logs found. Click "Log Material Usage" above to start logging.
+                        <td colSpan={5} className="h-28 text-center text-muted-foreground align-middle">
+                          <div className="flex flex-col items-center justify-center space-y-1.5">
+                            {siteSearch ? (
+                              <>
+                                <p className="text-sm font-semibold">
+                                  No project sites matching "{siteSearch}"
+                                </p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSiteSearch("")}
+                                  className="text-xs text-primary font-bold h-7"
+                                >
+                                  Clear Search
+                                </Button>
+                              </>
+                            ) : filterSearch || filterProjectId || filterDate ? (
+                              <>
+                                <p className="text-sm font-semibold">
+                                  No material logs match active filters.
+                                </p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setFilterSearch("");
+                                    setFilterProjectId("");
+                                    setFilterDate("");
+                                  }}
+                                  className="text-xs text-primary font-bold h-7"
+                                >
+                                  Reset Filters
+                                </Button>
+                              </>
+                            ) : (
+                              <p className="text-sm font-semibold">
+                                No material logs found. Click "Log Material Usage" above to start logging.
+                              </p>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -981,6 +1063,7 @@ export default function MaterialLogsPage() {
                             className="border-b transition-colors hover:bg-muted/30 cursor-pointer"
                             onClick={() => {
                               setSelectedDetailGroup(g);
+                              setDetailProductSearch("");
                               const matchProj = projectsList.find((p) => p.id === g.projectId);
                               if (matchProj) {
                                 setSelectedProject(matchProj);
@@ -1012,6 +1095,7 @@ export default function MaterialLogsPage() {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedDetailGroup(g);
+                                  setDetailProductSearch("");
                                   const matchProj = projectsList.find((p) => p.id === g.projectId);
                                   if (matchProj) {
                                     setSelectedProject(matchProj);
@@ -1103,11 +1187,35 @@ export default function MaterialLogsPage() {
           <div className="w-full">
             {/* Logged Materials List */}
             <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-md bg-white dark:bg-zinc-950 rounded-2xl overflow-hidden">
-              <CardHeader className="p-5 border-b border-slate-100 dark:border-zinc-900">
+              <CardHeader className="p-4 sm:p-5 border-b border-slate-100 dark:border-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
                   <ClipboardList className="h-4 w-4 text-emerald-500" />
-                  Logged Materials ({activeDetailRecords.length})
+                  Logged Materials ({filteredDetailRecords.length}
+                  {filteredDetailRecords.length !== activeDetailRecords.length ? ` / ${activeDetailRecords.length}` : ""})
                 </CardTitle>
+
+                {/* Product Search Field */}
+                {activeDetailRecords.length > 0 && (
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search products in this sheet..."
+                      value={detailProductSearch}
+                      onChange={(e) => setDetailProductSearch(e.target.value)}
+                      className="pl-8 pr-7 h-9 text-xs bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 rounded-lg font-medium"
+                    />
+                    {detailProductSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setDetailProductSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+                        title="Clear product search"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="p-0">
                 {activeDetailRecords.length === 0 ? (
@@ -1115,6 +1223,21 @@ export default function MaterialLogsPage() {
                     <Package className="h-10 w-10 opacity-30 animate-pulse" />
                     <p className="text-sm font-semibold">No materials logged for this site yet.</p>
                     <p className="text-xs opacity-70">Click "Log More Materials" above to add paint products.</p>
+                  </div>
+                ) : filteredDetailRecords.length === 0 ? (
+                  <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center space-y-2">
+                    <Search className="h-8 w-8 opacity-30" />
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      No products found matching "{detailProductSearch}"
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDetailProductSearch("")}
+                      className="text-xs text-primary font-bold h-7"
+                    >
+                      Clear Product Search
+                    </Button>
                   </div>
                 ) : (
                   <div className="w-full overflow-x-auto no-scrollbar">
@@ -1139,7 +1262,7 @@ export default function MaterialLogsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {activeDetailRecords.map((r) => {
+                        {filteredDetailRecords.map((r) => {
                           const unitPrice = Number(r.product?.price || 0);
                           const totalPrice = Number(r.quantity || 0) * unitPrice;
                           return (
