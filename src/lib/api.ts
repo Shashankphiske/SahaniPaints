@@ -119,7 +119,10 @@ export const apiRequest = {
       }
       throw new ApiError(getFriendlyErrorMessage(rawData?.message || rawData?.error || `Request failed with status ${res.status}`), res.status);
     }
-    return rawData.data?.records ? rawData.data.records : rawData.data;
+    if (rawData && typeof rawData === "object" && "data" in rawData) {
+      return rawData.data?.records !== undefined ? rawData.data.records : rawData.data;
+    }
+    return rawData;
   },
   fetchPaginated: async <T>(
     resource: string,
