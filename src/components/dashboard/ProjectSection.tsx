@@ -139,7 +139,7 @@ export function ProjectSection() {
         </div>
       ) : (
         <div className="max-h-[500px] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {runningProjects.map((project) => {
               const finalTotal = Number(project.agreedPrice ?? project.totalAmount ?? 0);
               const originalTotal = Number(project.totalAmount ?? 0);
@@ -208,8 +208,8 @@ export function ProjectSection() {
 
                     {/* Vertical Financial Pills with Simple Light Colors */}
                     <div className="flex flex-col gap-1.5 text-xs">
-                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 min-w-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
                           {hasDiscount && (
                             <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
@@ -217,29 +217,29 @@ export function ProjectSection() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col items-end text-right min-w-0">
                           {hasDiscount && (
-                            <span className="text-[10px] line-through text-slate-400 font-medium">
+                            <span className="text-[10px] line-through text-slate-400 font-medium leading-none mb-0.5">
                               ₹{fmt(originalTotal)}
                             </span>
                           )}
-                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200 leading-tight">
                             ₹{fmt(finalTotal)}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
+                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 min-w-0">
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight shrink-0">Paid</span>
                         <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                           ₹{fmt(paid)}
                         </span>
                       </div>
-                      <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border ${
+                      <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border min-w-0 ${
                         due > 0
                           ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
                           : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
                       }`}>
-                        <span className={`text-[10px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-tight shrink-0 ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
                         <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
                           ₹{fmt(due)}
                         </span>
@@ -308,7 +308,7 @@ export function ProjectSection() {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-muted-foreground font-semibold">Total Cost</span>
-                        <div className="text-right flex items-center gap-1.5">
+                        <div className="text-right flex items-center gap-1.5 flex-wrap justify-end">
                           {itemHasDiscount && (
                             <span className="text-xs line-through text-slate-400 font-medium">
                               ₹{fmt(itemOriginalTotal)}

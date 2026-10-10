@@ -4,12 +4,29 @@ import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Trash2, Search, ClipboardList, Loader2, PackagePlus } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Search,
+  ClipboardList,
+  Loader2,
+  PackagePlus,
+  LayoutGrid,
+  Table as TableIcon,
+  CheckCircle2,
+  Clock,
+  Truck,
+  Building2,
+  Calendar,
+  Package,
+  Layers,
+} from "lucide-react";
 import type { LowMaterial, Project, Product } from "@/types/master";
 
 const getTodayString = () => {
@@ -45,31 +62,41 @@ interface MaterialItemRow {
   quantity: string;
 }
 
-interface ParsedMaterialItem {
+export interface ParsedRequestItem {
+  index: number;
   material: string;
   color: string;
   shade: string;
+  quantity: string;
 }
 
-const parseMaterialEntry = (rawMaterial: string): ParsedMaterialItem[] => {
+export const parseRequestItems = (rawMaterial: string, rawQuantity?: string): ParsedRequestItem[] => {
   if (!rawMaterial) return [];
-  const lines = rawMaterial.split("\n").map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return [];
+  const matLines = rawMaterial.split("\n").map((l) => l.trim()).filter(Boolean);
+  const qtyLines = (rawQuantity || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const cleanQuantities = qtyLines.map((q) => q.replace(/^\d+\.\s*/, "").trim());
 
-  return lines.map((line) => {
+  return matLines.map((line, idx) => {
     const cleanLine = line.replace(/^\d+\.\s*/, "");
     const match = cleanLine.match(/^(.*?)(?:\s*\[(?:Color:\s*([^|\]]+?)\s*\|\s*)?Shade:\s*([^\]]+)\])?$/i);
+    let material = cleanLine;
+    let color = "—";
+    let shade = "—";
+
     if (match && (match[2] !== undefined || match[3] !== undefined)) {
-      return {
-        material: match[1].trim() || cleanLine,
-        color: (match[2] || "").trim() || "—",
-        shade: (match[3] || "").trim() || "—",
-      };
+      material = match[1].trim() || cleanLine;
+      color = (match[2] || "").trim() || "—";
+      shade = (match[3] || "").trim() || "—";
     }
+
+    const quantity = cleanQuantities[idx] || (idx === 0 && rawQuantity ? rawQuantity.trim() : "") || "—";
+
     return {
-      material: cleanLine,
-      color: "—",
-      shade: "—",
+      index: idx + 1,
+      material,
+      color,
+      shade,
+      quantity,
     };
   });
 };
@@ -89,6 +116,8 @@ export default function MaterialRequestsPage() {
   const [projectFilter, setProjectFilter] = useState("");
   const [requestDate, setRequestDate] = useState(() => getTodayString());
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [statusFilter, setStatusFilter] = useState<"active" | "pending_approval" | "pending_delivery" | "completed">("active");
 
   // Multi-material item rows
   const [items, setItems] = useState<MaterialItemRow[]>([
@@ -182,13 +211,38 @@ export default function MaterialRequestsPage() {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...updates } : item)));
   };
 
-  const filteredRequests = useMemo(() => {
-    return requests.filter((r) => {
-      // Exclude wastage material logs
-      if (r.material?.startsWith("[WASTAGE]")) return false;
+  const validRequests = useMemo(() => {
+    return requests.filter((r) => !r.material?.startsWith("[WASTAGE]"));
+  }, [requests]);
 
-      // Hide requests that are both approved AND delivered on the main page
-      if (r.approved && r.delivered) return false;
+  const counts = useMemo(() => {
+    let active = 0;
+    let pendingApproval = 0;
+    let pendingDelivery = 0;
+    let completed = 0;
+
+    validRequests.forEach((r) => {
+      const isCompleted = Boolean(r.approved && r.delivered);
+      if (isCompleted) {
+        completed++;
+      } else {
+        active++;
+        if (!r.approved) pendingApproval++;
+        if (!r.delivered) pendingDelivery++;
+      }
+    });
+
+    return { active, pendingApproval, pendingDelivery, completed, total: validRequests.length };
+  }, [validRequests]);
+
+  const filteredRequests = useMemo(() => {
+    return validRequests.filter((r) => {
+      const isCompleted = Boolean(r.approved && r.delivered);
+
+      if (statusFilter === "active" && isCompleted) return false;
+      if (statusFilter === "pending_approval" && (r.approved || isCompleted)) return false;
+      if (statusFilter === "pending_delivery" && (r.delivered || isCompleted)) return false;
+      if (statusFilter === "completed" && !isCompleted) return false;
 
       const projName = r.project?.name || "";
       const matName = r.material || "";
@@ -200,7 +254,7 @@ export default function MaterialRequestsPage() {
         matName.toLowerCase().includes(q)
       );
     });
-  }, [requests, searchQuery]);
+  }, [validRequests, statusFilter, searchQuery]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -542,97 +596,321 @@ export default function MaterialRequestsPage() {
         </Dialog>
       </div>
 
-      {/* Filters and List */}
-      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden p-4 space-y-4">
-        {/* Search */}
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by site or material..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      {/* Metric Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div
+          onClick={() => setStatusFilter("active")}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+            statusFilter === "active"
+              ? "bg-primary/5 border-primary shadow-xs ring-1 ring-primary/20"
+              : "bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900 border-slate-200/80 dark:border-zinc-800"
+          }`}
+        >
+          <div className="flex items-center justify-between text-muted-foreground text-xs font-semibold">
+            <span>Active Requests</span>
+            <Layers className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-xl font-bold text-foreground mt-1.5">{counts.active}</div>
         </div>
 
-        {/* Requests Table */}
-        <div className="rounded-lg border overflow-hidden">
-          <Table>
-            <TableHeader className="bg-slate-50 dark:bg-zinc-900">
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Site / Project</TableHead>
-                <TableHead>Material</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Shade</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Approved by Office</TableHead>
-                <TableHead>Delivered</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
+        <div
+          onClick={() => setStatusFilter("pending_approval")}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+            statusFilter === "pending_approval"
+              ? "bg-amber-500/10 border-amber-500 shadow-xs ring-1 ring-amber-500/20"
+              : "bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900 border-slate-200/80 dark:border-zinc-800"
+          }`}
+        >
+          <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs font-semibold">
+            <span>Pending Office</span>
+            <Clock className="h-4 w-4" />
+          </div>
+          <div className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-1.5">{counts.pendingApproval}</div>
+        </div>
+
+        <div
+          onClick={() => setStatusFilter("pending_delivery")}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+            statusFilter === "pending_delivery"
+              ? "bg-blue-500/10 border-blue-500 shadow-xs ring-1 ring-blue-500/20"
+              : "bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900 border-slate-200/80 dark:border-zinc-800"
+          }`}
+        >
+          <div className="flex items-center justify-between text-blue-600 dark:text-blue-400 text-xs font-semibold">
+            <span>Pending Delivery</span>
+            <Truck className="h-4 w-4" />
+          </div>
+          <div className="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1.5">{counts.pendingDelivery}</div>
+        </div>
+
+        <div
+          onClick={() => setStatusFilter("completed")}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+            statusFilter === "completed"
+              ? "bg-emerald-500/10 border-emerald-500 shadow-xs ring-1 ring-emerald-500/20"
+              : "bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900 border-slate-200/80 dark:border-zinc-800"
+          }`}
+        >
+          <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+            <span>Delivered</span>
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1.5">{counts.completed}</div>
+        </div>
+      </div>
+
+      {/* Filters and List */}
+      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden p-4 space-y-4">
+        {/* Toolbar: Search & View Mode Switcher */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by site or material..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-1 self-end sm:self-auto bg-slate-100 dark:bg-zinc-850 p-1 rounded-lg border border-slate-200/60 dark:border-zinc-750">
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "cards" ? "secondary" : "ghost"}
+              onClick={() => setViewMode("cards")}
+              className={`h-7 px-2.5 text-xs font-bold gap-1.5 ${viewMode === "cards" ? "bg-white dark:bg-zinc-900 shadow-xs" : ""}`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>Cards</span>
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              onClick={() => setViewMode("table")}
+              className={`h-7 px-2.5 text-xs font-bold gap-1.5 ${viewMode === "table" ? "bg-white dark:bg-zinc-900 shadow-xs" : ""}`}
+            >
+              <TableIcon className="h-3.5 w-3.5" />
+              <span>Table</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Requests Content */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-7 w-7 animate-spin mx-auto text-primary" />
+            <span className="text-xs text-muted-foreground mt-2 block">Loading requests...</span>
+          </div>
+        ) : filteredRequests.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground text-xs italic bg-slate-50/50 dark:bg-zinc-900/30 rounded-xl border border-dashed border-border/60">
+            No material requests found {statusFilter !== "active" ? `for filter "${statusFilter.replace("_", " ")}"` : ""}.
+          </div>
+        ) : viewMode === "cards" ? (
+          /* Cards View */
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredRequests.map((req) => {
+              const requestItems = parseRequestItems(req.material, req.quantity);
+
+              return (
+                <Card
+                  key={req.id}
+                  className="group relative overflow-hidden border border-border/80 bg-card hover:border-primary/40 hover:shadow-md transition-all duration-200 flex flex-col justify-between rounded-xl"
+                >
+                  <CardContent className="p-4 space-y-3.5 flex flex-col justify-between h-full">
+                    {/* Top Row: Project & Date & Delete */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-foreground font-bold text-sm min-w-0 flex-1">
+                          <Building2 className="h-4 w-4 text-primary shrink-0" />
+                          <span className="truncate" title={req.project?.name || "No Project"}>
+                            {req.project?.name || "—"}
+                          </span>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (window.confirm("Are you sure you want to delete this material request?")) {
+                              remove(req.id);
+                              toast({ title: "Request Removed", description: "Material request deleted." });
+                            }
+                          }}
+                          className="h-7 w-7 text-muted-foreground/50 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 shrink-0 -mr-1 -mt-1"
+                          title="Delete Request"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center text-[11px] text-muted-foreground gap-1.5">
+                        <Calendar className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span className="font-mono">{formatDate(req.date)}</span>
+                      </div>
+                    </div>
+
+                    {/* Requested Items Box */}
+                    <div className="space-y-2 bg-slate-50/70 dark:bg-zinc-900/40 p-3 rounded-lg border border-slate-100 dark:border-zinc-800/80 min-w-0 flex-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Package className="h-3 w-3 text-primary" />
+                          Requested Items
+                        </span>
+                        <span className="bg-slate-200/70 dark:bg-zinc-800 px-1.5 py-0.2 rounded text-[9px] font-semibold text-slate-700 dark:text-slate-300">
+                          {requestItems.length} {requestItems.length === 1 ? "item" : "items"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-0.5 custom-scrollbar">
+                        {requestItems.map((item) => (
+                          <div
+                            key={item.index}
+                            className="bg-white dark:bg-zinc-850 p-2 rounded-md border border-slate-200/60 dark:border-zinc-700/60 text-xs space-y-1"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className="font-bold text-foreground line-clamp-2 leading-snug">
+                                {requestItems.length > 1 ? `${item.index}. ` : ""}{item.material}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="font-bold text-[10px] shrink-0 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200/50 px-1.5 py-0.2 leading-tight"
+                              >
+                                {item.quantity.toLowerCase().startsWith("qty") ? item.quantity : `Qty: ${item.quantity}`}
+                              </Badge>
+                            </div>
+
+                            {(item.shade !== "—" || item.color !== "—") && (
+                              <div className="flex items-center gap-1.5 text-[10px] flex-wrap pt-0.5">
+                                {item.shade !== "—" && (
+                                  <span className="font-mono font-semibold bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200/40 dark:border-zinc-700/40">
+                                    Shade: {item.shade}
+                                  </span>
+                                )}
+                                {item.color !== "—" && (
+                                  <span className="text-muted-foreground">
+                                    Color: <strong className="text-foreground">{item.color}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Status & Approvals Section */}
+                    <div className="space-y-2 pt-1 border-t border-border/40 text-xs">
+                      {/* Office Approval */}
+                      <div className="flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Office Approval</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                              req.approved
+                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200"
+                                : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200"
+                            }`}
+                          >
+                            {req.approved ? "Approved" : "Pending"}
+                          </Badge>
+                          {isAdmin && !req.approved && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleApprove(req)}
+                              className="h-6 text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100/50 font-bold px-2 py-0"
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Delivery Status */}
+                      <div className="flex items-center justify-between p-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Site Delivery</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                              req.delivered
+                                ? "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border-blue-200"
+                                : "bg-slate-100 dark:bg-zinc-800 text-slate-500 border-slate-200"
+                            }`}
+                          >
+                            {req.delivered ? "Delivered" : "Pending"}
+                          </Badge>
+                          {isAdmin && !req.delivered && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeliver(req)}
+                              className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-100/50 font-bold px-2 py-0"
+                            >
+                              Mark Delivered
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          /* Table View */
+          <div className="rounded-xl border overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-slate-50 dark:bg-zinc-900">
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
-                    <span className="text-xs text-muted-foreground mt-2 block">Loading requests...</span>
-                  </TableCell>
+                  <TableHead className="w-[105px] text-xs">Date</TableHead>
+                  <TableHead className="min-w-[130px] text-xs">Site / Project</TableHead>
+                  <TableHead className="min-w-[280px] text-xs">Requested Items</TableHead>
+                  <TableHead className="w-[170px] text-xs">Approved by Office</TableHead>
+                  <TableHead className="w-[170px] text-xs">Delivered</TableHead>
+                  <TableHead className="w-[60px] text-right text-xs">Actions</TableHead>
                 </TableRow>
-              ) : filteredRequests.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-xs italic">
-                    No material requests found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredRequests.map((req) => {
-                  const parsed = parseMaterialEntry(req.material);
+              </TableHeader>
+              <TableBody>
+                {filteredRequests.map((req) => {
+                  const requestItems = parseRequestItems(req.material, req.quantity);
+
                   return (
                     <TableRow key={req.id}>
                       <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
                       <TableCell className="font-bold text-xs">{req.project?.name || "—"}</TableCell>
-                      <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400 whitespace-pre-line leading-relaxed">
-                        {parsed.length > 0
-                          ? parsed.map((p, idx) => (
-                              <div key={idx}>
-                                {parsed.length > 1 ? `${idx + 1}. ` : ""}
-                                {p.material}
-                              </div>
-                            ))
-                          : req.material}
-                      </TableCell>
-                      <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">
-                        {parsed.length > 0 ? (
-                          parsed.map((p, idx) => (
-                            <div key={idx} className="text-slate-800 dark:text-slate-200">
-                              {p.color}
-                            </div>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground italic">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs font-bold whitespace-pre-line leading-relaxed">
-                        {parsed.length > 0 ? (
-                          parsed.map((p, idx) => (
-                            <div key={idx}>
-                              {p.shade !== "—" ? (
-                                <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800">
-                                  {p.shade}
+                      <TableCell className="py-2.5">
+                        <div className="space-y-1.5">
+                          {requestItems.map((item) => (
+                            <div key={item.index} className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-xs text-foreground">
+                                {requestItems.length > 1 ? `${item.index}. ` : ""}{item.material}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="font-bold text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200/50"
+                              >
+                                {item.quantity.toLowerCase().startsWith("qty") ? item.quantity : `Qty: ${item.quantity}`}
+                              </Badge>
+                              {item.shade !== "—" && (
+                                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 bg-slate-50 dark:bg-zinc-900">
+                                  Shade: {item.shade}
                                 </Badge>
-                              ) : (
-                                <span className="text-muted-foreground italic font-normal">—</span>
+                              )}
+                              {item.color !== "—" && (
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  ({item.color})
+                                </span>
                               )}
                             </div>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground italic font-normal">—</span>
-                        )}
+                          ))}
+                        </div>
                       </TableCell>
-                      <TableCell className="font-medium text-xs whitespace-pre-line leading-relaxed">{req.quantity}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <Badge
                             variant="outline"
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -656,7 +934,7 @@ export default function MaterialRequestsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <Badge
                             variant="outline"
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -696,11 +974,11 @@ export default function MaterialRequestsPage() {
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
     </div>
   );

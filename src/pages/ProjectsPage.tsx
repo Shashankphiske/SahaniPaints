@@ -35,6 +35,7 @@ import {
   ClipboardCheck,
   DollarSign,
   PackageCheck,
+  PackagePlus,
   ChevronDown,
   ChevronRight,
   LayoutGrid,
@@ -51,6 +52,7 @@ import {
   Edit,
 } from "lucide-react";
 import TasksPage from "./TasksPage";
+import { parseRequestItems } from "../components/materials/MaterialRequestsPage";
 
 // Format currency
 function fmt(n: any) {
@@ -538,7 +540,7 @@ export default function ProjectsPage() {
                   <p className="text-sm max-w-sm mx-auto">Create a new painting contract to start managing material selection and attendance ledger.</p>
                 </div>
               ) : viewMode === "cards" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {filteredProjects.map((project) => {
                     const finalTotal = Number(project.agreedPrice ?? project.totalAmount ?? 0);
                     const originalTotal = Number(project.totalAmount ?? 0);
@@ -598,8 +600,8 @@ export default function ProjectsPage() {
 
                           {/* Vertical Financial Pills with Simple Light Colors */}
                           <div className="flex flex-col gap-1.5 text-xs">
-                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40">
-                              <div className="flex items-center gap-1.5">
+                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 min-w-0">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
                                 {hasDiscount && (
                                   <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
@@ -607,29 +609,29 @@ export default function ProjectsPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-col items-end text-right min-w-0">
                                 {hasDiscount && (
-                                  <span className="text-[10px] line-through text-slate-400 font-medium">
+                                  <span className="text-[10px] line-through text-slate-400 font-medium leading-none mb-0.5">
                                     ₹{fmt(originalTotal)}
                                   </span>
                                 )}
-                                <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                                <span className="text-xs font-bold text-blue-900 dark:text-blue-200 leading-tight">
                                   ₹{fmt(finalTotal)}
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40">
-                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight">Paid</span>
+                            <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 min-w-0">
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight shrink-0">Paid</span>
                               <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                                 ₹{fmt(paid)}
                               </span>
                             </div>
-                            <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border ${
+                            <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border min-w-0 ${
                               due > 0
                                 ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
                                 : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
                             }`}>
-                              <span className={`text-[10px] font-bold uppercase tracking-tight ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                              <span className={`text-[10px] font-bold uppercase tracking-tight shrink-0 ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
                               <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
                                 ₹{fmt(due)}
                               </span>
@@ -1071,7 +1073,7 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                       <div className="space-y-1">
                         <label className="text-[11px] text-muted-foreground block">Area</label>
                         <Input
@@ -1137,7 +1139,7 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
               </button>
 
               {showAdvancedPricing && (
-                <div className="px-5 pb-5 grid grid-cols-2 gap-4 border-t border-slate-100 dark:border-zinc-900 pt-4">
+                <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 dark:border-zinc-900 pt-4">
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground block">Tax Rate (%)</label>
                     <Input
@@ -1677,7 +1679,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
               </h3>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               {
                 label: "Total Project Value",
@@ -1713,10 +1715,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
       )}
 
       {/* 3. Tasks Section */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks</h3>
-        </div>
+      <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
         <TasksPage projectId={fullProject.id} />
       </div>
 
@@ -1751,17 +1750,19 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
 
       {/* 7. General Details (others remaining) */}
       <form onSubmit={handleUpdate} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-          <div className="space-y-1 md:col-span-2">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Project / Site Name *
-            </span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-white dark:bg-zinc-950 p-4 sm:p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+            <div className="h-6 flex items-center">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Project / Site Name *
+              </span>
+            </div>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+          <div className="space-y-1.5 col-span-1">
+            <div className="h-6 flex items-center justify-between">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 Customer *
               </span>
               <Button
@@ -1790,10 +1791,12 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
             />
           </div>
 
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Supervisor
-            </span>
+          <div className="space-y-1.5 col-span-1">
+            <div className="h-6 flex items-center">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Supervisor
+              </span>
+            </div>
             <SearchableSelect
               value={supervisorId}
               displayValue={supervisorDisplay}
@@ -1808,21 +1811,25 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
             />
           </div>
 
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Deadline Date
-            </span>
+          <div className="space-y-1.5 col-span-1 lg:col-span-2">
+            <div className="h-6 flex items-center">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Deadline Date
+              </span>
+            </div>
             <Input type="date" value={projectDate} onChange={(e) => setProjectDate(e.target.value)} />
           </div>
 
-          <div className="space-y-1">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
-              Status
-            </span>
+          <div className="space-y-1.5 col-span-1 lg:col-span-2">
+            <div className="h-6 flex items-center">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Status
+              </span>
+            </div>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as any)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none"
+              className="flex h-10 w-full rounded-md border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus-visible:outline-none"
             >
               <option value="PENDING">Pending</option>
               <option value="ACTIVE">Active</option>
@@ -1833,9 +1840,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
             </select>
           </div>
 
-
-
-          <div className="flex justify-end pt-2 col-span-1 md:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
+          <div className="flex justify-end pt-2 col-span-1 sm:col-span-2 lg:col-span-4 border-t border-slate-100 dark:border-zinc-900 mt-2">
             <Button type="submit" disabled={saving} size="sm" className="font-bold">
               {saving ? "Saving Details..." : "Save Details"}
             </Button>
@@ -2483,6 +2488,111 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
   const [newLogDate, setNewLogDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [isSubmittingLog, setIsSubmittingLog] = useState(false);
 
+  // Log Material Modal (identical pattern to Log Work Dialog Modal)
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const { data: allProductsRaw } = useMasterData<Product>("products");
+  const allProducts = useMemo(() => (Array.isArray(allProductsRaw) ? allProductsRaw : []), [allProductsRaw]);
+
+  const [logDate, setLogDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [productSearchDisplay, setProductSearchDisplay] = useState("");
+  const [logQuantity, setLogQuantity] = useState("");
+  const [logRemarks, setLogRemarks] = useState("");
+  const [submittingLog, setSubmittingLog] = useState(false);
+
+  const matchedProduct = useMemo(() => {
+    return allProducts.find((p) => p.id === selectedProductId);
+  }, [allProducts, selectedProductId]);
+
+  // Material options: site allocated products first, then other catalog products
+  const productOptions = useMemo(() => {
+    const q = productSearchDisplay.toLowerCase().trim();
+    const allocatedProductIds = new Set(
+      projectProducts.map((pp) => pp.productId || pp.product?.id).filter(Boolean)
+    );
+
+    const matched = allProducts.filter((p) => {
+      if (!q) return true;
+      return (
+        p.name?.toLowerCase().includes(q) ||
+        p.category?.toLowerCase().includes(q) ||
+        p.brand?.name?.toLowerCase().includes(q)
+      );
+    });
+
+    const sorted = [...matched].sort((a, b) => {
+      const aInProj = allocatedProductIds.has(a.id) ? 1 : 0;
+      const bInProj = allocatedProductIds.has(b.id) ? 1 : 0;
+      if (aInProj !== bInProj) return bInProj - aInProj;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+    return sorted.slice(0, 30).map((p) => {
+      const isAllocated = allocatedProductIds.has(p.id);
+      return {
+        id: p.id,
+        label: `${p.name}${isAllocated ? " (Project)" : ""}${p.brand?.name ? ` - ${p.brand.name}` : ""}`,
+      };
+    });
+  }, [allProducts, projectProducts, productSearchDisplay]);
+
+  const handleLogMaterialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductId) {
+      toast({ title: "Product required", description: "Please select a material to log.", variant: "destructive" });
+      return;
+    }
+    const qtyNum = parseFloat(logQuantity);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      toast({ title: "Invalid quantity", description: "Please enter a valid positive quantity.", variant: "destructive" });
+      return;
+    }
+
+    setSubmittingLog(true);
+    try {
+      const payload: any = {
+        projectId,
+        productId: selectedProductId,
+        quantity: qtyNum,
+        date: new Date(logDate).toISOString(),
+      };
+      if (logRemarks.trim()) {
+        payload.remarks = logRemarks.trim();
+      }
+
+      const createdLog = await apiRequest.create<any>("project-material-logs", payload);
+
+      toast({
+        title: "Material Log Added",
+        description: `Successfully logged ${qtyNum} pack(s) of ${matchedProduct?.name || "material"}.`,
+      });
+
+      if (setFullProject) {
+        setFullProject((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            materialLogs: [createdLog, ...(prev.materialLogs || [])],
+          };
+        });
+      }
+
+      setSelectedProductId("");
+      setProductSearchDisplay("");
+      setLogQuantity("");
+      setLogRemarks("");
+      setIsLogModalOpen(false);
+    } catch (err: any) {
+      toast({
+        title: "Error saving material log",
+        description: err.message || "Failed to save material log.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingLog(false);
+    }
+  };
+
   // Compute matched logs for selected product
   const matchedLogs = useMemo(() => {
     if (!selectedPP) return [];
@@ -2608,14 +2718,130 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               Total Logged: ₹{fmt(totalProjectMaterialCost)}
             </Badge>
           )}
-          <Button asChild size="sm" className="font-bold">
-            <Link to="/material-usage">
-              <Plus className="h-4 w-4 mr-1.5" />
-              Log Materials
-            </Link>
+          <Button
+            size="sm"
+            onClick={() => setIsLogModalOpen(true)}
+            className="font-bold h-8 gap-1.5 shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Log Materials</span>
           </Button>
         </div>
       </div>
+
+      {/* Log Material Usage Dialog Modal (card popup matching Log Work button style) */}
+      <Dialog open={isLogModalOpen} onOpenChange={setIsLogModalOpen}>
+        <DialogContent className="max-w-md bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-visible">
+          <DialogHeader>
+            <DialogTitle className="text-base font-extrabold tracking-tight flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              Log Material Usage
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleLogMaterialSubmit} className="space-y-4 pt-2 overflow-visible">
+            <div className="space-y-1.5 relative overflow-visible">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground flex items-center justify-between">
+                <span>Choose Material *</span>
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  (Site materials listed first)
+                </span>
+              </label>
+              <SearchableSelect
+                value={selectedProductId}
+                displayValue={productSearchDisplay}
+                options={productOptions}
+                placeholder="Search material from catalog or site..."
+                onSearchChange={setProductSearchDisplay}
+                onSelect={(id, label) => {
+                  setSelectedProductId(id);
+                  setProductSearchDisplay(label);
+                }}
+                onClear={() => {
+                  setSelectedProductId("");
+                  setProductSearchDisplay("");
+                }}
+              />
+            </div>
+
+            {matchedProduct && (
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 text-xs flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-100 block">{matchedProduct.name}</span>
+                  {matchedProduct.brand?.name && (
+                    <span className="text-[10px] text-muted-foreground font-medium">Brand: {matchedProduct.brand.name}</span>
+                  )}
+                </div>
+                {Number(matchedProduct.price || 0) > 0 && (
+                  <Badge variant="outline" className="font-mono font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 text-xs">
+                    ₹{Number(matchedProduct.price).toLocaleString("en-IN")} / unit
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">
+                Quantity Logged (Packs / Units) *
+              </label>
+              <Input
+                type="number"
+                step="any"
+                min="0.01"
+                required
+                placeholder="e.g. 5"
+                value={logQuantity}
+                onChange={(e) => setLogQuantity(e.target.value)}
+                className="font-medium"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Log Date *</label>
+              <Input
+                type="date"
+                required
+                value={logDate}
+                onChange={(e) => setLogDate(e.target.value)}
+                className="font-medium"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Remarks / Notes</label>
+              <Input
+                placeholder="Optional notes e.g. base coat living room"
+                value={logRemarks}
+                onChange={(e) => setLogRemarks(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsLogModalOpen(false);
+                  setSelectedProductId("");
+                  setProductSearchDisplay("");
+                  setLogQuantity("");
+                  setLogRemarks("");
+                }}
+                className="h-9 text-xs font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingLog || !selectedProductId || !logQuantity}
+                className="h-9 text-xs font-bold shadow"
+              >
+                {submittingLog ? "Saving Log..." : "Log Material"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Card className="border border-slate-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
         <Table>
@@ -2977,7 +3203,7 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
             {projectProducts.map((pp) => (
               <TableRow key={pp.id}>
                 <TableCell className="font-semibold">{pp.product?.name}</TableCell>
-                <TableCell className="capitalize text-xs text-muted-foreground">
+                <TableCell className="capitalize text-sm font-medium text-muted-foreground">
                   {pp.product?.category}
                 </TableCell>
                 <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
@@ -3251,7 +3477,7 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 border border-border/60 bg-muted/20 rounded-xl p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border border-border/60 bg-muted/20 rounded-xl p-4">
         <div className="space-y-0.5">
           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Agreed Contract Price</span>
           <p className="text-sm font-extrabold text-foreground">₹{fmt(fullProject.agreedPrice || fullProject.totalAmount)}</p>
@@ -3355,7 +3581,7 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Payment Mode</label>
                 <select
@@ -3642,7 +3868,7 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
       </div>
 
       {/* Primary KPI Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Revenue Card */}
         <Card className="border border-slate-200/80 dark:border-zinc-800/80 p-5 shadow-sm-soft bg-white dark:bg-zinc-950 rounded-2xl">
           <div className="flex items-center justify-between mb-1.5">
@@ -4257,7 +4483,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-extrabold uppercase text-muted-foreground">Work (Sq.Ft) *</label>
                 <Input
@@ -4873,34 +5099,60 @@ function MaterialRequestsTab({ projectId }: MaterialRequestsTabProps) {
         <Table>
           <TableHeader className="bg-slate-50 dark:bg-zinc-900">
             <TableRow>
-              <TableHead className="text-xs">Date</TableHead>
-              <TableHead className="text-xs">Material</TableHead>
-              <TableHead className="text-xs">Quantity</TableHead>
-              <TableHead className="text-xs">Approved by Office</TableHead>
-              <TableHead className="text-xs">Delivered</TableHead>
-              <TableHead className="text-xs text-right">Actions</TableHead>
+              <TableHead className="w-[105px] text-xs">Date</TableHead>
+              <TableHead className="min-w-[240px] text-xs">Requested Items</TableHead>
+              <TableHead className="w-[170px] text-xs">Approved by Office</TableHead>
+              <TableHead className="w-[170px] text-xs">Delivered</TableHead>
+              <TableHead className="w-[60px] text-xs text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
                   <span className="text-xs text-muted-foreground mt-2 block">Loading requests...</span>
                 </TableCell>
               </TableRow>
             ) : projectRequests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-xs italic">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs italic">
                   No material requests found for this project.
                 </TableCell>
               </TableRow>
             ) : (
-              projectRequests.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
-                  <TableCell className="font-semibold text-xs text-indigo-650 dark:text-indigo-400">{req.material}</TableCell>
-                  <TableCell className="font-medium text-xs">{req.quantity}</TableCell>
+              projectRequests.map((req) => {
+                const requestItems = parseRequestItems(req.material, req.quantity);
+                return (
+                  <TableRow key={req.id}>
+                    <TableCell className="font-mono text-xs">{formatDate(req.date)}</TableCell>
+                    <TableCell className="py-2.5">
+                      <div className="space-y-1.5">
+                        {requestItems.map((item) => (
+                          <div key={item.index} className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-xs text-foreground">
+                              {requestItems.length > 1 ? `${item.index}. ` : ""}{item.material}
+                            </span>
+                            <Badge
+                              variant="secondary"
+                              className="font-bold text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200/50"
+                            >
+                              {item.quantity.toLowerCase().startsWith("qty") ? item.quantity : `Qty: ${item.quantity}`}
+                            </Badge>
+                            {item.shade !== "—" && (
+                              <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 bg-slate-50 dark:bg-zinc-900">
+                                Shade: {item.shade}
+                              </Badge>
+                            )}
+                            {item.color !== "—" && (
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                ({item.color})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Badge
@@ -4960,8 +5212,9 @@ function MaterialRequestsTab({ projectId }: MaterialRequestsTabProps) {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
+              );
+            })
+          )}
           </TableBody>
         </Table>
       </div>

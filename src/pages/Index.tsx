@@ -131,27 +131,27 @@ function ReportsSection() {
       {/* Date Filter Panel */}
       {showFilter && (
         <div className="flex flex-wrap items-end gap-3 bg-muted/20 border border-border rounded-xl p-4 animate-in slide-in-from-top-2 duration-200">
-          <div className="space-y-1">
+          <div className="space-y-1 w-full sm:w-auto">
             <span className="text-xs font-semibold text-muted-foreground">Start Date</span>
             <Input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="text-sm w-44"
+              className="text-sm w-full sm:w-44"
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 w-full sm:w-auto">
             <span className="text-xs font-semibold text-muted-foreground">End Date</span>
             <Input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="text-sm w-44"
+              className="text-sm w-full sm:w-44"
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button size="sm" onClick={handleApply}>
               Apply
             </Button>
@@ -168,7 +168,7 @@ function ReportsSection() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       ) : report ? (
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <ReportCard
             title="Running Projects"
             value={String(report.totalProjects ?? 0)}

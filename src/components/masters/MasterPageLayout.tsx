@@ -34,6 +34,8 @@ interface MasterPageLayoutProps {
   resource?: string;
   importExtraData?: Record<string, any>;
   queryParams?: Record<string, any>;
+  embedded?: boolean;
+  titleClassName?: string;
 }
 
 // Simple CSV Schema definition
@@ -150,7 +152,9 @@ export function MasterPageLayout({
   onFilterToggle,
   resource,
   importExtraData,
-  queryParams
+  queryParams,
+  embedded = false,
+  titleClassName,
 }: MasterPageLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
@@ -412,7 +416,9 @@ export function MasterPageLayout({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground select-none">{title}</h1>
+          <h1 className={titleClassName || (embedded ? "text-sm font-semibold text-slate-800 dark:text-slate-200 select-none" : "text-2xl font-bold font-display text-foreground select-none")}>
+            {title}
+          </h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

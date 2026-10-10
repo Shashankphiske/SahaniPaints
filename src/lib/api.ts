@@ -1,7 +1,7 @@
 import { getCookie } from "./cookies";
 
 const BASE_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-  ? "http://localhost:4000/v1"
+  ? "http://localhost:3001/v1"
   : "https://sahanipaintsbackend.onrender.com/v1";
 
 function getFriendlyErrorMessage(msg: string): string {
@@ -190,7 +190,7 @@ export const apiRequest = {
   },
 
   bulkCreate: <T>(resource: string, data: Partial<T>[]) => {
-    const cleanData = data.map(row => 
+    const cleanData = data.map(row =>
       Object.fromEntries(
         Object.entries(row as any).filter(([key]) => !key.startsWith("_") || key === "_")
       )

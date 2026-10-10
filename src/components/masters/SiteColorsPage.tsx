@@ -365,7 +365,7 @@ export default function SiteColorsPage() {
 
   if (!selectedProject) {
     return (
-      <div className="space-y-8 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
+      <div className="space-y-6 sm:space-y-8 animate-fade-in w-full">
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-1.5">
@@ -456,7 +456,7 @@ export default function SiteColorsPage() {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in w-full">
       {/* Back to Projects link */}
       <div className="flex items-center">
         <Button

@@ -628,7 +628,7 @@ export default function LabourAttendancePage() {
   }, [attendanceList, selectedDetailGroup]);
 
   return (
-    <div className="space-y-8 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in w-full">
       {/* Ledger List Mode */}
       {!selectedDetailGroup && (
         <div className="space-y-8">

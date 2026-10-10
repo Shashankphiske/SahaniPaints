@@ -189,6 +189,7 @@ export default function TasksPage({ projectId }: { projectId?: string }) {
     <>
       <MasterPageLayout
         title="Tasks"
+        embedded={Boolean(projectId)}
         searchPlaceholder="Search tasks by title or description..."
         onSearch={handleSearch}
         onSearchSubmit={handleSearchSubmit}

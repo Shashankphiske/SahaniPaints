@@ -314,7 +314,7 @@ export default function WastageMaterialLogsPage() {
   }, [wastageLogs]);
 
   return (
-    <div className="space-y-6 animate-fade-in p-6 bg-slate-50/50 dark:bg-zinc-950/20 min-h-screen">
+    <div className="space-y-6 animate-fade-in w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

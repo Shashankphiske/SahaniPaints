@@ -478,7 +478,7 @@ export function MasterForm({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-muted-foreground">Phone Number</label>
                 <Input
@@ -597,7 +597,7 @@ export function MasterForm({
               {errors.password && <p className="text-xs text-destructive font-semibold">{errors.password}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-muted-foreground">Phone Number</label>
                 <Input
@@ -723,7 +723,7 @@ export function MasterForm({
               {errors.projectId && <p className="text-xs text-destructive font-semibold">{errors.projectId}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div ref={priorityRef} className="space-y-1 relative">
                 <label className="text-sm font-semibold text-muted-foreground">Priority <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
@@ -839,7 +839,7 @@ export function MasterForm({
       case "inquiries":
         return (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-muted-foreground">Project Name <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
@@ -863,7 +863,7 @@ export function MasterForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-muted-foreground">Phone Number <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
@@ -915,7 +915,7 @@ export function MasterForm({
               {errors.name && <p className="text-xs text-destructive font-semibold">{errors.name}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div ref={brandRef} className="space-y-1 relative">
                 <label className="text-sm font-semibold text-slate-500">Brand <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
@@ -995,7 +995,7 @@ export function MasterForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
@@ -1027,7 +1027,7 @@ export function MasterForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-slate-500">Coverage (sq.ft per L)</label>
                 <Input

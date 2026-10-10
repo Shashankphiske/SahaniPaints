@@ -38,6 +38,8 @@ interface SearchableSelectProps {
   disabled?: boolean;
   /** Direction of dropdown list display (default 'down') */
   direction?: "up" | "down";
+  /** Font weight class (default 'font-normal') */
+  fontWeight?: string;
 }
 
 /**
@@ -58,6 +60,7 @@ export function SearchableSelect({
   className = "",
   inputHeight = "h-10",
   textSize = "text-sm",
+  fontWeight = "font-normal",
   disabled = false,
   direction = "down",
 }: SearchableSelectProps) {
@@ -167,7 +170,7 @@ export function SearchableSelect({
           placeholder={placeholder}
           disabled={disabled}
           required={required && !value}
-          className={`${inputHeight} ${textSize} ${value && onClear ? "pl-9" : "pl-3"} pr-9 font-semibold`}
+          className={`${inputHeight} ${textSize} ${value && onClear ? "pl-9" : "pl-3"} pr-9 ${fontWeight}`}
         />
         <button
           type="button"

@@ -176,7 +176,7 @@ export default function LabourDailyLogPage() {
   }, [selectedDate]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header section with Date Picker */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
         <div>
