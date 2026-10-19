@@ -261,19 +261,39 @@ const HEADER_CANONICAL_ALIASES: Record<string, string> = {
   type: "type",
 };
 
-function matchHeaderToSchema(csvHdr: string, schemaHeaders: string[]): string | undefined {
+function matchHeaderToSchema(csvHdr: string, schemaHeaders: string[], resource?: string): string | undefined {
   const norm = normalizeHeaderKey(csvHdr);
   // 1. Direct normalized match
   const direct = schemaHeaders.find(sh => normalizeHeaderKey(sh) === norm);
   if (direct) return direct;
 
-  // 2. Alias lookup
+  // 2. Resource-specific entity name aliases
+  if (schemaHeaders.includes("name")) {
+    if (norm === "name" || norm === "fullname" || norm === "itemname") return "name";
+    if (resource === "brands" && (norm === "brand" || norm === "brandname")) return "name";
+    if (resource === "products" && (norm === "product" || norm === "productname")) return "name";
+    if (resource === "customers" && (norm === "customer" || norm === "customername")) return "name";
+    if (resource === "contractors" && (norm === "contractor" || norm === "contractorname")) return "name";
+    if (resource === "labours" && (norm === "labour" || norm === "labourname" || norm === "worker" || norm === "workername")) return "name";
+    if (resource === "interiors" && (norm === "interior" || norm === "interiorname" || norm === "designer" || norm === "designername")) return "name";
+    if (resource === "areas" && (norm === "area" || norm === "areaname")) return "name";
+    if (resource === "colors" && (norm === "color" || norm === "colorname")) return "name";
+  }
+
+  // 3. Alias lookup
   const canonical = HEADER_CANONICAL_ALIASES[norm];
   if (canonical) {
     const aliasMatch = schemaHeaders.find(sh => normalizeHeaderKey(sh) === normalizeHeaderKey(canonical));
     if (aliasMatch) return aliasMatch;
     const directAlias = schemaHeaders.find(sh => sh.toLowerCase() === canonical.toLowerCase());
     if (directAlias) return directAlias;
+  }
+
+  // 4. Suffix match for "...name" if schema has "name" and no other field matches
+  if (schemaHeaders.includes("name") && norm.endsWith("name") && !schemaHeaders.some(sh => normalizeHeaderKey(sh) === norm)) {
+    if (!(resource === "products" && (norm === "brandname" || norm === "brand"))) {
+      return "name";
+    }
   }
 
   return undefined;
@@ -512,7 +532,7 @@ export function MasterPageLayout({
         }
 
         const rawHeaders = parsed[0].map(h => h.trim());
-        const colToSchemaHeader: (string | undefined)[] = rawHeaders.map(rh => matchHeaderToSchema(rh, schema.headers));
+        const colToSchemaHeader: (string | undefined)[] = rawHeaders.map(rh => matchHeaderToSchema(rh, schema.headers, resource));
 
         const matchedSchemaHeaderSet = new Set(colToSchemaHeader.filter(Boolean));
         const missingRequired = schema.required.filter(
