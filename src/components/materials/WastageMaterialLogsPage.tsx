@@ -255,8 +255,8 @@ export default function WastageMaterialLogsPage() {
 
     if (!shade.trim()) {
       toast({
-        title: "Shade Number Required",
-        description: "Shade number is compulsory.",
+        title: "Size Required",
+        description: "Size is compulsory.",
         variant: "destructive",
       });
       return;
@@ -417,11 +417,11 @@ export default function WastageMaterialLogsPage() {
                   />
                 </div>
 
-                {/* Color and Shade */}
+                {/* Shade and Size */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                      Color
+                      Shade
                     </label>
                     <Input
                       placeholder="e.g. Royal Blue / Pearl White"
@@ -433,10 +433,10 @@ export default function WastageMaterialLogsPage() {
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                      Shade * <span className="text-rose-500 font-bold">(Compulsory)</span>
+                      Size * <span className="text-rose-500 font-bold">(Compulsory)</span>
                     </label>
                     <Input
-                      placeholder="e.g. 8214 / L102"
+                      placeholder="e.g. 20 Ltr / 4 Ltr / 1 Ltr"
                       value={shade}
                       onChange={(e) => setShade(e.target.value)}
                       className="h-10 text-sm font-semibold font-mono"
@@ -448,7 +448,7 @@ export default function WastageMaterialLogsPage() {
                 {/* Quantity Wasted */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                    Quantity Wasted *
+                    Quantity Wasted (PCS) *
                   </label>
                   <Input
                     placeholder="e.g. 5 Ltrs / 2 Buckets / 10 kg"
@@ -563,7 +563,7 @@ export default function WastageMaterialLogsPage() {
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search site, material, color, shade, remarks..."
+              placeholder="Search site, material, shade, size, remarks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 text-xs"
@@ -609,9 +609,9 @@ export default function WastageMaterialLogsPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Site / Project</TableHead>
                 <TableHead>Material / Product</TableHead>
-                <TableHead>Color</TableHead>
                 <TableHead>Shade</TableHead>
-                <TableHead>Quantity Wasted</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead>Quantity Wasted (PCS)</TableHead>
                 <TableHead>Reason / Remarks</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>

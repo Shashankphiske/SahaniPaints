@@ -78,7 +78,7 @@ export const parseRequestItems = (rawMaterial: string, rawQuantity?: string): Pa
 
   return matLines.map((line, idx) => {
     const cleanLine = line.replace(/^\d+\.\s*/, "");
-    const match = cleanLine.match(/^(.*?)(?:\s*\[(?:Color:\s*([^|\]]+?)\s*\|\s*)?Shade:\s*([^\]]+)\])?$/i);
+    const match = cleanLine.match(/^(.*?)(?:\s*\[(?:(?:Color|Shade):\s*([^|\]]+?)\s*\|\s*)?(?:Shade|Size):\s*([^\]]+)\])?$/i);
     let material = cleanLine;
     let color = "—";
     let shade = "—";
@@ -274,12 +274,12 @@ export default function MaterialRequestsPage() {
       return;
     }
 
-    // Check if any row has missing shade (Shade is compulsory)
+    // Check if any row has missing size (Size is compulsory)
     const missingShade = items.find((item) => (item.materialName.trim() || item.quantity.trim()) && !item.shade.trim());
     if (missingShade) {
       toast({
         title: "Validation Error",
-        description: "Shade number is compulsory for all requested materials.",
+        description: "Size is compulsory for all requested materials.",
         variant: "destructive",
       });
       return;
@@ -294,7 +294,7 @@ export default function MaterialRequestsPage() {
     if (incompleteItem) {
       toast({
         title: "Validation Error",
-        description: "Please fill in material name, shade number, and quantity for all material rows.",
+        description: "Please fill in material name, size, and quantity for all material rows.",
         variant: "destructive",
       });
       return;
@@ -306,11 +306,11 @@ export default function MaterialRequestsPage() {
       
       const finalMaterialString =
         validItems.length === 1
-          ? `${validItems[0].materialName.trim()} [Color: ${validItems[0].color.trim() || "—"} | Shade: ${validItems[0].shade.trim()}]`
+          ? `${validItems[0].materialName.trim()} [Shade: ${validItems[0].color.trim() || "—"} | Size: ${validItems[0].shade.trim()}]`
           : validItems
               .map(
                 (item, i) =>
-                  `${i + 1}. ${item.materialName.trim()} [Color: ${item.color.trim() || "—"} | Shade: ${item.shade.trim()}]`
+                  `${i + 1}. ${item.materialName.trim()} [Shade: ${item.color.trim() || "—"} | Size: ${item.shade.trim()}]`
               )
               .join("\n");
 
@@ -526,7 +526,7 @@ export default function MaterialRequestsPage() {
 
                         <div className="sm:col-span-3 space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                            Color
+                            Shade
                           </label>
                           <Input
                             placeholder="e.g. Royal Blue"
@@ -538,10 +538,10 @@ export default function MaterialRequestsPage() {
 
                         <div className="sm:col-span-2 space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                            Shade * <span className="text-rose-500 font-bold">*</span>
+                            Size <span className="text-rose-500 font-bold">*</span>
                           </label>
                           <Input
-                            placeholder="e.g. 8214"
+                            placeholder="e.g. 20 Ltr"
                             value={item.shade}
                             onChange={(e) => updateItemRow(item.id, { shade: e.target.value })}
                             className="h-10 text-sm font-semibold font-mono"
@@ -782,14 +782,14 @@ export default function MaterialRequestsPage() {
 
                             {(item.shade !== "—" || item.color !== "—") && (
                               <div className="flex items-center gap-1.5 text-[10px] flex-wrap pt-0.5">
-                                {item.shade !== "—" && (
-                                  <span className="font-mono font-semibold bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200/40 dark:border-zinc-700/40">
-                                    Shade: {item.shade}
-                                  </span>
-                                )}
                                 {item.color !== "—" && (
                                   <span className="text-muted-foreground">
-                                    Color: <strong className="text-foreground">{item.color}</strong>
+                                    Shade: <strong className="text-foreground">{item.color}</strong>
+                                  </span>
+                                )}
+                                {item.shade !== "—" && (
+                                  <span className="font-mono font-semibold bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200/40 dark:border-zinc-700/40">
+                                    Size: {item.shade}
                                   </span>
                                 )}
                               </div>
@@ -895,14 +895,14 @@ export default function MaterialRequestsPage() {
                               >
                                 {item.quantity.toLowerCase().startsWith("qty") ? item.quantity : `Qty: ${item.quantity}`}
                               </Badge>
-                              {item.shade !== "—" && (
+                              {item.color !== "—" && (
                                 <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 bg-slate-50 dark:bg-zinc-900">
-                                  Shade: {item.shade}
+                                  Shade: {item.color}
                                 </Badge>
                               )}
-                              {item.color !== "—" && (
+                              {item.shade !== "—" && (
                                 <span className="text-[10px] text-muted-foreground font-medium">
-                                  ({item.color})
+                                  (Size: {item.shade})
                                 </span>
                               )}
                             </div>
