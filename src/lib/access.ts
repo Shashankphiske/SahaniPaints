@@ -8,6 +8,7 @@ export const ROUTE_ACCESS_MAP: Record<string, string> = {
   "/masters/products": "products",
   "/masters/interiors": "interiors",
   "/masters/users": "sales-associate",
+  "/masters/colors": "site-colors",
   "/masters/site-colors": "site-colors",
   "/masters/areas": "site-colors",
   "/masters/labours": "labours",

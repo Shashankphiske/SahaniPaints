@@ -21,6 +21,8 @@ import {
   ChevronRight,
   ArrowLeft,
   Copy,
+  Upload,
+  Download,
 } from "lucide-react";
 
 // Generate clean initials (e.g. "Living Room" -> "LR")
@@ -345,6 +347,202 @@ export default function SiteColorsPage() {
     }
   };
 
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  const exportSiteColorsCSV = () => {
+    if (!selectedProject) return;
+    const headers = ["Area", "Color", "Shade", "Stage", "Description"];
+    const rows = mappings.map(m => [
+      m.area?.name || "",
+      m.color?.name || "",
+      m.color?.shade || "",
+      m.stage || "Putty",
+      m.description || ""
+    ].map(val => {
+      const strVal = String(val).replace(/"/g, '""');
+      return strVal.includes(",") || strVal.includes("\n") || strVal.includes('"') ? `"${strVal}"` : strVal;
+    }).join(","));
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const safeName = selectedProject.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.setAttribute("download", `site_colors_${safeName}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export completed",
+      description: `Exported ${mappings.length} color mapping records for ${selectedProject.name}.`,
+    });
+  };
+
+  const parseCSVRows = (text: string): string[][] => {
+    const cleanText = text.replace(/^\uFEFF/, "");
+    const result: string[][] = [];
+    let row: string[] = [];
+    let cell = "";
+    let insideQuote = false;
+
+    for (let i = 0; i < cleanText.length; i++) {
+      const char = cleanText[i];
+      const nextChar = cleanText[i + 1];
+
+      if (insideQuote) {
+        if (char === '"') {
+          if (nextChar === '"') {
+            cell += '"';
+            i++;
+          } else {
+            insideQuote = false;
+          }
+        } else {
+          cell += char;
+        }
+      } else {
+        if (char === '"') {
+          insideQuote = true;
+        } else if (char === ',') {
+          row.push(cell.trim());
+          cell = "";
+        } else if (char === '\r' || char === '\n') {
+          row.push(cell.trim());
+          cell = "";
+          if (row.length > 0 && row.some(x => x !== "")) {
+            result.push(row);
+          }
+          row = [];
+          if (char === '\r' && nextChar === '\n') {
+            i++;
+          }
+        } else {
+          cell += char;
+        }
+      }
+    }
+    if (cell !== "" || row.length > 0) {
+      row.push(cell.trim());
+      if (row.some(x => x !== "")) {
+        result.push(row);
+      }
+    }
+    return result;
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedProject) return;
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      toast({
+        title: "Invalid file format",
+        description: "Please upload a valid CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const rows = parseCSVRows(text);
+        if (rows.length <= 1) {
+          toast({
+            title: "Empty CSV",
+            description: "CSV file contains no data rows.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        const areaIdx = headers.findIndex(h => h.includes("area"));
+        const colorIdx = headers.findIndex(h => h === "color" || h.includes("color name"));
+        const shadeIdx = headers.findIndex(h => h.includes("shade"));
+        const stageIdx = headers.findIndex(h => h.includes("stage"));
+        const descIdx = headers.findIndex(h => h.includes("desc") || h.includes("remark"));
+
+        if (areaIdx === -1 || (colorIdx === -1 && shadeIdx === -1)) {
+          toast({
+            title: "Invalid CSV format",
+            description: 'CSV must contain at least "Area" and ("Color" or "Shade") columns.',
+            variant: "destructive",
+          });
+          return;
+        }
+
+        let importedCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 1; i < rows.length; i++) {
+          const cells = rows[i];
+          const areaName = cells[areaIdx]?.trim();
+          const shadeVal = shadeIdx !== -1 ? cells[shadeIdx]?.trim() : "";
+          const colorName = colorIdx !== -1 ? cells[colorIdx]?.trim() : shadeVal;
+          const stageVal = stageIdx !== -1 ? cells[stageIdx]?.trim() : "Putty";
+          const descVal = descIdx !== -1 ? cells[descIdx]?.trim() : "";
+
+          if (!areaName || (!shadeVal && !colorName)) continue;
+
+          // Find or create area
+          let area = globalAreasData?.find(a => a.name.toLowerCase().trim() === areaName.toLowerCase());
+          if (!area) {
+            area = await apiRequest.create<Area>("areas", { name: areaName });
+          }
+
+          // Find or create color
+          const finalShade = shadeVal || colorName;
+          const finalColorName = colorName || shadeVal;
+          let color = colorsData?.find(c => 
+            c.shade?.toLowerCase().trim() === finalShade.toLowerCase() &&
+            c.name?.toLowerCase().trim() === finalColorName.toLowerCase()
+          );
+          if (!color) {
+            color = await apiRequest.create<Color>("colors", {
+              name: finalColorName,
+              shade: finalShade,
+            });
+          }
+
+          // Check if already mapped
+          const alreadyMapped = mappings.some(m => m.areaId === area!.id && m.colorId === color!.id);
+          if (alreadyMapped) {
+            skippedCount++;
+            continue;
+          }
+
+          await apiRequest.create("project-area-colors", {
+            projectId: selectedProject.id,
+            areaId: area.id,
+            colorId: color.id,
+            stage: stageVal || "Putty",
+            description: descVal || null,
+          });
+          importedCount++;
+        }
+
+        toast({
+          title: "Import complete",
+          description: `Successfully imported ${importedCount} color mapping(s).${skippedCount > 0 ? ` Skipped ${skippedCount} duplicate(s).` : ""}`,
+        });
+
+        await fetchProjectColorMappings(selectedProject.id);
+      } catch (err: any) {
+        toast({
+          title: "Import failed",
+          description: err.message || "Failed to parse or import CSV.",
+          variant: "destructive",
+        });
+      }
+    };
+    reader.readAsText(file);
+    if (importFileInputRef.current) importFileInputRef.current.value = "";
+  };
+
   // Filter projects by search query in list
   const filteredProjects = useMemo(() => {
     const list = Array.isArray(projectsData) ? projectsData : [];
@@ -514,7 +712,30 @@ export default function SiteColorsPage() {
                 Configure what color and shade allocations are applied to specific site rooms.
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                ref={importFileInputRef}
+                onChange={handleImportCSV}
+                accept=".csv"
+                className="hidden"
+              />
+              <Button
+                onClick={() => importFileInputRef.current?.click()}
+                variant="outline"
+                size="sm"
+                className="font-bold text-xs rounded-xl"
+              >
+                <Upload className="h-4 w-4 mr-1.5" /> Import CSV
+              </Button>
+              <Button
+                onClick={exportSiteColorsCSV}
+                variant="outline"
+                size="sm"
+                className="font-bold text-xs rounded-xl"
+              >
+                <Download className="h-4 w-4 mr-1.5" /> Export CSV
+              </Button>
               <Button onClick={openDuplicateModal} variant="outline" size="sm" className="font-bold text-xs rounded-xl">
                 <Copy className="h-4 w-4 mr-1.5" /> Duplicate Mappings
               </Button>
@@ -532,7 +753,7 @@ export default function SiteColorsPage() {
                 No Colors Configured Yet
               </p>
               <p className="text-xs text-slate-400 dark:text-zinc-500 max-w-sm">
-                Use the "Add Mapping" button to start linking paint colors to site coordinate areas.
+                Use the "Add Mapping" button or "Import CSV" to start linking paint colors to site coordinate areas.
               </p>
             </div>
           </CardContent>
@@ -549,7 +770,23 @@ export default function SiteColorsPage() {
                 List of assigned color/shade configurations mapped to site locations.
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => importFileInputRef.current?.click()}
+                variant="outline"
+                size="sm"
+                className="font-bold text-xs rounded-xl"
+              >
+                <Upload className="h-4 w-4 mr-1.5" /> Import CSV
+              </Button>
+              <Button
+                onClick={exportSiteColorsCSV}
+                variant="outline"
+                size="sm"
+                className="font-bold text-xs rounded-xl"
+              >
+                <Download className="h-4 w-4 mr-1.5" /> Export CSV
+              </Button>
               <Button onClick={openDuplicateModal} variant="outline" size="sm" className="font-bold text-xs rounded-xl">
                 <Copy className="h-4 w-4 mr-1.5" /> Duplicate Mappings
               </Button>

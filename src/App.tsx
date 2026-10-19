@@ -21,6 +21,7 @@ import BrandsPage from "./components/masters/BrandsPage";
 import ProductsPage from "./components/masters/ProductsPage";
 import InteriorsPage from "./components/masters/InteriorsPage";
 import SalesAssociatePage from "./components/masters/SalesAssociatePage";
+import ColorsPage from "./components/masters/ColorsPage";
 import SiteColorsPage from "./components/masters/SiteColorsPage";
 import LaboursPage from "./components/masters/LaboursPage";
 import AreasPage from "./components/masters/AreasPage";
@@ -121,6 +122,7 @@ export default function App() {
               <Route path="/masters/products" element={<Protected><ProductsPage /></Protected>} />
               <Route path="/masters/interiors" element={<Protected><InteriorsPage /></Protected>} />
               <Route path="/masters/users" element={<Protected><SalesAssociatePage /></Protected>} />
+              <Route path="/masters/colors" element={<Protected><ColorsPage /></Protected>} />
               <Route path="/masters/site-colors" element={<Protected><SiteColorsPage /></Protected>} />
               <Route path="/masters/areas" element={<Protected><AreasPage /></Protected>} />
               <Route path="/masters/labours" element={<Protected><LaboursPage /></Protected>} />

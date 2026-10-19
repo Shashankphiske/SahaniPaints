@@ -43,13 +43,21 @@ interface CSVResourceSchema {
   headers: string[];
   required: string[];
   numericFields?: string[];
+  booleanFields?: string[];
   downloadHeaders: string[];
+  sampleRow?: Record<string, string>;
 }
 
 const CSV_RESOURCE_FIELDS: Record<string, string[]> = {
-  customers: ["name", "phonenumber", "alternatePhonenumber", "email", "address"],
   brands: ["name", "description"],
+  customers: ["name", "phonenumber", "alternatePhonenumber", "email", "address"],
   users: ["role", "username", "email", "password", "phonenumber", "address"],
+  products: ["name", "brandId", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
+  interiors: ["name", "email", "phonenumber", "alternatePhonenumber", "address", "commissionFeePercentage"],
+  areas: ["name"],
+  labours: ["name", "paymentPerDay", "tuesdayPaymentAmount", "type", "phonenumber"],
+  contractors: ["name", "phonenumber", "email", "address", "type"],
+  colors: ["name", "shade"],
 };
 
 const CSV_SCHEMAS: Record<string, CSVResourceSchema> = {
@@ -57,29 +65,240 @@ const CSV_SCHEMAS: Record<string, CSVResourceSchema> = {
     headers: ["name", "description"],
     required: ["name"],
     downloadHeaders: ["id", "name", "description", "createdAt"],
+    sampleRow: {
+      name: "Asian Paints",
+      description: "Premium interior and exterior wall paints",
+    },
   },
   customers: {
     headers: ["name", "phonenumber", "alternatePhonenumber", "email", "address"],
     required: ["name"],
     downloadHeaders: ["id", "name", "phonenumber", "alternatePhonenumber", "email", "address", "createdAt"],
+    sampleRow: {
+      name: "Rajesh Kumar",
+      phonenumber: "9876543210",
+      alternatePhonenumber: "9123456780",
+      email: "rajesh@example.com",
+      address: "123 Park Avenue, Mumbai",
+    },
   },
   users: {
-    headers: ["username", "email", "password", "phonenumber", "address"],
+    headers: ["username", "email", "password", "phonenumber", "role", "address"],
     required: ["username", "email"],
     downloadHeaders: ["id", "role", "username", "email", "phonenumber", "address", "createdAt"],
+    sampleRow: {
+      username: "amit_supervisor",
+      email: "amit@sahanipaints.com",
+      password: "User@123",
+      phonenumber: "9811223344",
+      role: "SALES_ASSOCIATE",
+      address: "Bandra West, Mumbai",
+    },
+  },
+  products: {
+    headers: ["name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
+    required: ["name", "brand", "category", "price"],
+    numericFields: ["price", "coverageSqFt", "coverageRnFt"],
+    booleanFields: ["hasToken"],
+    downloadHeaders: ["id", "name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken", "createdAt"],
+    sampleRow: {
+      name: "Royale Luxury Emulsion",
+      brand: "Asian Paints",
+      category: "Interior",
+      price: "1850",
+      size: "1ltr",
+      coverageSqFt: "140",
+      coverageRnFt: "90",
+      hasToken: "No",
+    },
+  },
+  interiors: {
+    headers: ["name", "email", "phonenumber", "alternatePhonenumber", "address", "commissionFeePercentage"],
+    required: ["name"],
+    numericFields: ["commissionFeePercentage"],
+    downloadHeaders: ["id", "name", "email", "phonenumber", "alternatePhonenumber", "address", "commissionFeePercentage", "createdAt"],
+    sampleRow: {
+      name: "Studio Design Works",
+      email: "contact@studiodesign.com",
+      phonenumber: "9988776655",
+      alternatePhonenumber: "",
+      address: "Indiranagar, Bangalore",
+      commissionFeePercentage: "10",
+    },
+  },
+  areas: {
+    headers: ["name"],
+    required: ["name"],
+    downloadHeaders: ["id", "name", "createdAt"],
+    sampleRow: {
+      name: "Master Bedroom",
+    },
+  },
+  labours: {
+    headers: ["name", "paymentPerDay", "tuesdayPaymentAmount", "type", "phonenumber"],
+    required: ["name", "paymentPerDay"],
+    numericFields: ["paymentPerDay", "tuesdayPaymentAmount"],
+    downloadHeaders: ["id", "name", "paymentPerDay", "tuesdayPaymentAmount", "type", "phonenumber", "createdAt"],
+    sampleRow: {
+      name: "Ramesh Painter",
+      paymentPerDay: "750",
+      tuesdayPaymentAmount: "300",
+      type: "WEEKLY",
+      phonenumber: "9870001122",
+    },
+  },
+  contractors: {
+    headers: ["name", "phonenumber", "email", "address", "type"],
+    required: ["name"],
+    downloadHeaders: ["id", "name", "phonenumber", "email", "address", "type", "createdAt"],
+    sampleRow: {
+      name: "Sunil Finishing Works",
+      phonenumber: "9898989898",
+      email: "sunil.contractor@gmail.com",
+      address: "Sector 14, Gurgaon",
+      type: "WEEKLY",
+    },
+  },
+  colors: {
+    headers: ["name", "shade"],
+    required: ["name"],
+    downloadHeaders: ["id", "name", "shade", "createdAt"],
+    sampleRow: {
+      name: "Morning Sky",
+      shade: "AP-8201",
+    },
   },
 };
 
-// CSV parsing / generating helpers
+// Normalize string for robust header and key comparisons
+function normalizeHeaderKey(str: string): string {
+  return str.toLowerCase().replace(/[\s_\-./\\]+/g, "");
+}
+
+// Canonical aliases for master attributes
+const HEADER_CANONICAL_ALIASES: Record<string, string> = {
+  phone: "phonenumber",
+  phoneno: "phonenumber",
+  phonenumber: "phonenumber",
+  mobilenumber: "phonenumber",
+  mobile: "phonenumber",
+  mobileno: "phonenumber",
+  contact: "phonenumber",
+  contactnumber: "phonenumber",
+  telephonenumber: "phonenumber",
+
+  altphone: "alternatePhonenumber",
+  altphoneno: "alternatePhonenumber",
+  alternatephone: "alternatePhonenumber",
+  alternatephoneno: "alternatePhonenumber",
+  alternatephonenumber: "alternatePhonenumber",
+  secondaryphone: "alternatePhonenumber",
+  altmobile: "alternatePhonenumber",
+
+  paymentperday: "paymentPerDay",
+  payperday: "paymentPerDay",
+  dailyrate: "paymentPerDay",
+  dailywage: "paymentPerDay",
+  perday: "paymentPerDay",
+  rateperday: "paymentPerDay",
+
+  tuesdaypaymentamount: "tuesdayPaymentAmount",
+  tuesdayamount: "tuesdayPaymentAmount",
+  tuesdaypayment: "tuesdayPaymentAmount",
+  tuesdaypay: "tuesdayPaymentAmount",
+  mangalwaramount: "tuesdayPaymentAmount",
+
+  commissionfeepercentage: "commissionFeePercentage",
+  commissionpercentage: "commissionFeePercentage",
+  commissionfee: "commissionFeePercentage",
+  commission: "commissionFeePercentage",
+  commissionpct: "commissionFeePercentage",
+
+  coveragesqft: "coverageSqFt",
+  coverageinsqft: "coverageSqFt",
+  sqftcoverage: "coverageSqFt",
+  sqft: "coverageSqFt",
+
+  coveragernft: "coverageRnFt",
+  coverageinrnft: "coverageRnFt",
+  rnftcoverage: "coverageRnFt",
+  rnft: "coverageRnFt",
+
+  brand: "brand",
+  brandname: "brand",
+  brandid: "brand",
+
+  hastoken: "hasToken",
+  token: "hasToken",
+  istoken: "hasToken",
+
+  username: "username",
+  user: "username",
+  uname: "username",
+  email: "email",
+  emailid: "email",
+  mail: "email",
+  password: "password",
+  pass: "password",
+  address: "address",
+  location: "address",
+  category: "category",
+  cat: "category",
+  size: "size",
+  packsize: "size",
+  price: "price",
+  rate: "price",
+  cost: "price",
+  unitprice: "price",
+  name: "name",
+  fullname: "name",
+  shade: "shade",
+  colorcode: "shade",
+  description: "description",
+  desc: "description",
+  remarks: "description",
+  role: "role",
+  type: "type",
+};
+
+function matchHeaderToSchema(csvHdr: string, schemaHeaders: string[]): string | undefined {
+  const norm = normalizeHeaderKey(csvHdr);
+  // 1. Direct normalized match
+  const direct = schemaHeaders.find(sh => normalizeHeaderKey(sh) === norm);
+  if (direct) return direct;
+
+  // 2. Alias lookup
+  const canonical = HEADER_CANONICAL_ALIASES[norm];
+  if (canonical) {
+    const aliasMatch = schemaHeaders.find(sh => normalizeHeaderKey(sh) === normalizeHeaderKey(canonical));
+    if (aliasMatch) return aliasMatch;
+    const directAlias = schemaHeaders.find(sh => sh.toLowerCase() === canonical.toLowerCase());
+    if (directAlias) return directAlias;
+  }
+
+  return undefined;
+}
+
+function parseCleanNumber(val: any): number | null {
+  if (val === null || val === undefined) return null;
+  const str = String(val).trim();
+  if (!str) return null;
+  const cleaned = str.replace(/[₹$,%\s]/g, "");
+  const num = Number(cleaned);
+  return isNaN(num) ? null : num;
+}
+
+// CSV parsing / generating helpers (handles RFC-4180 quotes, multiline cells, and Windows UTF-8 BOM)
 function parseCSV(text: string): string[][] {
+  const cleanText = text.replace(/^\uFEFF/, "");
   const result: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let insideQuote = false;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
 
     if (insideQuote) {
       if (char === '"') {
@@ -122,12 +341,53 @@ function parseCSV(text: string): string[][] {
   return result;
 }
 
+function getValueByPath(item: any, path: string): any {
+  if (item == null) return "";
+
+  // Exact property match
+  if (item[path] !== undefined && item[path] !== null) {
+    const val = item[path];
+    if (typeof val === "boolean") return val ? "Yes" : "No";
+    if (typeof val === "object" && !(val instanceof Date)) {
+      if ("name" in val) return val.name;
+      if ("title" in val) return val.title;
+      if ("username" in val) return val.username;
+    }
+    if (val instanceof Date) return val.toISOString();
+    return val;
+  }
+
+  // Relations & Aliases
+  if (path === "brand") return item.brand?.name || item.brandName || item.brandId || "";
+  if (path === "customer") return item.customer?.name || item.customerName || item.customerId || "";
+  if (path === "project") return item.project?.name || item.projectName || item.projectId || "";
+  if (path === "user") return item.user?.username || item.user?.name || item.userId || "";
+  if (path === "contractor") return item.contractor?.name || item.contractorId || "";
+  if (path === "labour") return item.labour?.name || item.labourId || "";
+  if (path === "area") return item.area?.name || item.areaId || "";
+  if (path === "color") return item.color?.name || item.colorId || "";
+
+  // Nested dot notation: "brand.name"
+  if (path.includes(".")) {
+    const parts = path.split(".");
+    let curr = item;
+    for (const part of parts) {
+      if (curr == null) return "";
+      curr = curr[part];
+    }
+    if (typeof curr === "boolean") return curr ? "Yes" : "No";
+    return curr ?? "";
+  }
+
+  return "";
+}
+
 function jsonToCSV(headers: string[], data: any[]): string {
   const headerRow = headers.join(",");
   const rows = data.map(item => {
     return headers.map(header => {
-      const val = item[header];
-      if (val == null) return '""';
+      const val = getValueByPath(item, header);
+      if (val == null || val === "") return '""';
       const strVal = String(val).replace(/"/g, '""');
       if (strVal.includes(",") || strVal.includes("\n") || strVal.includes("\r") || strVal.includes('"')) {
         return `"${strVal}"`;
@@ -251,18 +511,38 @@ export function MasterPageLayout({
           return;
         }
 
-        const csvHeaders = parsed[0].map(h => h.trim().toLowerCase());
+        const rawHeaders = parsed[0].map(h => h.trim());
+        const colToSchemaHeader: (string | undefined)[] = rawHeaders.map(rh => matchHeaderToSchema(rh, schema.headers));
+
+        const matchedSchemaHeaderSet = new Set(colToSchemaHeader.filter(Boolean));
         const missingRequired = schema.required.filter(
-          reqCol => !csvHeaders.includes(reqCol.toLowerCase())
+          reqCol => !matchedSchemaHeaderSet.has(reqCol)
         );
 
         if (missingRequired.length > 0) {
           setImportErrors([
             `Missing required column headers: ${missingRequired.join(", ")}.`,
+            `Found in CSV: ${rawHeaders.join(", ")}`,
             `Expected headers: ${schema.headers.join(", ")}`
           ]);
           setImportStatus("errors");
           return;
+        }
+
+        // If products, preload brands for name -> brandId resolution
+        const brandsLookup: Map<string, string> = new Map();
+        if (resource === "products") {
+          try {
+            const brandsList = await apiRequest.fetchAll<any>("brands", { limit: 1000 });
+            if (Array.isArray(brandsList)) {
+              brandsList.forEach(b => {
+                if (b.name) brandsLookup.set(b.name.toLowerCase().trim(), b.id);
+                if (b.id) brandsLookup.set(b.id.toLowerCase().trim(), b.id);
+              });
+            }
+          } catch {
+            // ignore if empty
+          }
         }
 
         const rowsToImport: any[] = [];
@@ -275,13 +555,14 @@ export function MasterPageLayout({
           const rowErrors: string[] = [];
           const rowObj: Record<string, string> = {};
 
-          csvHeaders.forEach((hdr, colIdx) => {
-            const originalHeader = schema.headers.find(eh => eh.toLowerCase() === hdr);
-            if (originalHeader) {
-              rowObj[originalHeader] = row[colIdx] || "";
+          rawHeaders.forEach((_, colIdx) => {
+            const schemaHeader = colToSchemaHeader[colIdx];
+            if (schemaHeader) {
+              rowObj[schemaHeader] = (row[colIdx] || "").trim();
             }
           });
 
+          // Check required fields
           schema.required.forEach(reqField => {
             const val = rowObj[reqField];
             if (val === undefined || val === null || val.trim() === "") {
@@ -289,24 +570,96 @@ export function MasterPageLayout({
             }
           });
 
+          // Validate numeric fields
+          if (schema.numericFields) {
+            schema.numericFields.forEach(numField => {
+              const val = rowObj[numField];
+              if (val !== undefined && val !== null && val.trim() !== "") {
+                const cleanedNum = parseCleanNumber(val);
+                if (cleanedNum === null) {
+                  rowErrors.push(`"${numField}" must be a valid number`);
+                }
+              }
+            });
+          }
+
+          // Resource-specific validations & mappings
+          const cleanedPayload: Record<string, any> = {};
+
+          if (resource === "products") {
+            const brandInput = (rowObj.brand || rowObj.brandId || "").trim();
+            if (!brandInput) {
+              rowErrors.push('"brand" is required');
+            } else {
+              const matchedId = brandsLookup.get(brandInput.toLowerCase());
+              if (!matchedId) {
+                rowErrors.push(`Brand "${brandInput}" does not exist. Please create it under Brands master first.`);
+              } else {
+                cleanedPayload.brandId = matchedId;
+              }
+            }
+            if (rowObj.price !== undefined && rowObj.price !== "") {
+              cleanedPayload.price = parseCleanNumber(rowObj.price);
+            }
+            cleanedPayload.size = rowObj.size?.trim() || "1ltr";
+            cleanedPayload.category = rowObj.category?.trim() || "Emulsion";
+            cleanedPayload.hasToken = ["true", "yes", "1", "y"].includes((rowObj.hasToken || "").trim().toLowerCase());
+            if (rowObj.coverageSqFt !== undefined && rowObj.coverageSqFt !== "") {
+              cleanedPayload.coverageSqFt = parseCleanNumber(rowObj.coverageSqFt);
+            }
+            if (rowObj.coverageRnFt !== undefined && rowObj.coverageRnFt !== "") {
+              cleanedPayload.coverageRnFt = parseCleanNumber(rowObj.coverageRnFt);
+            }
+          }
+
+          if (resource === "labours") {
+            if (rowObj.paymentPerDay !== undefined && rowObj.paymentPerDay !== "") {
+              cleanedPayload.paymentPerDay = parseCleanNumber(rowObj.paymentPerDay);
+            }
+            if (rowObj.tuesdayPaymentAmount !== undefined && rowObj.tuesdayPaymentAmount !== "") {
+              cleanedPayload.tuesdayPaymentAmount = parseCleanNumber(rowObj.tuesdayPaymentAmount) ?? 0;
+            }
+            const tVal = (rowObj.type || "").trim().toUpperCase();
+            cleanedPayload.type = tVal === "MONTHLY" ? "MONTHLY" : "WEEKLY";
+          }
+
+          if (resource === "contractors") {
+            const tVal = (rowObj.type || "").trim().toUpperCase();
+            cleanedPayload.type = tVal === "MONTHLY" ? "MONTHLY" : "WEEKLY";
+          }
+
+          if (resource === "interiors") {
+            if (rowObj.commissionFeePercentage !== undefined && rowObj.commissionFeePercentage !== "") {
+              cleanedPayload.commissionFeePercentage = parseCleanNumber(rowObj.commissionFeePercentage);
+            }
+          }
+
+          if (resource === "users") {
+            const rVal = (rowObj.role || "").trim().toUpperCase();
+            cleanedPayload.role = ["USER", "ADMIN", "INTERIOR", "SALES_ASSOCIATE", "SUPERVISOR"].includes(rVal) ? rVal : (importExtraData?.role || "USER");
+            cleanedPayload.password = rowObj.password?.trim() || "User@123";
+          }
+
+          if (resource === "colors") {
+            cleanedPayload.shade = rowObj.shade?.trim() || null;
+          }
+
           if (rowErrors.length > 0) {
             errors.push(`Row ${rowIdx + 1}: ${rowErrors.join(", ")}`);
           } else {
-            const mappedPayload: Record<string, any> = {};
             const allowedFields = CSV_RESOURCE_FIELDS[resource || ""] || [];
-            
             schema.headers.forEach(h => {
               const val = rowObj[h];
-              if (val !== undefined && val !== null && val.trim() !== "") {
-                mappedPayload[h] = val;
+              if (val !== undefined && val !== null && val.trim() !== "" && cleanedPayload[h] === undefined) {
+                cleanedPayload[h] = val.trim();
               }
             });
 
-            const cleanedPayload = Object.fromEntries(
-              Object.entries(mappedPayload).filter(([k]) => allowedFields.includes(k) || k === "password")
+            const finalPayload = Object.fromEntries(
+              Object.entries(cleanedPayload).filter(([k]) => allowedFields.includes(k) || k === "password")
             );
 
-            rowsToImport.push(cleanedPayload);
+            rowsToImport.push(finalPayload);
           }
         }
 
@@ -367,8 +720,26 @@ export function MasterPageLayout({
         return;
       }
 
-      // Fetch all items from the database
-      const allItems = await apiRequest.fetchAll(resource, queryParams);
+      // Fetch all items from the database with a high limit
+      let allItems: any[] = [];
+      try {
+        const result = await apiRequest.fetchAll(resource, { limit: 10000, ...queryParams });
+        allItems = Array.isArray(result) ? result : [];
+      } catch (fetchErr: any) {
+        if (fetchErr?.status === 404 || fetchErr?.message?.toLowerCase().includes("not found")) {
+          allItems = [];
+        } else {
+          throw fetchErr;
+        }
+      }
+
+      if (allItems.length === 0) {
+        toast({
+          title: "No records to export",
+          description: `No records found in "${resource}". Generating template headers.`,
+        });
+      }
+
       const csv = jsonToCSV(schema.downloadHeaders, allItems);
       
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -400,8 +771,18 @@ export function MasterPageLayout({
     const schema = CSV_SCHEMAS[resource];
     if (!schema) return;
 
-    // Generate CSV template containing just the headers and a sample row
-    const csvContent = schema.headers.join(",") + "\n" + schema.headers.map(h => `Sample_${h}`).join(",");
+    let sampleRowStr = "";
+    if (schema.sampleRow) {
+      sampleRowStr = schema.headers.map(h => {
+        const val = schema.sampleRow?.[h] ?? `Sample_${h}`;
+        const strVal = String(val).replace(/"/g, '""');
+        return strVal.includes(",") || strVal.includes("\n") || strVal.includes('"') ? `"${strVal}"` : strVal;
+      }).join(",");
+    } else {
+      sampleRowStr = schema.headers.map(h => `Sample_${h}`).join(",");
+    }
+
+    const csvContent = schema.headers.join(",") + "\n" + sampleRowStr;
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

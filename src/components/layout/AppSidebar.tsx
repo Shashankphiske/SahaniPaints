@@ -21,7 +21,8 @@ import {
   Briefcase,
   BookOpen,
   BarChart3,
-  Activity
+  Activity,
+  Palette
 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { NavLink } from "../NavLink";
@@ -82,6 +83,7 @@ const mastersItems = [
   { title: "Products", url: "/masters/products", icon: Package },
   { title: "Interiors", url: "/masters/interiors", icon: Home },
   { title: "Users", url: "/masters/users", icon: UserCheck },
+  { title: "Colors", url: "/masters/colors", icon: Palette },
   { title: "Site Colors", url: "/masters/site-colors", icon: Paintbrush },
   { title: "Areas", url: "/masters/areas", icon: MapPin },
   { title: "Labours", url: "/masters/labours", icon: Hammer },
