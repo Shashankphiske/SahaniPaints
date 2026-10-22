@@ -334,7 +334,6 @@ export function MasterForm({
     if (normalizedResource === "products") {
       if (!formData.name?.trim()) newErrors.name = "Product name is required";
       if (!formData.brandId) newErrors.brandId = "Brand is required";
-      if (!formData.category) newErrors.category = "Category is required";
       if (formData.price === undefined || formData.price === null || formData.price === "" || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
         newErrors.price = "Valid price per litre is required";
       }
@@ -343,11 +342,13 @@ export function MasterForm({
           newErrors.coverageSqFt = "Coverage must be a valid positive number";
         }
       }
+      /* coverageRnFt validation commented out - see Paints/SPEC_COVERAGE_RNFT.md to restore
       if (formData.coverageRnFt !== undefined && formData.coverageRnFt !== null && formData.coverageRnFt !== "") {
         if (isNaN(Number(formData.coverageRnFt)) || Number(formData.coverageRnFt) < 0) {
           newErrors.coverageRnFt = "Coverage must be a valid positive number";
         }
       }
+      */
     }
 
     if (normalizedResource === "colors") {
@@ -391,6 +392,9 @@ export function MasterForm({
     }
 
     if (resource === "products") {
+      if (payload.category !== undefined && typeof payload.category === "string") {
+        payload.category = payload.category.trim() || null;
+      }
       if (payload.brandId) {
         const selectedBrand = brandsList.find(b => b.id === payload.brandId);
         if (selectedBrand) {
@@ -962,14 +966,15 @@ export function MasterForm({
               </div>
 
               <div ref={categoryRef} className="space-y-1 relative">
-                <label className="text-sm font-semibold text-slate-500">Category <span className="text-red-500 font-bold ml-0.5">*</span></label>
+                <label className="text-sm font-semibold text-slate-500">Category</label>
                 <Input
-                  placeholder="Search and select category..."
+                  placeholder="Search and select category (optional)..."
                   value={categorySearch}
                   onFocus={() => setCategoryOpen(true)}
                   onChange={(e) => {
-                    setCategorySearch(e.target.value);
-                    setFormData(prev => ({ ...prev, category: "" }));
+                    const val = e.target.value;
+                    setCategorySearch(val);
+                    setFormData(prev => ({ ...prev, category: val }));
                     setCategoryOpen(true);
                   }}
                 />
@@ -1041,6 +1046,7 @@ export function MasterForm({
                 {errors.coverageSqFt && <p className="text-xs text-destructive font-semibold">{errors.coverageSqFt}</p>}
               </div>
 
+              {/* Coverage (rn.ft per L) disabled as per spec. See Paints/SPEC_COVERAGE_RNFT.md to restore.
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-slate-500">Coverage (rn.ft per L)</label>
                 <Input
@@ -1053,6 +1059,7 @@ export function MasterForm({
                 />
                 {errors.coverageRnFt && <p className="text-xs text-destructive font-semibold">{errors.coverageRnFt}</p>}
               </div>
+              */}
             </div>
 
             <div className="flex items-center space-x-2 py-2">

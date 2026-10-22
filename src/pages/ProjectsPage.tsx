@@ -9,7 +9,7 @@ import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contr
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "../components/ui/table";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { toast } from "../hooks/use-toast";
@@ -1707,13 +1707,6 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
         </div>
       )}
 
-      {/* 2. Labour Payment Section */}
-      {user?.role === "ADMIN" && (
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-          <LabourPaymentsTab fullProject={fullProject} />
-        </div>
-      )}
-
       {/* 3. Tasks Section */}
       <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
         <TasksPage projectId={fullProject.id} />
@@ -2608,6 +2601,18 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     }, 0);
   }, [materialLogs, projectProducts]);
 
+  const totalLoggedPacks = useMemo(() => {
+    return materialLogs.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
+  }, [materialLogs]);
+
+  const totalLoggedLitres = useMemo(() => {
+    return materialLogs.reduce((sum: number, log: any) => {
+      const matchPP = projectProducts.find((pp) => pp.productId === log.productId);
+      const packSizeL = getProductSizeInLitres(matchPP?.product?.size);
+      return sum + Number(log.quantity || 0) * packSizeL;
+    }, 0);
+  }, [materialLogs, projectProducts]);
+
   // Compute metrics for selected product
   const selectedMetrics = useMemo(() => {
     if (!selectedPP) return null;
@@ -2857,7 +2862,14 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projectProducts.map((pp) => {
+            {projectProducts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground italic">
+                  No materials allocated to this project yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              projectProducts.map((pp) => {
               const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
               const packSizeL = getProductSizeInLitres(pp.product?.size);
               const totalPacks = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
@@ -2945,8 +2957,27 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   </TableCell>
                 </TableRow>
               );
-            })}
+            }))}
           </TableBody>
+          <TableFooter className="bg-slate-50/90 dark:bg-zinc-900/90 border-t-2 border-slate-200 dark:border-zinc-800">
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={3} className="font-extrabold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200 py-3.5">
+                Total Material Cost
+              </TableCell>
+              <TableCell className="font-bold text-xs text-slate-800 dark:text-slate-200 py-3.5">
+                {totalLoggedPacks} Pack{totalLoggedPacks !== 1 ? "s" : ""}
+                {totalLoggedLitres > 0 && (
+                  <span className="text-muted-foreground font-normal ml-1">
+                    ({fmt(totalLoggedLitres)} L)
+                  </span>
+                )}
+              </TableCell>
+              <TableCell className="text-right font-mono font-extrabold text-sm text-emerald-600 dark:text-emerald-400 py-3.5">
+                ₹{fmt(totalProjectMaterialCost)}
+              </TableCell>
+              <TableCell colSpan={2} className="py-3.5" />
+            </TableRow>
+          </TableFooter>
         </Table>
       </Card>
 
@@ -3167,6 +3198,17 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                             );
                           })}
                         </TableBody>
+                        <TableFooter className="bg-slate-50/90 dark:bg-zinc-900/90 border-t border-slate-200 dark:border-zinc-800">
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell colSpan={4} className="font-extrabold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 py-3">
+                              Total Cost for {selectedPP.product?.name || "Material"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-extrabold text-xs text-emerald-600 dark:text-emerald-400 py-3">
+                              ₹{fmt(selectedMetrics.totalCost)}
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableFooter>
                       </Table>
                     </div>
                   )}
@@ -3204,7 +3246,7 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
               <TableRow key={pp.id}>
                 <TableCell className="font-semibold">{pp.product?.name}</TableCell>
                 <TableCell className="capitalize text-sm font-medium text-muted-foreground">
-                  {pp.product?.category}
+                  {pp.product?.category || "—"}
                 </TableCell>
                 <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
                   {fmt(pp.area)} {pp.unit}
