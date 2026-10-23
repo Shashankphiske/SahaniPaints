@@ -146,7 +146,12 @@ export function useMasterData<T extends { id: string | number }>(
       return result;
     },
     initialPageParam: null,
-    getNextPageParam: (lastPage: any) => lastPage?.nextCursor ?? null,
+    getNextPageParam: (lastPage: any) => {
+      if (!lastPage || !lastPage.nextCursor || !lastPage.records || lastPage.records.length === 0) {
+        return null;
+      }
+      return lastPage.nextCursor;
+    },
     staleTime: Infinity,
     gcTime: 1000 * 60 * 30,
     refetchOnWindowFocus: false,

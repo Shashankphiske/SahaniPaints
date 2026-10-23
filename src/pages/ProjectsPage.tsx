@@ -5,7 +5,7 @@ import { useMasterData } from "../hooks/use-master-data";
 import { getResourceChannel } from "../lib/realtime";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
-import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color, LowMaterial } from "../types/master";
+import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color, LowMaterial, Interior } from "../types/master";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -50,6 +50,7 @@ import {
   MapPin,
   CheckCircle2,
   Edit,
+  Award,
 } from "lucide-react";
 import TasksPage from "./TasksPage";
 import { parseRequestItems } from "../components/materials/MaterialRequestsPage";
@@ -151,10 +152,15 @@ export default function ProjectsPage() {
   const productsData = useMasterData<Product>("products", true);
   const usersData = useMasterData<any>("users", true);
   const contractorsData = useMasterData<Contractor>("contractors", true);
+  const interiorsData = useMasterData<Interior>("interiors", true);
 
   const projects = useMemo(() => {
     return Array.isArray(projectsData.data) ? projectsData.data : [];
   }, [projectsData.data]);
+
+  const interiors = useMemo(() => {
+    return Array.isArray(interiorsData.data) ? interiorsData.data : [];
+  }, [interiorsData.data]);
 
   const customers = useMemo(() => {
     return Array.isArray(customersData.data) ? customersData.data : [];
@@ -596,6 +602,17 @@ export default function ProjectsPage() {
                                 )}
                               </span>
                             </div>
+
+                            {/* Interior Designer */}
+                            {project.interior?.name && (
+                              <div className="flex items-center justify-between text-xs text-muted-foreground gap-2 pt-1 border-t border-slate-100 dark:border-zinc-900/40">
+                                <span className="truncate text-[11px] font-medium flex items-center">
+                                  <Award className="h-3 w-3 mr-1 text-primary" />
+                                  Designer: &nbsp;
+                                  <span className="text-primary font-bold">{project.interior.name}</span>
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Vertical Financial Pills with Simple Light Colors */}
@@ -670,6 +687,7 @@ export default function ProjectsPage() {
                         <TableHead>Customer</TableHead>
                         <TableHead>Deadline Date</TableHead>
                         <TableHead>Supervisor</TableHead>
+                        <TableHead>Interior Designer</TableHead>
                         <TableHead>Total Charges</TableHead>
                         <TableHead>Agreed Price</TableHead>
                         <TableHead>Status</TableHead>
@@ -699,6 +717,16 @@ export default function ProjectsPage() {
                               <span className="font-semibold text-indigo-600 dark:text-indigo-400">{project.supervisor.username}</span>
                             ) : (
                               <span className="text-xs font-semibold px-2 py-0.5 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-full border border-red-100">No Supervisor</span>
+                            )}
+                          </TableCell>
+                          <TableCell onClick={() => setViewingProject(project)}>
+                            {project.interior?.name ? (
+                              <span className="font-semibold text-primary flex items-center gap-1 text-xs">
+                                <Award className="h-3.5 w-3.5" />
+                                {project.interior.name}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
                           <TableCell onClick={() => setViewingProject(project)}>
@@ -744,6 +772,7 @@ export default function ProjectsPage() {
             customers={customers}
             products={products}
             supervisors={supervisors}
+            interiors={interiors}
             onCancel={() => setIsCreating(false)}
             onCreateCustomer={customersData.createAsync}
             onSave={async (projectPayload) => {
@@ -764,6 +793,7 @@ export default function ProjectsPage() {
             }}
             onSearchCustomers={(query) => customersData.forceServerSearch(query)}
             onSearchProducts={(query) => productsData.forceServerSearch(query)}
+            onSearchInteriors={(query) => interiorsData.forceServerSearch(query)}
           />
         )}
 
@@ -776,6 +806,7 @@ export default function ProjectsPage() {
             products={products}
             customers={customers}
             supervisors={supervisors}
+            interiors={interiors}
             setFullProject={setFullProject}
             updateAllCaches={projectsData.updateAllCaches}
             onCreateCustomer={customersData.createAsync}
@@ -790,6 +821,7 @@ export default function ProjectsPage() {
             }}
             onSearchCustomers={(query) => customersData.forceServerSearch(query)}
             onSearchProducts={(query) => productsData.forceServerSearch(query)}
+            onSearchInteriors={(query) => interiorsData.forceServerSearch(query)}
           />
         )}
       </div>
@@ -803,20 +835,24 @@ interface CreateProjectFormProps {
   customers: Customer[];
   products: Product[];
   supervisors: any[];
+  interiors: Interior[];
   onCancel: () => void;
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSave: (payload: any) => Promise<void>;
   onSearchCustomers?: (query: string) => void;
   onSearchProducts?: (query: string) => void;
+  onSearchInteriors?: (query: string) => void;
 }
 
-function CreateProjectForm({ customers, products, supervisors, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts }: CreateProjectFormProps) {
+function CreateProjectForm({ customers, products, supervisors, interiors, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts, onSearchInteriors }: CreateProjectFormProps) {
   // Form fields
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerDisplay, setCustomerDisplay] = useState("");
   const [supervisorId, setSupervisorId] = useState("");
   const [supervisorDisplay, setSupervisorDisplay] = useState("");
+  const [interiorId, setInteriorId] = useState("");
+  const [interiorDisplay, setInteriorDisplay] = useState("");
   const [projectDate, setProjectDate] = useState("");
   const [status, setStatus] = useState<any>("PENDING");
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -900,12 +936,15 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
     setSaving(true);
     try {
       const cust = customers.find((c) => c.id === customerId);
+      const chosenInterior = interiors.find((i) => i.id === interiorId);
       const payload = {
         name,
         customerId,
         supervisorId: supervisorId || null,
+        interiorId: interiorId || null,
         _customerName: cust?.name,
         _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
+        _interiorName: chosenInterior?.name || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
         totalAmount: subtotal,
@@ -990,6 +1029,25 @@ function CreateProjectForm({ customers, products, supervisors, onCancel, onCreat
                     onClear={() => { setCustomerId(""); setCustomerDisplay(""); }}
                     onEnter={(val) => onSearchCustomers?.(val)}
                     required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground block flex items-center gap-1">
+                    <Award className="h-3.5 w-3.5 text-primary" /> Interior Designer
+                  </label>
+                  <SearchableSelect
+                    value={interiorId}
+                    displayValue={interiorDisplay}
+                    options={interiors
+                      .filter((i) => !interiorDisplay || i.name.toLowerCase().includes(interiorDisplay.toLowerCase()))
+                      .slice(0, 10)
+                      .map((i) => ({ id: i.id, label: i.name }))}
+                    placeholder="Select interior designer (optional)"
+                    onSearchChange={setInteriorDisplay}
+                    onSelect={(id, label) => { setInteriorId(id); setInteriorDisplay(label); }}
+                    onClear={() => { setInteriorId(""); setInteriorDisplay(""); }}
+                    onEnter={(val) => onSearchInteriors?.(val)}
                   />
                 </div>
 
@@ -1289,6 +1347,7 @@ interface ProjectDetailViewProps {
   products: Product[];
   customers: Customer[];
   supervisors: any[];
+  interiors: Interior[];
   setFullProject: React.Dispatch<React.SetStateAction<any | null>>;
   updateAllCaches: (updatedItem: any) => void;
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
@@ -1296,6 +1355,7 @@ interface ProjectDetailViewProps {
   onRefresh: () => void;
   onSearchCustomers?: (query: string) => void;
   onSearchProducts?: (query: string) => void;
+  onSearchInteriors?: (query: string) => void;
 }
 
 function ProjectDetailView({
@@ -1305,6 +1365,7 @@ function ProjectDetailView({
   products,
   customers,
   supervisors,
+  interiors,
   setFullProject,
   updateAllCaches,
   onCreateCustomer,
@@ -1312,6 +1373,7 @@ function ProjectDetailView({
   onRefresh,
   onSearchCustomers,
   onSearchProducts,
+  onSearchInteriors,
 }: ProjectDetailViewProps) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1364,7 +1426,7 @@ function ProjectDetailView({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground font-medium">
-              Customer: {fullProject.customer?.name} | Deadline: {formatDate(fullProject.projectDate)}
+              Customer: {fullProject.customer?.name || "No Customer"} | {fullProject.interior?.name ? `Designer: ${fullProject.interior.name} | ` : ""}Deadline: {formatDate(fullProject.projectDate)}
             </p>
           </div>
         </div>
@@ -1406,8 +1468,10 @@ function ProjectDetailView({
             updateAllCaches={updateAllCaches}
             customers={customers}
             supervisors={supervisors}
+            interiors={interiors}
             onCreateCustomer={onCreateCustomer}
             onSearchCustomers={onSearchCustomers}
+            onSearchInteriors={onSearchInteriors}
           />
         </TabsContent>
 
@@ -1471,11 +1535,13 @@ interface OverviewEditTabProps {
   updateAllCaches: (updatedItem: any) => void;
   customers: Customer[];
   supervisors: any[];
+  interiors: Interior[];
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSearchCustomers?: (query: string) => void;
+  onSearchInteriors?: (query: string) => void;
 }
 
-function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, customers, supervisors, onCreateCustomer, onSearchCustomers }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, customers, supervisors, interiors, onCreateCustomer, onSearchCustomers, onSearchInteriors }: OverviewEditTabProps) {
   const { user } = useAuth();
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
@@ -1485,6 +1551,10 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
   const [supervisorId, setSupervisorId] = useState(fullProject.supervisorId || "");
   const [supervisorDisplay, setSupervisorDisplay] = useState(
     () => supervisors.find((s) => s.id === fullProject.supervisorId)?.username || ""
+  );
+  const [interiorId, setInteriorId] = useState(fullProject.interiorId || "");
+  const [interiorDisplay, setInteriorDisplay] = useState(
+    () => fullProject.interior?.name || interiors.find((i) => i.id === fullProject.interiorId)?.name || ""
   );
   const [projectDate, setProjectDate] = useState(() => {
     return fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "";
@@ -1529,9 +1599,11 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
     setCustomerDisplay(customers.find((c) => c.id === fullProject.customerId)?.name || "");
     setSupervisorId(fullProject.supervisorId || "");
     setSupervisorDisplay(supervisors.find((s) => s.id === fullProject.supervisorId)?.username || "");
+    setInteriorId(fullProject.interiorId || "");
+    setInteriorDisplay(fullProject.interior?.name || interiors.find((i) => i.id === fullProject.interiorId)?.name || "");
     setProjectDate(fullProject.projectDate ? new Date(fullProject.projectDate).toISOString().split("T")[0] : "");
     setStatus(fullProject.status);
-  }, [fullProject, customers, supervisors]);
+  }, [fullProject, customers, supervisors, interiors]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1540,12 +1612,15 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
     setSaving(true);
     try {
       const cust = customers.find((c) => c.id === customerId);
+      const chosenInterior = interiors.find((i) => i.id === interiorId);
       const payload = {
         name,
         customerId,
         supervisorId: supervisorId || null,
+        interiorId: interiorId || null,
         _customerName: cust?.name,
         _supervisorName: supervisors.find((s) => s.id === supervisorId)?.username || null,
+        _interiorName: chosenInterior?.name || null,
         projectDate: projectDate ? new Date(projectDate).toISOString() : null,
         status,
         totalAmount: Number(fullProject.totalAmount),
@@ -1570,14 +1645,24 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
           name,
           customerId,
           supervisorId: supervisorId || null,
+          interiorId: interiorId || null,
           customer: cust ? { id: cust.id, name: cust.name, phonenumber: cust.phonenumber || null, email: cust.email || null, address: cust.address || null } : null,
           supervisor: supervisorId ? { id: supervisorId, username: supervisors.find((s) => s.id === supervisorId)?.username } : null,
+          interior: interiorId ? { id: interiorId, name: chosenInterior?.name || fullProject.interior?.name || "Interior Designer" } : null,
           projectDate: projectDate ? new Date(projectDate) : null,
           status,
         };
       });
       // Optimistically update list cache for status changes
-      updateAllCaches({ id: fullProject.id, name, status, customerId, supervisorId } as any);
+      updateAllCaches({
+        id: fullProject.id,
+        name,
+        status,
+        customerId,
+        supervisorId,
+        interiorId,
+        interior: interiorId ? { id: interiorId, name: chosenInterior?.name || fullProject.interior?.name } : null
+      } as any);
       toast({
         title: "Project Details Saved",
         description: "General project information has been updated.",
@@ -1808,6 +1893,27 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
               onSearchChange={setSupervisorDisplay}
               onSelect={(id, label) => { setSupervisorId(id); setSupervisorDisplay(label); }}
               onClear={() => { setSupervisorId(""); setSupervisorDisplay(""); }}
+            />
+          </div>
+
+          <div className="space-y-1.5 col-span-1">
+            <div className="h-6 flex items-center">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Award className="h-3.5 w-3.5 text-primary" /> Interior Designer
+              </span>
+            </div>
+            <SearchableSelect
+              value={interiorId}
+              displayValue={interiorDisplay}
+              options={interiors
+                .filter((i) => !interiorDisplay || i.name.toLowerCase().includes(interiorDisplay.toLowerCase()))
+                .slice(0, 10)
+                .map((i) => ({ id: i.id, label: i.name }))}
+              placeholder="Select interior designer (optional)"
+              onSearchChange={setInteriorDisplay}
+              onSelect={(id, label) => { setInteriorId(id); setInteriorDisplay(label); }}
+              onClear={() => { setInteriorId(""); setInteriorDisplay(""); }}
+              onEnter={(val) => onSearchInteriors?.(val)}
             />
           </div>
 

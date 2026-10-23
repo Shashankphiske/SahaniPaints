@@ -150,6 +150,12 @@ export const apiRequest = {
 
     const rawData = await res.json();
     if (!res.ok) {
+      if (res.status === 404) {
+        return {
+          records: [],
+          nextCursor: null,
+        };
+      }
       if (res.status === 401 || res.status === 403) {
         localStorage.removeItem("auth_state");
         document.cookie = "accessToken=; Max-Age=0; path=/;";
@@ -161,9 +167,13 @@ export const apiRequest = {
       throw new ApiError(getFriendlyErrorMessage(rawData?.message || rawData?.error || `Request failed with status ${res.status}`), res.status);
     }
 
+    const limit = Number(query.limit) || 10;
+    const records = rawData.data?.records ?? [];
+    const nextCursor = records.length < limit ? null : (rawData.data?.nextCursor ?? null);
+
     return {
-      records: rawData.data?.records ?? [],
-      nextCursor: rawData.data?.nextCursor ?? null,
+      records,
+      nextCursor,
     };
   },
 
