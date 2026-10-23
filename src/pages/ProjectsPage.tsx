@@ -5,7 +5,8 @@ import { useMasterData } from "../hooks/use-master-data";
 import { getResourceChannel } from "../lib/realtime";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../lib/api";
-import type { Project, Customer, Product, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color, LowMaterial, Interior } from "../types/master";
+import type { Project, Customer, Product, Labour, LabourAttendance, LabourPayment, Contractor, ContractorWorkLog, ProjectAreaColor, Area, Color, LowMaterial, Interior } from "../types/master";
+import LabourDashboard from "../components/masters/LabourDashboard";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -29,6 +30,7 @@ import {
   Calendar,
   FolderOpen,
   AlertTriangle,
+  AlertCircle,
   Building,
   TrendingUp,
   Hammer,
@@ -1411,6 +1413,7 @@ function ProjectDetailView({
   onSearchInteriors,
 }: ProjectDetailViewProps) {
   const { user } = useAuth();
+  const [selectedLabour, setSelectedLabour] = useState<Labour | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState(() => {
@@ -1439,6 +1442,36 @@ function ProjectDetailView({
       <div className="flex flex-col items-center justify-center py-32 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-sm">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
         <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading project details & ledgers...</p>
+      </div>
+    );
+  }
+
+  if (selectedLabour) {
+    return (
+      <div className="space-y-6">
+        <LabourDashboard
+          labour={selectedLabour}
+          onBack={() => setSelectedLabour(null)}
+          handleSave={async (formData) => {
+            try {
+              await apiRequest.update("labours", selectedLabour.id, formData);
+              setSelectedLabour((prev: any) => (prev ? { ...prev, ...formData } : null));
+              toast({
+                title: "Labour details saved",
+                description: "Labour details updated successfully."
+              });
+            } catch (err: any) {
+              toast({
+                title: "Failed to save details",
+                description: err.message || "Something went wrong.",
+                variant: "destructive"
+              });
+              throw err;
+            }
+          }}
+          initialTab="overview"
+          initialSite={fullProject?.name}
+        />
       </div>
     );
   }
@@ -1507,6 +1540,7 @@ function ProjectDetailView({
             onCreateCustomer={onCreateCustomer}
             onSearchCustomers={onSearchCustomers}
             onSearchInteriors={onSearchInteriors}
+            onSelectLabour={setSelectedLabour}
           />
         </TabsContent>
 
@@ -1537,7 +1571,7 @@ function ProjectDetailView({
 
         {/* TAB 4: PROFIT & LOSS CALCULATOR */}
         <TabsContent value="profitloss">
-          <ProfitLossTab fullProject={fullProject} />
+          <ProfitLossTab fullProject={fullProject} onSelectLabour={setSelectedLabour} />
         </TabsContent>
 
         {/* TAB 4.5: MATERIAL REQUESTS LOG */}
@@ -1574,9 +1608,10 @@ interface OverviewEditTabProps {
   onCreateCustomer: (data: Partial<Customer>) => Promise<any>;
   onSearchCustomers?: (query: string) => void;
   onSearchInteriors?: (query: string) => void;
+  onSelectLabour?: (labour: any) => void;
 }
 
-function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, customers, supervisors, interiors, onCreateCustomer, onSearchCustomers, onSearchInteriors }: OverviewEditTabProps) {
+function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, customers, supervisors, interiors, onCreateCustomer, onSearchCustomers, onSearchInteriors, onSelectLabour }: OverviewEditTabProps) {
   const { user } = useAuth();
   const [name, setName] = useState(fullProject.name);
   const [customerId, setCustomerId] = useState(fullProject.customerId || "");
@@ -1843,7 +1878,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
 
       {/* 4. Labour Attendance Section */}
       <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 shadow-sm-soft">
-        <LabourCrewTab attendance={fullProject.attendance || []} />
+        <LabourCrewTab attendance={fullProject.attendance || []} onSelectLabour={onSelectLabour} />
       </div>
 
       {/* 5. Material Used Section */}
@@ -2745,6 +2780,10 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     return Array.from(map.values());
   }, [projectProducts, materialLogs, allProducts]);
 
+  const unallocatedCount = useMemo(() => {
+    return consolidatedMaterials.filter((m) => !m.isAllocated).length;
+  }, [consolidatedMaterials]);
+
   // Material options: site allocated products first, then other catalog products
   const productOptions = useMemo(() => {
     const q = productSearchDisplay.toLowerCase().trim();
@@ -2808,12 +2847,18 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
         description: `Successfully logged ${qtyNum} pack(s) of ${matchedProduct?.name || "material"}.`,
       });
 
+      const fullCreatedLog = {
+        ...payload,
+        ...(typeof createdLog === "object" ? createdLog : {}),
+        product: matchedProduct || createdLog?.product,
+      };
+
       if (setFullProject) {
         setFullProject((prev: any) => {
           if (!prev) return prev;
           return {
             ...prev,
-            materialLogs: [createdLog, ...(prev.materialLogs || [])],
+            materialLogs: [fullCreatedLog, ...(prev.materialLogs || [])],
           };
         });
       }
@@ -2923,11 +2968,20 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 
       toast({ title: "Material Log Added", description: `Added ${qtyNum} pack(s) of ${activePP.product?.name || "material"}.` });
 
+      const fullCreatedLog = {
+        projectId,
+        productId: activePP.productId,
+        quantity: qtyNum,
+        date: new Date(newLogDate).toISOString(),
+        ...(typeof createdLog === "object" ? createdLog : {}),
+        product: activePP.product || createdLog?.product,
+      };
+
       // Update state live
       if (setFullProject) {
         setFullProject((prev: any) => {
           if (!prev) return prev;
-          const updatedLogs = [createdLog, ...(prev.materialLogs || [])];
+          const updatedLogs = [fullCreatedLog, ...(prev.materialLogs || [])];
           return { ...prev, materialLogs: updatedLogs };
         });
       }
@@ -2971,7 +3025,13 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             Click any product row below to inspect detailed material logs & consumption history.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {unallocatedCount > 0 && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 border-amber-300 font-bold px-2.5 py-1 text-xs flex items-center gap-1.5 shadow-2xs">
+              <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span>{unallocatedCount} Not in Selected Products</span>
+            </Badge>
+          )}
           {totalProjectMaterialCost > 0 && (
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 font-mono font-bold px-3 py-1 text-xs">
               Total Logged: ₹{fmt(totalProjectMaterialCost)}
@@ -3107,18 +3167,17 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
           <TableHeader>
             <TableRow className="bg-slate-50 dark:bg-zinc-900/50">
               <TableHead>Product</TableHead>
-              <TableHead className="text-right">Unit Price</TableHead>
-              <TableHead>Area</TableHead>
               <TableHead>Quantity Logged</TableHead>
-              <TableHead className="text-right">Total Cost</TableHead>
               <TableHead>Coverage</TableHead>
-              <TableHead className="text-right">Status</TableHead>
+              <TableHead>Area</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Total Cost</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {consolidatedMaterials.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground italic">
+                <TableCell colSpan={6} className="text-center py-8 text-xs text-muted-foreground italic">
                   No materials allocated or logged for this project yet.
                 </TableCell>
               </TableRow>
@@ -3140,6 +3199,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 
               const isExceeding = actualCoverage > designatedArea && designatedArea > 0;
               const diff = isExceeding ? actualCoverage - designatedArea : 0;
+              const isUnallocated = !pp.isAllocated;
 
               return (
                 <TableRow
@@ -3148,16 +3208,24 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                     setSelectedPP(pp);
                     setIsAddingLog(false);
                   }}
-                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-colors group"
+                  className={`cursor-pointer transition-colors group ${
+                    isUnallocated
+                      ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/70 dark:hover:bg-amber-950/40 border-l-4 border-l-amber-500"
+                      : "hover:bg-slate-50 dark:hover:bg-zinc-900/60"
+                  }`}
                 >
+                  {/* 1. Product */}
                   <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <span>{pp.product?.name || "Paint Product"}</span>
-                          {!pp.isAllocated && (
-                            <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-bold uppercase bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200">
-                              Site Logged
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={isUnallocated ? "text-amber-950 dark:text-amber-100 font-bold" : ""}>
+                            {pp.product?.name || "Paint Product"}
+                          </span>
+                          {isUnallocated && (
+                            <Badge className="text-[10px] py-0.5 px-2 font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white shadow-2xs flex items-center gap-1">
+                              <AlertCircle className="h-2.5 w-2.5" />
+                              Not in Selected Products
                             </Badge>
                           )}
                         </div>
@@ -3170,12 +3238,8 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-2" />
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono font-medium text-xs text-slate-700 dark:text-slate-300">
-                    {unitPrice > 0 ? `₹${fmt(unitPrice)}` : "—"}
-                  </TableCell>
-                  <TableCell className="font-medium text-xs">
-                    {designatedArea > 0 ? `${fmt(pp.area)} ${pp.unit}` : <span className="text-muted-foreground italic text-xs">Unspecified</span>}
-                  </TableCell>
+
+                  {/* 2. Quantity Logged */}
                   <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
                     {totalPacks} Pack{totalPacks !== 1 ? "s" : ""}
                     {litresNum > 0 && (
@@ -3187,15 +3251,43 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       {loggedProducts.length} log entr{loggedProducts.length === 1 ? "y" : "ies"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                    {totalCost > 0 ? `₹${fmt(totalCost)}` : "—"}
-                  </TableCell>
+
+                  {/* 3. Coverage */}
                   <TableCell>
                     <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{fmt(actualCoverage)}</span>
                     <span className="text-[10px] text-muted-foreground ml-1">{pp.unit}</span>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {litresNum === 0 && totalPacks === 0 ? (
+
+                  {/* 4. Area */}
+                  <TableCell className="font-medium text-xs">
+                    {isUnallocated ? (
+                      <div className="flex flex-col">
+                        <span className="text-amber-700 dark:text-amber-400 font-bold text-xs flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" />
+                          Unplanned
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-normal">
+                          0 {pp.unit} allocated
+                        </span>
+                      </div>
+                    ) : designatedArea > 0 ? (
+                      `${fmt(pp.area)} ${pp.unit}`
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs">Unspecified</span>
+                    )}
+                  </TableCell>
+
+                  {/* 5. Status */}
+                  <TableCell>
+                    {isUnallocated ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-100/80 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 font-bold text-xs flex items-center gap-1 w-fit"
+                      >
+                        <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
+                        Unplanned Extra
+                      </Badge>
+                    ) : litresNum === 0 && totalPacks === 0 ? (
                       <Badge variant="outline" className="bg-slate-50 text-slate-400">
                         No Usage Logged
                       </Badge>
@@ -3206,7 +3298,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                     ) : isExceeding ? (
                       <Badge
                         variant="outline"
-                        className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 flex items-center gap-1.5 justify-end w-fit ml-auto"
+                        className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 flex items-center gap-1.5 w-fit"
                       >
                         <AlertTriangle className="h-3 w-3" />
                         Exceeding by {fmt(diff)} {pp.unit}
@@ -3220,14 +3312,19 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       </Badge>
                     )}
                   </TableCell>
+
+                  {/* 6. Total Cost */}
+                  <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                    {totalCost > 0 ? `₹${fmt(totalCost)}` : "—"}
+                  </TableCell>
                 </TableRow>
               );
             }))}
           </TableBody>
           <TableFooter className="bg-slate-50/90 dark:bg-zinc-900/90 border-t-2 border-slate-200 dark:border-zinc-800">
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={3} className="font-extrabold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200 py-3.5">
-                Total Material Cost
+              <TableCell className="font-extrabold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200 py-3.5">
+                Total
               </TableCell>
               <TableCell className="font-bold text-xs text-slate-800 dark:text-slate-200 py-3.5">
                 {totalLoggedPacks} Pack{totalLoggedPacks !== 1 ? "s" : ""}
@@ -3237,10 +3334,10 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   </span>
                 )}
               </TableCell>
+              <TableCell colSpan={3} className="py-3.5" />
               <TableCell className="text-right font-mono font-extrabold text-sm text-emerald-600 dark:text-emerald-400 py-3.5">
                 ₹{fmt(totalProjectMaterialCost)}
               </TableCell>
-              <TableCell colSpan={2} className="py-3.5" />
             </TableRow>
           </TableFooter>
         </Table>
@@ -3254,9 +3351,15 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/80 dark:bg-zinc-900/80">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                    <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100 flex-wrap">
                       <Package className="h-5 w-5 text-primary" />
                       <span>{activePP.product?.name || "Product Material Logs"}</span>
+                      {!activePP.isAllocated && (
+                        <Badge className="text-[10px] py-0.5 px-2 font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white shadow-2xs flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Not in Selected Products
+                        </Badge>
+                      )}
                     </DialogTitle>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
                       {activePP.product?.brand?.name && (
@@ -3340,6 +3443,15 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 
               {/* Modal Body with KPI Cards & Logs Table */}
               <div className="p-4 sm:p-5 overflow-y-auto max-h-[60vh] space-y-5">
+                {!activePP.isAllocated && (
+                  <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-2xs">
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-sm mb-0.5">Unplanned Site Material</span>
+                      This material was logged directly during site operations, but was not included in the pre-selected products configured for this project. Its planned area is 0, and all logged usage represents unplanned extra material.
+                    </div>
+                  </div>
+                )}
                 {/* Metric Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
@@ -3557,12 +3669,13 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
 /* ──────────────────────────────────────────────────────── */
 interface LabourCrewTabProps {
   attendance: LabourAttendance[];
+  onSelectLabour?: (labour: any) => void;
 }
 
-function LabourCrewTab({ attendance }: LabourCrewTabProps) {
+function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
   // Aggregate attendance data: Group by worker
   const aggregatedLabour = useMemo(() => {
-    const map: Record<string, { name: string; paymentPerDay: number; daysValueSum: number; phone: string }> = {};
+    const map: Record<string, { labour: any; name: string; paymentPerDay: number; daysValueSum: number; phone: string }> = {};
 
     attendance.forEach((att) => {
       const labourId = att.labourId;
@@ -3576,6 +3689,15 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
 
       if (!map[labourId]) {
         map[labourId] = {
+          labour: {
+            id: labourId,
+            name: lName,
+            paymentPerDay: paymentRate,
+            phonenumber: phoneNum !== "—" ? phoneNum : null,
+            type: (att.labour as any)?.type || "WEEKLY",
+            createdAt: (att.labour as any)?.createdAt || new Date(),
+            ...(att.labour || {}),
+          },
           name: lName,
           paymentPerDay: paymentRate,
           daysValueSum: 0,
@@ -3587,6 +3709,7 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
 
     return Object.entries(map).map(([id, item]) => ({
       id,
+      labour: item.labour,
       name: item.name,
       paymentPerDay: item.paymentPerDay,
       daysPresentCount: item.daysValueSum,
@@ -3603,6 +3726,9 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Labour Attendance</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Click any crew member below to inspect full attendance history & wages.
+        </p>
       </div>
 
       {aggregatedLabour.length === 0 ? (
@@ -3622,12 +3748,19 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
                   <TableHead>Wages / Day</TableHead>
                   <TableHead>Days Present</TableHead>
                   <TableHead className="text-right">Total Wages</TableHead>
+                  <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {aggregatedLabour.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-semibold">{item.name}</TableCell>
+                  <TableRow
+                    key={item.id}
+                    onClick={() => onSelectLabour?.(item.labour)}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-900/60 transition-colors group"
+                  >
+                    <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
+                      {item.name}
+                    </TableCell>
                     <TableCell className="text-slate-500 text-xs font-mono">{item.phone}</TableCell>
                     <TableCell>₹{fmt(item.paymentPerDay)}</TableCell>
                     <TableCell>
@@ -3637,6 +3770,9 @@ function LabourCrewTab({ attendance }: LabourCrewTabProps) {
                     </TableCell>
                     <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
                       ₹{fmt(item.totalWages)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-auto" />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -4029,9 +4165,10 @@ function LabourPaymentsTab({ fullProject }: LabourPaymentsTabProps) {
 /* ──────────────────────────────────────────────────────── */
 interface ProfitLossTabProps {
   fullProject: any;
+  onSelectLabour?: (labour: any) => void;
 }
 
-function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
+function ProfitLossTab({ fullProject, onSelectLabour }: ProfitLossTabProps) {
   // Agreed price
   const agreedPrice = Number(fullProject.agreedPrice || fullProject.totalAmount || 0);
 
@@ -4151,7 +4288,15 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
       if (!map.has(lId)) {
         map.set(lId, {
           labourId: lId,
-          labour: att.labour,
+          labour: {
+            id: lId,
+            name: att.labour?.name || "Worker",
+            paymentPerDay: rate,
+            phonenumber: att.labour?.phonenumber || null,
+            type: att.labour?.type || "WEEKLY",
+            createdAt: att.labour?.createdAt || new Date(),
+            ...(att.labour || {}),
+          },
           daysWorked: 0,
           paymentPerDay: rate,
           totalEarned: 0,
@@ -4494,11 +4639,16 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
                       <TableHead className="font-bold text-right">Daily Rate</TableHead>
                       <TableHead className="font-bold text-center">Days Worked</TableHead>
                       <TableHead className="font-bold text-right">Total Wages</TableHead>
+                      <TableHead className="w-8"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {labourSummaryList.map((w) => (
-                      <TableRow key={w.labourId} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/50">
+                      <TableRow
+                        key={w.labourId}
+                        onClick={() => onSelectLabour?.(w.labour)}
+                        className="cursor-pointer hover:bg-slate-50/80 dark:hover:bg-zinc-900/50 transition-colors group"
+                      >
                         <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
                           <div>
                             <span>{w.labour?.name || "Worker"}</span>
@@ -4517,6 +4667,9 @@ function ProfitLossTab({ fullProject }: ProfitLossTabProps) {
                         </TableCell>
                         <TableCell className="text-right font-mono font-bold text-slate-900 dark:text-slate-100">
                           ₹{fmt(w.totalEarned)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-auto" />
                         </TableCell>
                       </TableRow>
                     ))}

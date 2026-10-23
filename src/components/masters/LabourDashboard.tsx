@@ -27,12 +27,17 @@ export default function LabourDashboard({
   labour,
   onBack,
   handleSave,
+  initialTab = "overview",
+  initialSite,
 }: {
   labour: Labour;
   onBack: () => void;
   handleSave: (data: any) => void;
+  initialTab?: "overview" | "attendance" | "payments" | "edit";
+  initialSite?: string;
 }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "payments" | "edit">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "payments" | "edit">(initialTab);
+  const [selectedSite, setSelectedSite] = useState<string>("ALL");
 
   // Fetch all attendance logs for this labour
   const {
@@ -77,6 +82,17 @@ export default function LabourDashboard({
     });
     return Array.from(sites);
   }, [attendanceList]);
+
+  useEffect(() => {
+    if (initialSite && uniqueSites.some((s) => s.toLowerCase() === initialSite.toLowerCase())) {
+      setSelectedSite(initialSite);
+    }
+  }, [initialSite, uniqueSites]);
+
+  const filteredAttendance = useMemo(() => {
+    if (selectedSite === "ALL") return attendanceList;
+    return attendanceList.filter((a) => a.project?.name?.toLowerCase() === selectedSite.toLowerCase());
+  }, [attendanceList, selectedSite]);
 
   // Calculations
   const rate = Number(labour.paymentPerDay || 0);
@@ -318,17 +334,50 @@ export default function LabourDashboard({
       {/* ATTENDANCE TAB */}
       {activeTab === "attendance" && (
         <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4 animate-in fade-in duration-200">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
-            <Calendar size={18} className="text-primary" />
-            <h2 className="text-lg font-bold">Attendance Records Ledger</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
+              <Calendar size={18} className="text-primary" />
+              <h2 className="text-lg font-bold">Attendance Records Ledger</h2>
+              <span className="text-xs text-muted-foreground font-semibold">({filteredAttendance.length} records)</span>
+            </div>
+            {uniqueSites.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground font-semibold mr-1">Filter Site:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSite("ALL")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    selectedSite === "ALL"
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  All Sites ({attendanceList.length})
+                </button>
+                {uniqueSites.map((site) => (
+                  <button
+                    key={site}
+                    type="button"
+                    onClick={() => setSelectedSite(site)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      selectedSite.toLowerCase() === site.toLowerCase()
+                        ? "bg-primary text-white shadow-xs"
+                        : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {site}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="border-t pt-2">
             {attendanceLoading ? (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-            ) : attendanceList.length === 0 ? (
-              <p className="text-sm text-slate-400 italic py-10 text-center">No attendance logs logged yet.</p>
+            ) : filteredAttendance.length === 0 ? (
+              <p className="text-sm text-slate-400 italic py-10 text-center">No attendance logs found for this filter.</p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-zinc-800">
                 <table className="w-full text-sm">
@@ -342,7 +391,7 @@ export default function LabourDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-zinc-800">
-                    {attendanceList.map((a) => {
+                    {filteredAttendance.map((a) => {
                       const val = Number(a.workDayValue ?? 1.0);
                       const earnedWage = rate * val;
                       const shiftLabel = a.workDayType === "NIGHT" ? "Night (0.5x)" : a.workDayType === "BOTH" ? "Both (1.5x)" : "Day (1.0x)";
