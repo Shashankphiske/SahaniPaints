@@ -933,6 +933,19 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
 
     const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
 
+    // Merge duplicate materials if user selected the same product multiple times
+    const mergedMap = new Map<string, PaintProductRow>();
+    for (const r of filteredRows) {
+      const key = `${r.productId}_${r.unit}`;
+      if (mergedMap.has(key)) {
+        const existing = mergedMap.get(key)!;
+        existing.area = Number((Number(existing.area || 0) + Number(r.area || 0)).toFixed(2));
+      } else {
+        mergedMap.set(key, { ...r, area: Number(r.area) });
+      }
+    }
+    const finalMergedRows = Array.from(mergedMap.values());
+
     setSaving(true);
     try {
       const cust = customers.find((c) => c.id === customerId);
@@ -952,7 +965,7 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
         discount: Number(discount || 0),
         discountType,
         agreedPrice: finalPrice,
-        projectProducts: filteredRows.map((r) => ({
+        projectProducts: finalMergedRows.map((r) => ({
           productId: r.productId,
           area: r.area,
           unit: r.unit,
@@ -1111,6 +1124,28 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
                         placeholder="Choose product"
                         onSearchChange={(query) => handleRowChange(idx, "_search", query)}
                         onSelect={(id, label) => {
+                          const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === id && r.unit === row.unit);
+                          if (otherIdx !== -1) {
+                            const currArea = Number(row.area || 0);
+                            const otherArea = Number(rows[otherIdx].area || 0);
+                            const mergedArea = Number((currArea + otherArea).toFixed(2));
+                            toast({
+                              title: "Material Merged",
+                              description: `"${label}" is already added. Merged into existing row (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
+                            });
+                            const copy = [...rows];
+                            copy[otherIdx] = {
+                              ...copy[otherIdx],
+                              area: mergedArea,
+                            };
+                            if (copy.length > 1) {
+                              copy.splice(idx, 1);
+                            } else {
+                              copy[idx] = createEmptyProductRow();
+                            }
+                            setRows(copy);
+                            return;
+                          }
                           handleRowChange(idx, "productId", id);
                           handleRowChange(idx, "_search", label);
                         }}
@@ -2165,9 +2200,22 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
     e.preventDefault();
     const filteredRows = rows.filter((r) => r.productId && Number(r.area) > 0);
 
+    // Merge duplicate materials if user selected the same product multiple times
+    const mergedMap = new Map<string, PaintProductRow>();
+    for (const r of filteredRows) {
+      const key = `${r.productId}_${r.unit}`;
+      if (mergedMap.has(key)) {
+        const existing = mergedMap.get(key)!;
+        existing.area = Number((Number(existing.area || 0) + Number(r.area || 0)).toFixed(2));
+      } else {
+        mergedMap.set(key, { ...r, area: Number(r.area) });
+      }
+    }
+    const finalMergedRows = Array.from(mergedMap.values());
+
     setSaving(true);
     try {
-      const newSubtotal = filteredRows.reduce((sum, r) => sum + (Number(r.rate || 0) * Number(r.area || 0)), 0);
+      const newSubtotal = finalMergedRows.reduce((sum, r) => sum + (Number(r.rate || 0) * Number(r.area || 0)), 0);
       const payload = {
         name: fullProject.name,
         customerId: fullProject.customerId,
@@ -2179,7 +2227,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
         discount: Number(fullProject.discount || 0),
         discountType: fullProject.discountType || "amount",
         agreedPrice: Number(fullProject.agreedPrice || newSubtotal),
-        projectProducts: filteredRows.map((r) => ({
+        projectProducts: finalMergedRows.map((r) => ({
           productId: r.productId,
           area: r.area,
           unit: r.unit,
@@ -2190,7 +2238,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
 
       await apiRequest.update("projects", fullProject.id, payload as any);
 
-      const updatedProjectProducts = filteredRows.map((r, index) => {
+      const updatedProjectProducts = finalMergedRows.map((r, index) => {
         const prod = products.find((p) => p.id === r.productId);
         return {
           id: `temp-${index}-${Date.now()}`,
@@ -2212,6 +2260,17 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
           } : undefined
         };
       });
+
+      // Synchronize rows state with merged products
+      setRows(
+        finalMergedRows.map((r) => {
+          const prodName = products.find((p) => p.id === r.productId)?.name || "";
+          return {
+            ...r,
+            _search: prodName,
+          };
+        })
+      );
 
       setFullProject((prev: any) => {
         if (!prev) return prev;
@@ -2296,6 +2355,29 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                         placeholder="Choose Product"
                         onSearchChange={(query) => handleRowChange(idx, "_search", query)}
                         onSelect={(id, label) => {
+                          const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === id && r.unit === row.unit);
+                          if (otherIdx !== -1) {
+                            const currArea = Number(row.area || 0);
+                            const otherArea = Number(rows[otherIdx].area || 0);
+                            const mergedArea = Number((currArea + otherArea).toFixed(2));
+                            toast({
+                              title: "Material Merged",
+                              description: `"${label}" is already in your selected products. Appended area (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
+                            });
+                            const copy = [...rows];
+                            copy[otherIdx] = {
+                              ...copy[otherIdx],
+                              area: mergedArea,
+                            };
+                            if (copy.length > 1) {
+                              copy.splice(idx, 1);
+                            } else {
+                              copy[idx] = createEmptyProductRow();
+                            }
+                            setRows(copy);
+                            setIsDirty(checkIfDirty(copy));
+                            return;
+                          }
                           handleRowChange(idx, "productId", id);
                           handleRowChange(idx, "_search", label);
                         }}
@@ -2603,11 +2685,71 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     return allProducts.find((p) => p.id === selectedProductId);
   }, [allProducts, selectedProductId]);
 
+  // Consolidate project products and site material logs by productId so same materials are merged
+  const consolidatedMaterials = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      productId: string;
+      product: any;
+      unit: string;
+      area: number;
+      rate: number;
+      price: number;
+      isAllocated: boolean;
+    }>();
+
+    // 1. Process all allocated project products, merging same productId entries
+    (projectProducts || []).forEach((pp: any) => {
+      const pId = pp.productId || pp.product?.id;
+      if (!pId) return;
+      const existing = map.get(pId);
+      const ppArea = Number(pp.area || 0);
+      const ppRate = Number(pp.rate ?? pp.product?.price ?? pp.price ?? 0);
+      if (existing) {
+        existing.area = Number((existing.area + ppArea).toFixed(2));
+        if (!existing.product && pp.product) existing.product = pp.product;
+      } else {
+        const fullProd = pp.product || allProducts.find((p) => p.id === pId);
+        map.set(pId, {
+          id: pp.id || `merged-${pId}`,
+          productId: pId,
+          product: fullProd,
+          unit: pp.unit || "sq.ft",
+          area: ppArea,
+          rate: ppRate,
+          price: Number(fullProd?.price ?? ppRate),
+          isAllocated: true,
+        });
+      }
+    });
+
+    // 2. Also include any materials that have usage logs but weren't in projectProducts
+    (materialLogs || []).forEach((log: any) => {
+      const pId = log.productId;
+      if (!pId) return;
+      if (!map.has(pId)) {
+        const fullProd = log.product || allProducts.find((p) => p.id === pId);
+        map.set(pId, {
+          id: `log-only-${pId}`,
+          productId: pId,
+          product: fullProd,
+          unit: "sq.ft",
+          area: 0,
+          rate: Number(fullProd?.price || 0),
+          price: Number(fullProd?.price || 0),
+          isAllocated: false,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [projectProducts, materialLogs, allProducts]);
+
   // Material options: site allocated products first, then other catalog products
   const productOptions = useMemo(() => {
     const q = productSearchDisplay.toLowerCase().trim();
     const allocatedProductIds = new Set(
-      projectProducts.map((pp) => pp.productId || pp.product?.id).filter(Boolean)
+      consolidatedMaterials.map((pp) => pp.productId).filter(Boolean)
     );
 
     const matched = allProducts.filter((p) => {
@@ -2633,7 +2775,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
         label: `${p.name}${isAllocated ? " (Project)" : ""}${p.brand?.name ? ` - ${p.brand.name}` : ""}`,
       };
     });
-  }, [allProducts, projectProducts, productSearchDisplay]);
+  }, [allProducts, consolidatedMaterials, productSearchDisplay]);
 
   const handleLogMaterialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2692,20 +2834,26 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     }
   };
 
+  // Active selected product synced with consolidatedMaterials
+  const activePP = useMemo(() => {
+    if (!selectedPP) return null;
+    return consolidatedMaterials.find((cm) => cm.productId === selectedPP.productId) || selectedPP;
+  }, [selectedPP, consolidatedMaterials]);
+
   // Compute matched logs for selected product
   const matchedLogs = useMemo(() => {
-    if (!selectedPP) return [];
-    return materialLogs.filter((log: any) => log.productId === selectedPP.productId);
-  }, [selectedPP, materialLogs]);
+    if (!activePP) return [];
+    return materialLogs.filter((log: any) => log.productId === activePP.productId);
+  }, [activePP, materialLogs]);
 
   // Total cost across all logged materials for this project
   const totalProjectMaterialCost = useMemo(() => {
     return materialLogs.reduce((sum: number, log: any) => {
-      const matchPP = projectProducts.find((pp) => pp.productId === log.productId);
+      const matchPP = consolidatedMaterials.find((pp) => pp.productId === log.productId);
       const unitPrice = Number(matchPP?.product?.price ?? matchPP?.rate ?? matchPP?.price ?? log.product?.price ?? 0);
       return sum + Number(log.quantity || 0) * unitPrice;
     }, 0);
-  }, [materialLogs, projectProducts]);
+  }, [materialLogs, consolidatedMaterials]);
 
   const totalLoggedPacks = useMemo(() => {
     return materialLogs.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
@@ -2713,30 +2861,30 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 
   const totalLoggedLitres = useMemo(() => {
     return materialLogs.reduce((sum: number, log: any) => {
-      const matchPP = projectProducts.find((pp) => pp.productId === log.productId);
+      const matchPP = consolidatedMaterials.find((pp) => pp.productId === log.productId);
       const packSizeL = getProductSizeInLitres(matchPP?.product?.size);
       return sum + Number(log.quantity || 0) * packSizeL;
     }, 0);
-  }, [materialLogs, projectProducts]);
+  }, [materialLogs, consolidatedMaterials]);
 
   // Compute metrics for selected product
   const selectedMetrics = useMemo(() => {
-    if (!selectedPP) return null;
+    if (!activePP) return null;
 
-    const packSizeL = getProductSizeInLitres(selectedPP.product?.size);
+    const packSizeL = getProductSizeInLitres(activePP.product?.size);
     const totalPacks = matchedLogs.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
     const litresNum = totalPacks * packSizeL;
 
-    const unitPrice = Number(selectedPP.product?.price ?? selectedPP.rate ?? selectedPP.price ?? 0);
+    const unitPrice = Number(activePP.product?.price ?? activePP.rate ?? activePP.price ?? 0);
     const totalCost = totalPacks * unitPrice;
 
-    const coverageSqFtL = selectedPP.product?.coverageSqFt != null ? Number(selectedPP.product.coverageSqFt) : 0;
-    const coverageRnFtL = selectedPP.product?.coverageRnFt != null ? Number(selectedPP.product.coverageRnFt) : 0;
+    const coverageSqFtL = activePP.product?.coverageSqFt != null ? Number(activePP.product.coverageSqFt) : 0;
+    const coverageRnFtL = activePP.product?.coverageRnFt != null ? Number(activePP.product.coverageRnFt) : 0;
 
-    const actualCoverage = selectedPP.unit === "sq.ft" ? litresNum * coverageSqFtL : litresNum * coverageRnFtL;
-    const designatedArea = Number(selectedPP.area || 0);
+    const actualCoverage = activePP.unit === "sq.ft" ? litresNum * coverageSqFtL : litresNum * coverageRnFtL;
+    const designatedArea = Number(activePP.area || 0);
 
-    const isExceeding = actualCoverage > designatedArea;
+    const isExceeding = actualCoverage > designatedArea && designatedArea > 0;
     const diff = isExceeding ? actualCoverage - designatedArea : 0;
 
     return {
@@ -2751,13 +2899,13 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
       designatedArea,
       isExceeding,
       diff,
-      coveragePerL: selectedPP.unit === "sq.ft" ? coverageSqFtL : coverageRnFtL,
+      coveragePerL: activePP.unit === "sq.ft" ? coverageSqFtL : coverageRnFtL,
     };
-  }, [selectedPP, matchedLogs]);
+  }, [activePP, matchedLogs]);
 
   const handleAddMaterialLog = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPP) return;
+    if (!activePP) return;
     const qtyNum = parseFloat(newLogQuantity);
     if (isNaN(qtyNum) || qtyNum <= 0) {
       toast({ title: "Invalid Quantity", description: "Please enter a valid positive quantity.", variant: "destructive" });
@@ -2768,12 +2916,12 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
     try {
       const createdLog = await apiRequest.create<any>("project-material-logs", {
         projectId,
-        productId: selectedPP.productId,
+        productId: activePP.productId,
         quantity: qtyNum,
         date: new Date(newLogDate).toISOString(),
       });
 
-      toast({ title: "Material Log Added", description: `Added ${qtyNum} pack(s) of ${selectedPP.product?.name}.` });
+      toast({ title: "Material Log Added", description: `Added ${qtyNum} pack(s) of ${activePP.product?.name || "material"}.` });
 
       // Update state live
       if (setFullProject) {
@@ -2968,14 +3116,14 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projectProducts.length === 0 ? (
+            {consolidatedMaterials.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground italic">
-                  No materials allocated to this project yet.
+                  No materials allocated or logged for this project yet.
                 </TableCell>
               </TableRow>
             ) : (
-              projectProducts.map((pp) => {
+              consolidatedMaterials.map((pp) => {
               const loggedProducts = materialLogs.filter((log: any) => log.productId === pp.productId);
               const packSizeL = getProductSizeInLitres(pp.product?.size);
               const totalPacks = loggedProducts.reduce((sum: number, log: any) => sum + Number(log.quantity || 0), 0);
@@ -2990,7 +3138,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               const actualCoverage = pp.unit === "sq.ft" ? litresNum * coverageSqFtL : litresNum * coverageRnFtL;
               const designatedArea = Number(pp.area);
 
-              const isExceeding = actualCoverage > designatedArea;
+              const isExceeding = actualCoverage > designatedArea && designatedArea > 0;
               const diff = isExceeding ? actualCoverage - designatedArea : 0;
 
               return (
@@ -3005,7 +3153,14 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   <TableCell className="font-semibold text-slate-900 dark:text-slate-100">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span>{pp.product?.name || "Paint Product"}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>{pp.product?.name || "Paint Product"}</span>
+                          {!pp.isAllocated && (
+                            <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-bold uppercase bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200">
+                              Site Logged
+                            </Badge>
+                          )}
+                        </div>
                         {pp.product?.brand?.name && (
                           <span className="text-[10px] text-muted-foreground font-medium block">
                             Brand: {pp.product.brand.name}
@@ -3019,7 +3174,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                     {unitPrice > 0 ? `₹${fmt(unitPrice)}` : "—"}
                   </TableCell>
                   <TableCell className="font-medium text-xs">
-                    {fmt(pp.area)} {pp.unit}
+                    {designatedArea > 0 ? `${fmt(pp.area)} ${pp.unit}` : <span className="text-muted-foreground italic text-xs">Unspecified</span>}
                   </TableCell>
                   <TableCell className="font-bold text-xs text-slate-900 dark:text-slate-100">
                     {totalPacks} Pack{totalPacks !== 1 ? "s" : ""}
@@ -3029,7 +3184,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       </span>
                     )}
                     <span className="text-[10px] text-muted-foreground block font-normal">
-                      {loggedProducts.length} log entry{loggedProducts.length !== 1 ? "ies" : ""}
+                      {loggedProducts.length} log entr{loggedProducts.length === 1 ? "y" : "ies"}
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
@@ -3043,6 +3198,10 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                     {litresNum === 0 && totalPacks === 0 ? (
                       <Badge variant="outline" className="bg-slate-50 text-slate-400">
                         No Usage Logged
+                      </Badge>
+                    ) : designatedArea === 0 ? (
+                      <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/20 dark:text-sky-400">
+                        Logged on Site
                       </Badge>
                     ) : isExceeding ? (
                       <Badge
@@ -3090,29 +3249,29 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
       {/* Detailed Material Usage Dialog */}
       <Dialog open={Boolean(selectedPP)} onOpenChange={(open) => !open && setSelectedPP(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 border-slate-200 dark:border-zinc-800">
-          {selectedPP && selectedMetrics && (
+          {activePP && selectedMetrics && (
             <>
               <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/80 dark:bg-zinc-900/80">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
                       <Package className="h-5 w-5 text-primary" />
-                      <span>{selectedPP.product?.name || "Product Material Logs"}</span>
+                      <span>{activePP.product?.name || "Product Material Logs"}</span>
                     </DialogTitle>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
-                      {selectedPP.product?.brand?.name && (
+                      {activePP.product?.brand?.name && (
                         <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Brand: {selectedPP.product.brand.name}
+                          Brand: {activePP.product.brand.name}
                         </Badge>
                       )}
-                      {selectedPP.product?.category && (
+                      {activePP.product?.category && (
                         <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Category: {selectedPP.product.category}
+                          Category: {activePP.product.category}
                         </Badge>
                       )}
-                      {selectedPP.product?.size && (
+                      {activePP.product?.size && (
                         <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Pack Size: {selectedPP.product.size}
+                          Pack Size: {activePP.product.size}
                         </Badge>
                       )}
                       {selectedMetrics.unitPrice > 0 && (
@@ -3139,7 +3298,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   <form onSubmit={handleAddMaterialLog} className="mt-4 p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
                     <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                       <Plus className="h-3.5 w-3.5 text-primary" />
-                      Add Usage Log Entry for {selectedPP.product?.name}
+                      Add Usage Log Entry for {activePP.product?.name}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -3186,7 +3345,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Designated Area</span>
                     <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
-                      {fmt(selectedPP.area)} {selectedPP.unit}
+                      {activePP.area > 0 ? `${fmt(activePP.area)} ${activePP.unit}` : "Unspecified"}
                     </span>
                   </div>
 
@@ -3201,7 +3360,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950 shadow-2xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Est. Coverage Achieved</span>
                     <span className="text-base font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
-                      {fmt(selectedMetrics.actualCoverage)} {selectedPP.unit}
+                      {fmt(selectedMetrics.actualCoverage)} {activePP.unit}
                     </span>
                   </div>
 
@@ -3222,9 +3381,13 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 block mt-1">
                           No Usage Logged
                         </span>
+                      ) : activePP.area === 0 ? (
+                        <span className="text-xs font-bold text-sky-600 dark:text-sky-400 block mt-1">
+                          Logged on Site
+                        </span>
                       ) : selectedMetrics.isExceeding ? (
                         <span className="text-xs font-bold text-rose-600 dark:text-rose-400 block mt-1">
-                          Exceeding by {fmt(selectedMetrics.diff)} {selectedPP.unit}
+                          Exceeding by {fmt(selectedMetrics.diff)} {activePP.unit}
                         </span>
                       ) : (
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block mt-1">
@@ -3247,7 +3410,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   {matchedLogs.length === 0 ? (
                     <div className="py-12 text-center text-xs text-muted-foreground italic border border-dashed rounded-xl p-6 flex flex-col items-center gap-2">
                       <Package className="h-8 w-8 text-slate-300 dark:text-zinc-700" />
-                      <span>No material logs recorded for {selectedPP.product?.name} yet.</span>
+                      <span>No material logs recorded for {activePP.product?.name} yet.</span>
                       <Button size="sm" variant="outline" onClick={() => setIsAddingLog(true)} className="mt-1 font-bold text-xs">
                         + Add First Log Entry
                       </Button>
@@ -3284,7 +3447,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                                   {fmt(entryLitres)} L
                                 </TableCell>
                                 <TableCell className="font-semibold text-xs">
-                                  +{fmt(entryCoverage)} {selectedPP.unit}
+                                  +{fmt(entryCoverage)} {activePP.unit}
                                 </TableCell>
                                 <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
                                   {entryCost > 0 ? `₹${fmt(entryCost)}` : "—"}
@@ -3307,7 +3470,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                         <TableFooter className="bg-slate-50/90 dark:bg-zinc-900/90 border-t border-slate-200 dark:border-zinc-800">
                           <TableRow className="hover:bg-transparent">
                             <TableCell colSpan={4} className="font-extrabold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 py-3">
-                              Total Cost for {selectedPP.product?.name || "Material"}
+                              Total Cost for {activePP.product?.name || "Material"}
                             </TableCell>
                             <TableCell className="text-right font-mono font-extrabold text-xs text-emerald-600 dark:text-emerald-400 py-3">
                               ₹{fmt(selectedMetrics.totalCost)}
@@ -3332,6 +3495,21 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
 /* ── TAB CONTENT: MEASUREMENTS Read Only ────────────────── */
 /* ──────────────────────────────────────────────────────── */
 function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
+  const consolidatedMeasurements = useMemo(() => {
+    const map = new Map<string, any>();
+    (projectProducts || []).forEach((pp) => {
+      const pId = pp.productId || pp.product?.id;
+      if (!pId) return;
+      if (map.has(pId)) {
+        const existing = map.get(pId);
+        existing.area = Number((Number(existing.area || 0) + Number(pp.area || 0)).toFixed(2));
+      } else {
+        map.set(pId, { ...pp, area: Number(pp.area || 0) });
+      }
+    });
+    return Array.from(map.values());
+  }, [projectProducts]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -3348,17 +3526,25 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {projectProducts.map((pp) => (
-              <TableRow key={pp.id}>
-                <TableCell className="font-semibold">{pp.product?.name}</TableCell>
-                <TableCell className="capitalize text-sm font-medium text-muted-foreground">
-                  {pp.product?.category || "—"}
-                </TableCell>
-                <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
-                  {fmt(pp.area)} {pp.unit}
+            {consolidatedMeasurements.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center py-6 text-xs text-muted-foreground italic">
+                  No product measurements allocated yet.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              consolidatedMeasurements.map((pp) => (
+                <TableRow key={pp.id || pp.productId}>
+                  <TableCell className="font-semibold">{pp.product?.name || "Product"}</TableCell>
+                  <TableCell className="capitalize text-sm font-medium text-muted-foreground">
+                    {pp.product?.category || "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
+                    {fmt(pp.area)} {pp.unit}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </Card>
