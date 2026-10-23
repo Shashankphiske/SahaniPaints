@@ -97,7 +97,7 @@ const CSV_SCHEMAS: Record<string, CSVResourceSchema> = {
   },
   products: {
     headers: ["name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
-    required: ["name", "brand", "category", "price"],
+    required: ["name", "brand", "price"],
     numericFields: ["price", "coverageSqFt", "coverageRnFt"],
     booleanFields: ["hasToken"],
     downloadHeaders: ["id", "name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken", "createdAt"],

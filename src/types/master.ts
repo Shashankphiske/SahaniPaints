@@ -176,7 +176,7 @@ export interface Product {
   id: string;
   name: string;
   brandId: string;
-  category: string;
+  category?: string | null;
   price: number | any;
   coverageSqFt?: number | any;
   coverageRnFt?: number | any;

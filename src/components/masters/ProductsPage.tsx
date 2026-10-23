@@ -27,7 +27,7 @@ const formatDate = (dateStr: any) => {
 const columns: ColumnDef<Product>[] = [
   { key: "name", header: "Name" },
   { key: "brand", header: "Brand", render: (p) => p.brand?.name ?? "—" },
-  { key: "category", header: "Category" },
+  { key: "category", header: "Category", render: (p) => p.category || "—" },
   {
     key: "price",
     header: "Price",
@@ -47,10 +47,12 @@ const columns: ColumnDef<Product>[] = [
         const sq = Number(p.coverageSqFt);
         if (!isNaN(sq)) parts.push(`${sq} sq.ft`);
       }
+      /* Coverage in rn.ft commented out - see Paints/SPEC_COVERAGE_RNFT.md to restore
       if (p.coverageRnFt !== undefined && p.coverageRnFt !== null && p.coverageRnFt !== "") {
         const rn = Number(p.coverageRnFt);
         if (!isNaN(rn)) parts.push(`${rn} rn.ft`);
       }
+      */
       return parts.length > 0 ? parts.join(" / ") : "—";
     },
   },

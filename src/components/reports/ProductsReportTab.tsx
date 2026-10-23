@@ -84,10 +84,10 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {categoryBreakdown.map((c: any) => (
-              <div key={c.category} className="p-3 rounded-lg border border-border/60 bg-muted/20 flex items-center justify-between">
+              <div key={c.category || "Uncategorized"} className="p-3 rounded-lg border border-border/60 bg-muted/20 flex items-center justify-between">
                 <div>
                   <Badge variant="outline" className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-700 border-purple-500/20">
-                    {c.category}
+                    {c.category || "Uncategorized"}
                   </Badge>
                   <p className="text-xs text-muted-foreground mt-1">Master catalogued items</p>
                 </div>
@@ -132,7 +132,7 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
                     <td className="px-3.5 py-2.5 text-muted-foreground">{p.type}</td>
                     <td className="px-3.5 py-2.5">
                       <Badge variant="outline" className="text-[9px] uppercase font-bold px-1.5 py-0.5 bg-muted text-muted-foreground">
-                        {p.category}
+                        {p.category || "Uncategorized"}
                       </Badge>
                     </td>
                     <td className="px-3.5 py-2.5 text-center font-semibold text-foreground">{p.count}</td>
