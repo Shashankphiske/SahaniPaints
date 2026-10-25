@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Search, Filter, X, Loader2, ChevronDown, Upload, Download, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { apiRequest } from "../../lib/api";
 import { useToast } from "../../hooks/use-toast";
 
@@ -973,6 +973,7 @@ export function MasterPageLayout({
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Import Data: {title}</DialogTitle>
+            <DialogDescription className="sr-only">Upload and import CSV data records</DialogDescription>
           </DialogHeader>
 
           <div className="py-4">

@@ -1,15 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
 import type { Labour, LabourAttendance, LabourPayment, Project } from "../../types/master";
-import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Wrench } from "lucide-react";
+import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Wrench, Pencil } from "lucide-react";
 import { MasterForm } from "./MasterForm";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { apiRequest } from "../../lib/api";
 import { toast } from "../../hooks/use-toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Pencil } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 
 const StatCard = ({ title, value, icon: Icon, className = "" }: { title: string; value: string | number; icon: any; className?: string }) => (
   <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-5 rounded-2xl shadow-sm flex items-center justify-between">
@@ -513,6 +512,7 @@ export default function LabourDashboard({
                 <DialogTitle>
                   {editingPayment ? "Edit Labour Payout" : "Log New Payout"}
                 </DialogTitle>
+                <DialogDescription className="sr-only">Labour payout form</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleAddPayment} className="space-y-4 pt-2">
                 <div className="space-y-1">

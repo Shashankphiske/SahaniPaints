@@ -15,7 +15,7 @@ import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { toast } from "../hooks/use-toast";
 import { SearchableSelect } from "../components/ui/SearchableSelect";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { MasterForm } from "../components/masters/MasterForm";
 import {
   Loader2,
@@ -1341,6 +1341,7 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add New Customer</DialogTitle>
+            <DialogDescription className="sr-only">Add a new customer to the database</DialogDescription>
           </DialogHeader>
           <MasterForm
             resource="customers"
@@ -2022,6 +2023,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add New Customer</DialogTitle>
+            <DialogDescription className="sr-only">Add a new customer to the database</DialogDescription>
           </DialogHeader>
           <MasterForm
             resource="customers"
@@ -3056,6 +3058,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               <ClipboardList className="h-5 w-5 text-primary" />
               Log Material Usage
             </DialogTitle>
+            <DialogDescription className="sr-only">Record material usage on project site</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleLogMaterialSubmit} className="space-y-4 pt-2 overflow-visible">
@@ -3346,63 +3349,64 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
       {/* Detailed Material Usage Dialog */}
       <Dialog open={Boolean(selectedPP)} onOpenChange={(open) => !open && setSelectedPP(null)}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 border-slate-200 dark:border-zinc-800">
-          {activePP && selectedMetrics && (
-            <>
-              <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/80 dark:bg-zinc-900/80">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100 flex-wrap">
-                      <Package className="h-5 w-5 text-primary" />
-                      <span>{activePP.product?.name || "Product Material Logs"}</span>
-                      {!activePP.isAllocated && (
-                        <Badge className="text-[10px] py-0.5 px-2 font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white shadow-2xs flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Not in Selected Products
-                        </Badge>
-                      )}
-                    </DialogTitle>
-                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
-                      {activePP.product?.brand?.name && (
-                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Brand: {activePP.product.brand.name}
-                        </Badge>
-                      )}
-                      {activePP.product?.category && (
-                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Category: {activePP.product.category}
-                        </Badge>
-                      )}
-                      {activePP.product?.size && (
-                        <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
-                          Pack Size: {activePP.product.size}
-                        </Badge>
-                      )}
-                      {selectedMetrics.unitPrice > 0 && (
-                        <Badge variant="outline" className="text-[10px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200">
-                          Unit Price: ₹{fmt(selectedMetrics.unitPrice)}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Button
-                    size="sm"
-                    variant={isAddingLog ? "outline" : "default"}
-                    onClick={() => setIsAddingLog((prev) => !prev)}
-                    className="font-bold shrink-0 h-9 gap-1.5"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>{isAddingLog ? "Cancel Logging" : "Log Material"}</span>
-                  </Button>
+          <DialogHeader className="p-4 sm:p-5 border-b bg-slate-50/80 dark:bg-zinc-900/80">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100 flex-wrap">
+                  <Package className="h-5 w-5 text-primary" />
+                  <span>{activePP?.product?.name || "Product Material Logs"}</span>
+                  {activePP && !activePP.isAllocated && (
+                    <Badge className="text-[10px] py-0.5 px-2 font-bold uppercase bg-amber-500 hover:bg-amber-600 text-white shadow-2xs flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Not in Selected Products
+                    </Badge>
+                  )}
+                </DialogTitle>
+                <DialogDescription className="sr-only">Detailed breakdown of material usage</DialogDescription>
+                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
+                  {activePP?.product?.brand?.name && (
+                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                      Brand: {activePP.product.brand.name}
+                    </Badge>
+                  )}
+                  {activePP?.product?.category && (
+                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                      Category: {activePP.product.category}
+                    </Badge>
+                  )}
+                  {activePP?.product?.size && (
+                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
+                      Pack Size: {activePP.product.size}
+                    </Badge>
+                  )}
+                  {selectedMetrics && selectedMetrics.unitPrice > 0 && (
+                    <Badge variant="outline" className="text-[10px] bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200">
+                      Unit Price: ₹{fmt(selectedMetrics.unitPrice)}
+                    </Badge>
+                  )}
                 </div>
+              </div>
 
-                {/* Inline Add Material Log Form */}
-                {isAddingLog && (
-                  <form onSubmit={handleAddMaterialLog} className="mt-4 p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <Plus className="h-3.5 w-3.5 text-primary" />
-                      Add Usage Log Entry for {activePP.product?.name}
-                    </div>
+              {activePP && selectedMetrics && (
+                <Button
+                  size="sm"
+                  variant={isAddingLog ? "outline" : "default"}
+                  onClick={() => setIsAddingLog((prev) => !prev)}
+                  className="font-bold shrink-0 h-9 gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{isAddingLog ? "Cancel Logging" : "Log Material"}</span>
+                </Button>
+              )}
+            </div>
+
+            {/* Inline Add Material Log Form */}
+            {isAddingLog && activePP && (
+              <form onSubmit={handleAddMaterialLog} className="mt-4 p-3.5 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 space-y-3">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5 text-primary" />
+                  Add Usage Log Entry for {activePP.product?.name}
+                </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="space-y-1">
@@ -3442,8 +3446,14 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               </DialogHeader>
 
               {/* Modal Body with KPI Cards & Logs Table */}
-              <div className="p-4 sm:p-5 overflow-y-auto max-h-[60vh] space-y-5">
-                {!activePP.isAllocated && (
+              {!activePP || !selectedMetrics ? (
+                <div className="p-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span>Loading material details...</span>
+                </div>
+              ) : (
+                <div className="p-4 sm:p-5 overflow-y-auto max-h-[60vh] space-y-5">
+                  {!activePP.isAllocated && (
                   <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-2xs">
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <div>
@@ -3595,7 +3605,6 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   )}
                 </div>
               </div>
-            </>
           )}
         </DialogContent>
       </Dialog>
@@ -4032,6 +4041,7 @@ function CustomerPaymentsTab({ fullProject, setFullProject, updateAllCaches }: C
               <DollarSign className="h-5 w-5 text-primary" />
               Record New Payment
             </DialogTitle>
+            <DialogDescription className="sr-only">Record a new payment for the project</DialogDescription>
           </DialogHeader>
           
           <form onSubmit={handleRecordPayment} className="space-y-4 pt-2">
@@ -4936,6 +4946,7 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
               <ClipboardList className="h-5 w-5 text-primary" />
               Log Contractor Work Done
             </DialogTitle>
+            <DialogDescription className="sr-only">Log work done by contractor</DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 pt-2 overflow-visible">
@@ -5428,6 +5439,7 @@ function AreaStatusTab({ projectId }: AreaStatusTabProps) {
             <DialogTitle className="text-base font-extrabold tracking-tight">
               {editingMappingId ? "Edit Area Painting Scheme" : "Add Room Area & Color Scheme"}
             </DialogTitle>
+            <DialogDescription className="sr-only">Configure room area and color mapping</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-3 overflow-visible">
