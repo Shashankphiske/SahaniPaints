@@ -52,7 +52,7 @@ const CSV_RESOURCE_FIELDS: Record<string, string[]> = {
   brands: ["name", "description"],
   customers: ["name", "phonenumber", "alternatePhonenumber", "email", "address"],
   users: ["role", "username", "email", "password", "phonenumber", "address"],
-  products: ["name", "brandId", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
+  products: ["name", "brandId", "brand", /* "category", */ "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
   interiors: ["name", "email", "phonenumber", "alternatePhonenumber", "address", "commissionFeePercentage"],
   areas: ["name"],
   labours: ["name", "paymentPerDay", "tuesdayPaymentAmount", "type", "phonenumber"],
@@ -96,15 +96,15 @@ const CSV_SCHEMAS: Record<string, CSVResourceSchema> = {
     },
   },
   products: {
-    headers: ["name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
+    headers: ["name", "brand", /* "category", */ "price", "size", "coverageSqFt", "coverageRnFt", "hasToken"],
     required: ["name", "brand", "price"],
     numericFields: ["price", "coverageSqFt", "coverageRnFt"],
     booleanFields: ["hasToken"],
-    downloadHeaders: ["id", "name", "brand", "category", "price", "size", "coverageSqFt", "coverageRnFt", "hasToken", "createdAt"],
+    downloadHeaders: ["id", "name", "brand", /* "category", */ "price", "size", "coverageSqFt", "coverageRnFt", "hasToken", "createdAt"],
     sampleRow: {
       name: "Royale Luxury Emulsion",
       brand: "Asian Paints",
-      category: "Interior",
+      // category: "Interior", // Disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
       price: "1850",
       size: "1ltr",
       coverageSqFt: "140",
@@ -242,11 +242,13 @@ const HEADER_CANONICAL_ALIASES: Record<string, string> = {
   pass: "password",
   address: "address",
   location: "address",
-  category: "category",
-  cat: "category",
+  // category: "category", // Category disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
+  // cat: "category",
   size: "size",
   packsize: "size",
   price: "price",
+  priceperpack: "price",
+  packprice: "price",
   rate: "price",
   cost: "price",
   unitprice: "price",
@@ -622,7 +624,7 @@ export function MasterPageLayout({
               cleanedPayload.price = parseCleanNumber(rowObj.price);
             }
             cleanedPayload.size = rowObj.size?.trim() || "1ltr";
-            cleanedPayload.category = rowObj.category?.trim() || "Emulsion";
+            // cleanedPayload.category = rowObj.category?.trim() || "Emulsion"; // Category disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
             cleanedPayload.hasToken = ["true", "yes", "1", "y"].includes((rowObj.hasToken || "").trim().toLowerCase());
             if (rowObj.coverageSqFt !== undefined && rowObj.coverageSqFt !== "") {
               cleanedPayload.coverageSqFt = parseCleanNumber(rowObj.coverageSqFt);

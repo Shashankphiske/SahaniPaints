@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import { apiRequest } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
@@ -56,15 +57,26 @@ export default function ContractorPaymentsPage() {
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
   const { data: laboursRaw } = useMasterData<Labour>("labours");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const projectsList = useMemo(() => (Array.isArray(projectsRaw) ? projectsRaw : []), [projectsRaw]);
   const contractorsList = useMemo(() => (Array.isArray(contractorsRaw) ? contractorsRaw : []), [contractorsRaw]);
   const laboursList = useMemo(() => (Array.isArray(laboursRaw) ? laboursRaw : []), [laboursRaw]);
 
-  // Combined ledger state
-  const [contractorPayments, setContractorPayments] = useState<ContractorPayment[]>([]);
-  const [labourPayments, setLabourPayments] = useState<LabourPayment[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Combined ledger state cached in React Query
+  const { data: contractorPayments = [], isLoading: loadingContractors } = useQuery<ContractorPayment[]>({
+    queryKey: ["contractor-payments"],
+    queryFn: () => apiRequest.fetchAll<ContractorPayment>("contractor-payments"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: labourPayments = [], isLoading: loadingLabours } = useQuery<LabourPayment[]>({
+    queryKey: ["labour-payments"],
+    queryFn: () => apiRequest.fetchAll<LabourPayment>("labour-payments"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const loading = loadingContractors || loadingLabours;
 
   // Dialog & Edit state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,40 +101,20 @@ export default function ContractorPaymentsPage() {
   const [filterProjectDisplay, setFilterProjectDisplay] = useState("");
   const [filterMode, setFilterMode] = useState("");
 
-  const fetchAllCrewPayments = async () => {
-    setLoading(true);
-    try {
-      const [cLogs, lLogs] = await Promise.all([
-        apiRequest.fetchAll<ContractorPayment>("contractor-payments"),
-        apiRequest.fetchAll<LabourPayment>("labour-payments"),
-      ]);
-      setContractorPayments(Array.isArray(cLogs) ? cLogs : []);
-      setLabourPayments(Array.isArray(lLogs) ? lLogs : []);
-    } catch (err: any) {
-      toast({
-        title: "Fetch Error",
-        description: err.message || "Failed to load crew payments.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchAllCrewPayments();
-
     const channel1 = supabase
       .channel("db-contractor-payments-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "contractor_payments" }, () => {
-        fetchAllCrewPayments();
+        queryClient.invalidateQueries({ queryKey: ["contractor-payments"] });
+        queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
       })
       .subscribe();
 
     const channel2 = supabase
       .channel("db-labour-payments-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "labour_payments" }, () => {
-        fetchAllCrewPayments();
+        queryClient.invalidateQueries({ queryKey: ["labour-payments"] });
+        queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
       })
       .subscribe();
 
@@ -130,50 +122,54 @@ export default function ContractorPaymentsPage() {
       supabase.removeChannel(channel1);
       supabase.removeChannel(channel2);
     };
-  }, []);
+  }, [queryClient]);
 
   // Merge contractor and labour payments into single unified list
   const combinedPayments = useMemo<CombinedCrewPayment[]>(() => {
     const cList: CombinedCrewPayment[] = contractorPayments.map((cp) => {
       const matchedContractor = contractorsList.find((c) => c.id === cp.contractorId);
+      const matchedProject = projectsList.find((p) => p.id === cp.projectId);
       return {
         id: cp.id,
         payeeType: "CONTRACTOR",
         payeeId: cp.contractorId,
         payeeName: matchedContractor ? matchedContractor.name : cp.contractor?.name || "Contractor",
         projectId: cp.projectId,
-        projectName: cp.project?.name,
-        amount: Number(cp.amount),
+        projectName: cp.project?.name || matchedProject?.name || undefined,
+        amount: Number(cp.amount) || 0,
         paymentMode: cp.paymentMode || "CASH",
-        paymentDate: cp.paymentDate,
+        paymentDate: cp.paymentDate || cp.createdAt || "",
         remarks: cp.remarks,
-        createdAt: cp.createdAt,
+        createdAt: cp.createdAt || "",
         raw: cp,
       };
     });
 
     const lList: CombinedCrewPayment[] = labourPayments.map((lp) => {
       const matchedLabour = laboursList.find((l) => l.id === lp.labourId);
+      const matchedProject = projectsList.find((p) => p.id === lp.projectId);
       return {
         id: lp.id,
         payeeType: "LABOUR",
         payeeId: lp.labourId,
         payeeName: matchedLabour ? matchedLabour.name : lp.labour?.name || "Worker",
         projectId: lp.projectId,
-        projectName: lp.project?.name,
-        amount: Number(lp.amount),
+        projectName: lp.project?.name || matchedProject?.name || undefined,
+        amount: Number(lp.amount) || 0,
         paymentMode: lp.paymentMode || "CASH",
-        paymentDate: lp.paymentDate,
+        paymentDate: lp.paymentDate || lp.createdAt || "",
         remarks: lp.remarks,
-        createdAt: lp.createdAt,
+        createdAt: lp.createdAt || "",
         raw: lp,
       };
     });
 
-    return [...cList, ...lList].sort(
-      (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
-    );
-  }, [contractorPayments, labourPayments, contractorsList, laboursList]);
+    return [...cList, ...lList].sort((a, b) => {
+      const timeB = new Date(b.paymentDate || b.createdAt || 0).getTime();
+      const timeA = new Date(a.paymentDate || a.createdAt || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+  }, [contractorPayments, labourPayments, contractorsList, laboursList, projectsList]);
 
   const openCreateModal = () => {
     setEditingItem(null);
@@ -234,13 +230,40 @@ export default function ContractorPaymentsPage() {
           remarks: remarks.trim() || null,
         };
 
+        const matchedContractor = contractorsList.find((c) => c.id === payeeId);
+        const matchedProject = projectsList.find((p) => p.id === projectId);
+
         if (editingItem) {
           const updated = await apiRequest.update<ContractorPayment>("contractor-payments", editingItem.id, payload);
-          setContractorPayments((prev) => prev.map((item) => (item.id === editingItem.id ? { ...item, ...updated } : item)));
+          const completeUpdated: ContractorPayment = {
+            ...(editingItem.raw as ContractorPayment),
+            ...payload,
+            ...(updated || {}),
+            id: editingItem.id,
+            contractor: matchedContractor ? { name: matchedContractor.name } : { name: payeeDisplay || editingItem.payeeName },
+            project: matchedProject ? { name: matchedProject.name } : (projectId ? { name: projectDisplay } : undefined),
+          } as ContractorPayment;
+
+          queryClient.setQueryData<ContractorPayment[]>(["contractor-payments"], (prev = []) =>
+            prev.map((item) => (item.id === editingItem.id ? completeUpdated : item))
+          );
+          queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
           toast({ title: "Payout Updated", description: "Contractor payment record updated successfully." });
         } else {
           const created = await apiRequest.create<ContractorPayment>("contractor-payments", payload);
-          setContractorPayments((prev) => [created, ...prev]);
+          const completeRecord: ContractorPayment = {
+            ...payload,
+            id: created.id,
+            createdAt: created.createdAt || new Date().toISOString(),
+            contractor: matchedContractor ? { name: matchedContractor.name } : { name: payeeDisplay || "Contractor" },
+            project: matchedProject ? { name: matchedProject.name } : (projectId ? { name: projectDisplay } : undefined),
+          } as ContractorPayment;
+
+          queryClient.setQueryData<ContractorPayment[]>(["contractor-payments"], (prev = []) => [
+            completeRecord,
+            ...prev.filter((p) => p.id !== created.id),
+          ]);
+          queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
           toast({ title: "Payout Recorded", description: `Recorded contractor payout of ₹${fmt(numericAmount)}.` });
         }
       } else {
@@ -254,13 +277,40 @@ export default function ContractorPaymentsPage() {
           remarks: remarks.trim() || null,
         };
 
+        const matchedLabour = laboursList.find((l) => l.id === payeeId);
+        const matchedProject = projectsList.find((p) => p.id === projectId);
+
         if (editingItem) {
           const updated = await apiRequest.update<LabourPayment>("labour-payments", editingItem.id, payload);
-          setLabourPayments((prev) => prev.map((item) => (item.id === editingItem.id ? { ...item, ...updated } : item)));
+          const completeUpdated: LabourPayment = {
+            ...(editingItem.raw as LabourPayment),
+            ...payload,
+            ...(updated || {}),
+            id: editingItem.id,
+            labour: matchedLabour ? { name: matchedLabour.name } : { name: payeeDisplay || editingItem.payeeName },
+            project: matchedProject ? { name: matchedProject.name } : (projectId ? { name: projectDisplay } : undefined),
+          } as LabourPayment;
+
+          queryClient.setQueryData<LabourPayment[]>(["labour-payments"], (prev = []) =>
+            prev.map((item) => (item.id === editingItem.id ? completeUpdated : item))
+          );
+          queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
           toast({ title: "Payout Updated", description: "Labour wage payout record updated successfully." });
         } else {
           const created = await apiRequest.create<LabourPayment>("labour-payments", payload);
-          setLabourPayments((prev) => [created, ...prev]);
+          const completeRecord: LabourPayment = {
+            ...payload,
+            id: created.id,
+            createdAt: created.createdAt || new Date().toISOString(),
+            labour: matchedLabour ? { name: matchedLabour.name } : { name: payeeDisplay || "Worker" },
+            project: matchedProject ? { name: matchedProject.name } : (projectId ? { name: projectDisplay } : undefined),
+          } as LabourPayment;
+
+          queryClient.setQueryData<LabourPayment[]>(["labour-payments"], (prev = []) => [
+            completeRecord,
+            ...prev.filter((p) => p.id !== created.id),
+          ]);
+          queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
           toast({ title: "Payout Recorded", description: `Recorded labour wage payout of ₹${fmt(numericAmount)}.` });
         }
       }
@@ -279,10 +329,16 @@ export default function ContractorPaymentsPage() {
     try {
       if (payment.payeeType === "CONTRACTOR") {
         await apiRequest.delete("contractor-payments", payment.id);
-        setContractorPayments((prev) => prev.filter((item) => item.id !== payment.id));
+        queryClient.setQueryData<ContractorPayment[]>(["contractor-payments"], (prev = []) =>
+          prev.filter((item) => item.id !== payment.id)
+        );
+        queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
       } else {
         await apiRequest.delete("labour-payments", payment.id);
-        setLabourPayments((prev) => prev.filter((item) => item.id !== payment.id));
+        queryClient.setQueryData<LabourPayment[]>(["labour-payments"], (prev = []) =>
+          prev.filter((item) => item.id !== payment.id)
+        );
+        queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
       }
       toast({ title: "Payout Deleted", description: "Payment record deleted successfully." });
     } catch (err: any) {
@@ -320,7 +376,10 @@ export default function ContractorPaymentsPage() {
     return (
       <LabourDashboard
         labour={selectedLabour}
-        onBack={() => setSelectedLabour(null)}
+        onBack={() => {
+          setSelectedLabour(null);
+          queryClient.invalidateQueries({ queryKey: ["labour-payments"] });
+        }}
         handleSave={async (formData) => {
           await apiRequest.update("labours", selectedLabour.id, formData);
           setSelectedLabour((prev) => (prev ? { ...prev, ...formData } : null));
@@ -334,7 +393,10 @@ export default function ContractorPaymentsPage() {
     return (
       <ContractorDashboard
         contractor={selectedContractor}
-        onBack={() => setSelectedContractor(null)}
+        onBack={() => {
+          setSelectedContractor(null);
+          queryClient.invalidateQueries({ queryKey: ["contractor-payments"] });
+        }}
         handleSave={async (formData) => {
           await apiRequest.update("contractors", selectedContractor.id, formData);
           setSelectedContractor((prev) => (prev ? { ...prev, ...formData } : null));
@@ -691,6 +753,7 @@ export default function ContractorPaymentsPage() {
                   variant={payeeType === "CONTRACTOR" ? "default" : "outline"}
                   size="sm"
                   className="font-bold text-xs"
+                  disabled={!!editingItem}
                   onClick={() => {
                     setPayeeType("CONTRACTOR");
                     setPayeeId("");
@@ -704,6 +767,7 @@ export default function ContractorPaymentsPage() {
                   variant={payeeType === "LABOUR" ? "default" : "outline"}
                   size="sm"
                   className="font-bold text-xs"
+                  disabled={!!editingItem}
                   onClick={() => {
                     setPayeeType("LABOUR");
                     setPayeeId("");

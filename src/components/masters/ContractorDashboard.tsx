@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import type { Contractor, ContractorPayment, Project } from "../../types/master";
 import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Briefcase } from "lucide-react";
@@ -36,6 +37,7 @@ export default function ContractorDashboard({
   onBack: () => void;
   handleSave: (data: any) => void;
 }) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"overview" | "payments" | "work-logs" | "edit">("overview");
 
   // Fetch all payments logged for this contractor
@@ -207,6 +209,8 @@ export default function ContractorDashboard({
       setIsPaymentModalOpen(false);
       setEditingPayment(null);
       fetchPayments();
+      queryClient.invalidateQueries({ queryKey: ["contractor-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
     } catch (err: any) {
       toast({
         title: "Failed to record payment",
@@ -227,6 +231,8 @@ export default function ContractorDashboard({
           description: "Contractor ledger updated successfully."
         });
         fetchPayments();
+        queryClient.invalidateQueries({ queryKey: ["contractor-payments"] });
+        queryClient.invalidateQueries({ queryKey: ["contractor-payments_infinite"] });
       } catch (err: any) {
         toast({
           title: "Delete failed",

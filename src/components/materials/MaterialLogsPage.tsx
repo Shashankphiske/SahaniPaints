@@ -91,9 +91,17 @@ export default function MaterialLogsPage() {
   const [tempSelectedMaterials, setTempSelectedMaterials] = useState<QueuedMaterial[]>([]);
   const [submittingLogs, setSubmittingLogs] = useState(false);
 
-  // Product searchable dropdown states for adding materials
-  const [productSelectId, setProductSelectId] = useState("");
+  // Product searchable dropdown & variation selection states for adding materials
+  const [selectedProductName, setSelectedProductName] = useState("");
   const [productSelectDisplay, setProductSelectDisplay] = useState("");
+  const [selectedVariationId, setSelectedVariationId] = useState("");
+
+  const availableVariations = useMemo(() => {
+    if (!selectedProductName) return [];
+    return allProducts.filter(
+      (p) => p.name?.toLowerCase().trim() === selectedProductName.toLowerCase().trim()
+    );
+  }, [allProducts, selectedProductName]);
 
   // Search fields
   const [siteSearch, setSiteSearch] = useState("");
@@ -123,46 +131,61 @@ export default function MaterialLogsPage() {
     }
   };
 
-  // Products available in the dropdown (site-allocated products appear first with a tag, followed by entire catalog)
+  // Products available in the dropdown (unique product names, site-allocated products appear first)
   const productOptions = useMemo(() => {
     const query = productSelectDisplay.toLowerCase().trim();
 
-    // Set of product IDs allocated to the selected project
-    const allocatedProductIds = new Set(
+    // Group all products by name
+    const grouped = new Map<string, { product: Product; sizes: string[]; isAllocated: boolean }>();
+
+    // Set of product names allocated to the selected project
+    const allocatedProductNames = new Set(
       (fullSelectedProject?.projectProducts || [])
-        .map((pp: any) => pp?.product?.id || pp?.productId)
+        .map((pp: any) => pp?.product?.name?.toLowerCase().trim())
         .filter(Boolean)
     );
 
-    // Filter products by search query
-    const matched = allProducts.filter((p) => {
+    allProducts.forEach((p) => {
+      const nameKey = (p.name || "").trim().toLowerCase();
+      if (!nameKey) return;
+      if (!grouped.has(nameKey)) {
+        grouped.set(nameKey, {
+          product: p,
+          sizes: [p.size || "1ltr"],
+          isAllocated: allocatedProductNames.has(nameKey),
+        });
+      } else {
+        const item = grouped.get(nameKey)!;
+        if (p.size && !item.sizes.includes(p.size)) {
+          item.sizes.push(p.size);
+        }
+        if (allocatedProductNames.has(nameKey)) {
+          item.isAllocated = true;
+        }
+      }
+    });
+
+    const list = Array.from(grouped.values()).filter(({ product: p, sizes }) => {
       if (!query) return true;
       return (
         p.name?.toLowerCase().includes(query) ||
-        p.category?.toLowerCase().includes(query) ||
         p.brand?.name?.toLowerCase().includes(query) ||
-        p.size?.toLowerCase().includes(query)
+        sizes.some((s) => s.toLowerCase().includes(query))
       );
     });
 
-    // Sort matched: project allocated products first, then others alphabetically
-    const sorted = [...matched].sort((a, b) => {
-      const aInProject = allocatedProductIds.has(a.id) ? 1 : 0;
-      const bInProject = allocatedProductIds.has(b.id) ? 1 : 0;
-      if (aInProject !== bInProject) {
-        return bInProject - aInProject; // allocated first
-      }
-      return (a.name || "").localeCompare(b.name || "");
+    list.sort((a, b) => {
+      if (a.isAllocated !== b.isAllocated) return b.isAllocated ? 1 : -1;
+      return a.product.name.localeCompare(b.product.name);
     });
 
-    return sorted.slice(0, 30).map((p) => {
-      const isAllocated = allocatedProductIds.has(p.id);
+    return list.slice(0, 30).map(({ product: p, sizes, isAllocated }) => {
       const badge = isAllocated ? " (Project)" : "";
-      const priceVal = Number(p.price || 0);
-      const priceStr = priceVal > 0 ? ` • ₹${priceVal.toLocaleString("en-IN")}` : "";
+      const brandStr = p.brand?.name ? ` [${p.brand.name}]` : "";
+      const sizesStr = sizes.length > 1 ? ` • ${sizes.length} pack sizes` : ` • ${sizes[0] || "1ltr"}`;
       return {
-        id: p.id,
-        label: `${p.name}${badge}${priceStr}`,
+        id: p.name,
+        label: `${p.name}${brandStr}${badge}${sizesStr}`,
       };
     });
   }, [allProducts, productSelectDisplay, fullSelectedProject]);
@@ -247,18 +270,8 @@ export default function MaterialLogsPage() {
 
     toast({
       title: "Added to Log",
-      description: `${product.name} staged for logging.`,
+      description: `${product.name} (${product.size || "1ltr"}) staged for logging.`,
     });
-  };
-
-  const handleSelectProductFromDropdown = (id: string, label: string) => {
-    if (!id) return;
-    const match = allProducts.find((p) => p.id === id);
-    if (match) {
-      handleQueueProduct(match);
-      setProductSelectId("");
-      setProductSelectDisplay("");
-    }
   };
 
   const handleRemoveFromQueue = (queueId: string) => {
@@ -509,7 +522,8 @@ export default function MaterialLogsPage() {
                 onClick={() => {
                   setIsAddMode(false);
                   setTempSelectedMaterials([]);
-                  setProductSelectId("");
+                  setSelectedProductName("");
+                  setSelectedVariationId("");
                   setProductSelectDisplay("");
                 }}
                 className="h-9 px-3 gap-1.5 font-semibold text-xs rounded-xl"
@@ -600,7 +614,8 @@ export default function MaterialLogsPage() {
                       setProjectSelectDisplay("");
                       setFullSelectedProject(null);
                       setTempSelectedMaterials([]);
-                      setProductSelectId("");
+                      setSelectedProductName("");
+                      setSelectedVariationId("");
                       setProductSelectDisplay("");
                     }}
                     inputHeight="h-10"
@@ -609,7 +624,7 @@ export default function MaterialLogsPage() {
                 </div>
               </div>
 
-              {/* Step 2: Product / Material Searchable Dropdown */}
+              {/* Step 2: Product / Material Searchable Dropdown & Pack Size */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
                 <label className="text-xs font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
@@ -618,39 +633,69 @@ export default function MaterialLogsPage() {
                   </span>
                   {selectedProject && (
                     <span className="text-[11px] text-muted-foreground font-normal">
-                      (Site materials & all catalog products available)
+                      (Search product, then select pack size)
                     </span>
                   )}
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
                   <div className="flex-1">
                     <SearchableSelect
-                      value={productSelectId}
+                      value={selectedProductName}
                       displayValue={productSelectDisplay}
                       options={productOptions}
                       placeholder={
                         !selectedProject
                           ? "Select a project site first..."
-                          : "Search product from catalog by name, brand, or category..."
+                          : "Search product from catalog by name or brand..."
                       }
                       disabled={!selectedProject}
                       onSearchChange={setProductSelectDisplay}
-                      onSelect={(id, label) => {
-                        handleSelectProductFromDropdown(id, label);
+                      onSelect={(productName) => {
+                        setSelectedProductName(productName);
+                        setProductSelectDisplay(productName);
+                        const variations = allProducts.filter(
+                          (p) => p.name?.toLowerCase().trim() === productName.toLowerCase().trim()
+                        );
+                        setSelectedVariationId(variations[0]?.id || "");
                       }}
                       onClear={() => {
-                        setProductSelectId("");
+                        setSelectedProductName("");
+                        setSelectedVariationId("");
                         setProductSelectDisplay("");
                       }}
                       inputHeight="h-10"
                       textSize="text-sm font-medium"
                     />
                   </div>
+
+                  {selectedProductName && availableVariations.length > 0 && (
+                    <div className="w-full sm:w-64">
+                      <select
+                        value={selectedVariationId}
+                        onChange={(e) => setSelectedVariationId(e.target.value)}
+                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {availableVariations.map((v) => {
+                          const litres = getProductSizeInLitres(v.size);
+                          const perLitre = litres > 0 ? Number(v.price) / litres : Number(v.price);
+                          return (
+                            <option key={v.id} value={v.id}>
+                              {v.size || "1ltr"} — ₹{Number(v.price).toLocaleString("en-IN")} (₹{perLitre.toFixed(2)}/L)
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
                   <Button
                     type="button"
-                    disabled={!selectedProject || !productSelectId}
+                    disabled={!selectedProject || !selectedVariationId}
                     onClick={() => {
-                      handleSelectProductFromDropdown(productSelectId, productSelectDisplay);
+                      const selectedProd = allProducts.find((p) => p.id === selectedVariationId);
+                      if (selectedProd) {
+                        handleQueueProduct(selectedProd);
+                      }
                     }}
                     className="h-10 px-4 font-bold flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm"
                   >
@@ -712,15 +757,23 @@ export default function MaterialLogsPage() {
                                       ({p.brand.name})
                                     </span>
                                   )}
+                                  {p.size && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
+                                      {p.size}
+                                    </span>
+                                  )}
                                   {Number(p.price || 0) > 0 && (
                                     <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-1.5 py-0.5 rounded">
-                                      ₹{Number(p.price).toLocaleString("en-IN")} / unit
+                                      ₹{Number(p.price).toLocaleString("en-IN")} / pack
                                     </span>
                                   )}
                                 </div>
                                 {Number(p.price || 0) > 0 && Number(quantity) > 0 && (
                                   <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                                     Total: <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{(Number(quantity) * Number(p.price)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="text-[10px] text-muted-foreground ml-2">
+                                      ({(Number(quantity) * getProductSizeInLitres(p.size)).toFixed(2)} L)
+                                    </span>
                                   </p>
                                 )}
                               </div>
@@ -832,7 +885,8 @@ export default function MaterialLogsPage() {
                         onClick={() => {
                           setTempSelectedMaterials([]);
                           setIsAddMode(false);
-                          setProductSelectId("");
+                          setSelectedProductName("");
+                          setSelectedVariationId("");
                           setProductSelectDisplay("");
                         }}
                         className="sm:w-auto text-xs text-muted-foreground h-10 px-4"
@@ -1052,10 +1106,9 @@ export default function MaterialLogsPage() {
                     ) : (
                       groupedLogs.map((g) => {
                         const totalAmount = g.records.reduce((sum, r) => {
-                          return (
-                            sum +
-                            Number(r.quantity || 0) * Number(r.product?.price || 0)
-                          );
+                          const prod = r.product || allProducts.find((p) => p.id === r.productId);
+                          const price = Number(prod?.price || 0);
+                          return sum + (Number(r.quantity || 0) * price);
                         }, 0);
                         return (
                           <tr
@@ -1150,12 +1203,17 @@ export default function MaterialLogsPage() {
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
                 {activeDetailRecords.length} Items Logged
               </Badge>
-              {activeDetailRecords.reduce((sum, r) => sum + Number(r.quantity || 0) * Number(r.product?.price || 0), 0) > 0 && (
+              {activeDetailRecords.reduce((sum, r) => {
+                const prod = r.product || allProducts.find((p) => p.id === r.productId);
+                return sum + Number(r.quantity || 0) * Number(prod?.price || 0);
+              }, 0) > 0 && (
                 <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
                   Total Value: ₹{activeDetailRecords
                     .reduce(
-                      (sum, r) =>
-                        sum + Number(r.quantity || 0) * Number(r.product?.price || 0),
+                      (sum, r) => {
+                        const prod = r.product || allProducts.find((p) => p.id === r.productId);
+                        return sum + Number(r.quantity || 0) * Number(prod?.price || 0);
+                      },
                       0
                     )
                     .toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1263,12 +1321,18 @@ export default function MaterialLogsPage() {
                       </thead>
                       <tbody>
                         {filteredDetailRecords.map((r) => {
-                          const unitPrice = Number(r.product?.price || 0);
+                          const prod = r.product || allProducts.find((p) => p.id === r.productId);
+                          const unitPrice = Number(prod?.price || 0);
                           const totalPrice = Number(r.quantity || 0) * unitPrice;
                           return (
                             <tr key={r.id} className="border-b transition-colors hover:bg-muted/30">
                               <td className="p-4 align-middle font-bold text-slate-800 dark:text-slate-200">
-                                {r.product?.name}
+                                <span>{prod?.name || "Product"}</span>
+                                {prod?.size && (
+                                  <span className="ml-2 text-xs font-semibold text-muted-foreground font-mono">
+                                    ({prod.size})
+                                  </span>
+                                )}
                               </td>
                               <td className="p-4 align-middle text-right font-mono text-slate-700 dark:text-slate-300">
                                 {unitPrice > 0 ? `₹${unitPrice.toLocaleString("en-IN")}` : "—"}

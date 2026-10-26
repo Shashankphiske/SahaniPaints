@@ -28,13 +28,13 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
   }
 
   const summary = data.summary || {};
-  const categoryBreakdown = data.categoryBreakdown || [];
+  // const categoryBreakdown = data.categoryBreakdown || []; // Disabled - see SPEC_PRODUCT_CATEGORY.md
   const topProducts = data.topProducts || [];
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Overview Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card className="border border-border/80 shadow-sm bg-card">
           <CardContent className="p-4 flex items-center gap-3.5">
             <div className="p-2.5 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
@@ -59,6 +59,7 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
           </CardContent>
         </Card>
 
+        {/* Product category card disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
         <Card className="border border-border/80 shadow-sm bg-card">
           <CardContent className="p-4 flex items-center gap-3.5">
             <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 shrink-0">
@@ -70,9 +71,10 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
             </div>
           </CardContent>
         </Card>
+        */}
       </div>
 
-      {/* Category Breakdown */}
+      {/* Product category breakdown disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
       <div className="border rounded-xl border-border/80 bg-card p-4 shadow-sm space-y-3">
         <h3 className="text-sm font-bold text-foreground tracking-tight flex items-center gap-2">
           <Layers className="h-4 w-4 text-primary" />
@@ -97,6 +99,7 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
           </div>
         )}
       </div>
+      */}
 
       {/* Top Deployed Products Table */}
       <div className="border rounded-xl border-border/80 bg-card p-4 shadow-sm space-y-3">
@@ -114,7 +117,7 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
               <tr>
                 <th className="px-3.5 py-2.5">Product Name</th>
                 <th className="px-3.5 py-2.5">Type</th>
-                <th className="px-3.5 py-2.5">Category</th>
+                {/* <th className="px-3.5 py-2.5">Category</th> // Disabled - see SPEC_PRODUCT_CATEGORY.md */}
                 <th className="px-3.5 py-2.5 text-center">Projects Used</th>
                 <th className="px-3.5 py-2.5 text-center">Total Quantity</th>
                 <th className="px-3.5 py-2.5 text-right">Value Contribution</th>
@@ -123,18 +126,20 @@ export function ProductsReportTab({ filter }: { filter?: ReportFilter }) {
             <tbody className="divide-y divide-border/40">
               {topProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-6 text-muted-foreground">No product usage data found.</td>
+                  <td colSpan={5} className="text-center py-6 text-muted-foreground">No product usage data found.</td>
                 </tr>
               ) : (
                 topProducts.map((p: any, idx: number) => (
                   <tr key={idx} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3.5 py-2.5 font-semibold text-foreground">{p.name}</td>
                     <td className="px-3.5 py-2.5 text-muted-foreground">{p.type}</td>
+                    {/* Category cell disabled - see SPEC_PRODUCT_CATEGORY.md
                     <td className="px-3.5 py-2.5">
                       <Badge variant="outline" className="text-[9px] uppercase font-bold px-1.5 py-0.5 bg-muted text-muted-foreground">
                         {p.category || "Uncategorized"}
                       </Badge>
                     </td>
+                    */}
                     <td className="px-3.5 py-2.5 text-center font-semibold text-foreground">{p.count}</td>
                     <td className="px-3.5 py-2.5 text-center font-semibold text-foreground">{p.totalQty}</td>
                     <td className="px-3.5 py-2.5 text-right font-bold text-teal-600 dark:text-teal-400">₹{fmt(p.totalValue)}</td>

@@ -12,7 +12,23 @@ interface MasterFormProps {
   onCancel: () => void;
 }
 
-const CATEGORIES = ["Emulsion", "Enamel", "Exterior", "Interior", "Putty", "Primer"];
+// Product categories disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
+// const CATEGORIES = ["Emulsion", "Enamel", "Exterior", "Interior", "Putty", "Primer"];
+
+const getProductSizeInLitres = (sizeStr?: string): number => {
+  if (!sizeStr) return 1;
+  const normalized = sizeStr.toLowerCase().trim();
+  if (normalized.endsWith("ml")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val / 1000;
+  }
+  if (normalized.endsWith("ltr") || normalized.endsWith("l") || normalized.endsWith("lt")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val;
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 1 : val;
+};
 const PRIORITIES = [
   { value: "LOW", label: "Low" },
   { value: "MODERATE", label: "Moderate" },
@@ -39,7 +55,7 @@ const RESOURCE_FIELDS: Record<string, string[]> = {
   users: ["username", "email", "password", "phonenumber", "role", "address"],
   tasks: ["title", "projectId", "priority", "status", "taskDate", "description"],
   inquiries: ["projectName", "customerName", "phonenumber", "followUpDate", "comments"],
-  products: ["name", "brandId", "category", "price", "coverageSqFt", "coverageRnFt", "hasToken", "size"],
+  products: ["name", "brandId", /* "category", */ "price", "coverageSqFt", "coverageRnFt", "hasToken", "size"],
   colors: ["name", "shade"],
   labours: ["name", "paymentPerDay", "tuesdayPaymentAmount", "phonenumber", "type"],
   areas: ["name"],
@@ -120,10 +136,11 @@ export function MasterForm({
   const brandRef = useRef<HTMLDivElement>(null);
   useClickOutside(brandRef, () => setBrandOpen(false));
 
-  const [categorySearch, setCategorySearch] = useState("");
-  const [categoryOpen, setCategoryOpen] = useState(false);
-  const categoryRef = useRef<HTMLDivElement>(null);
-  useClickOutside(categoryRef, () => setCategoryOpen(false));
+  // Product category dropdown state disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
+  // const [categorySearch, setCategorySearch] = useState("");
+  // const [categoryOpen, setCategoryOpen] = useState(false);
+  // const categoryRef = useRef<HTMLDivElement>(null);
+  // useClickOutside(categoryRef, () => setCategoryOpen(false));
 
   const [projectSearch, setProjectSearch] = useState("");
   const [projectOpen, setProjectOpen] = useState(false);
@@ -194,7 +211,7 @@ export function MasterForm({
       // Initialize search query labels for existing records
       if (resource === "products") {
         setBrandSearch(initialData.brand?.name || "");
-        setCategorySearch(initialData.category || "");
+        // setCategorySearch(initialData.category || ""); // Disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
       } else if (resource === "tasks") {
         setProjectSearch(initialData.project?.name || "");
         const currentPriority = formattedData.priority || "MODERATE";
@@ -243,7 +260,7 @@ export function MasterForm({
         setRoleSearch("");
       }
       setBrandSearch("");
-      setCategorySearch("");
+      // setCategorySearch(""); // Disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
     }
     setErrors({});
   }, [initialData, resource]);
@@ -335,7 +352,7 @@ export function MasterForm({
       if (!formData.name?.trim()) newErrors.name = "Product name is required";
       if (!formData.brandId) newErrors.brandId = "Brand is required";
       if (formData.price === undefined || formData.price === null || formData.price === "" || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
-        newErrors.price = "Valid price per litre is required";
+        newErrors.price = "Valid price per pack is required";
       }
       if (formData.coverageSqFt !== undefined && formData.coverageSqFt !== null && formData.coverageSqFt !== "") {
         if (isNaN(Number(formData.coverageSqFt)) || Number(formData.coverageSqFt) < 0) {
@@ -392,9 +409,11 @@ export function MasterForm({
     }
 
     if (resource === "products") {
-      if (payload.category !== undefined && typeof payload.category === "string") {
-        payload.category = payload.category.trim() || null;
-      }
+      // Product category disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
+      // if (payload.category !== undefined && typeof payload.category === "string") {
+      //   payload.category = payload.category.trim() || null;
+      // }
+      delete payload.category;
       if (payload.brandId) {
         const selectedBrand = brandsList.find(b => b.id === payload.brandId);
         if (selectedBrand) {
@@ -965,6 +984,7 @@ export function MasterForm({
                 {errors.brandId && <p className="text-xs text-destructive font-semibold">{errors.brandId}</p>}
               </div>
 
+              {/* Product category field disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
               <div ref={categoryRef} className="space-y-1 relative">
                 <label className="text-sm font-semibold text-slate-500">Category</label>
                 <Input
@@ -998,20 +1018,26 @@ export function MasterForm({
                 )}
                 {errors.category && <p className="text-xs text-destructive font-semibold">{errors.category}</p>}
               </div>
+              */}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-sm font-semibold text-slate-500">Price (₹ per litre) <span className="text-red-500 font-bold ml-0.5">*</span></label>
+                <label className="text-sm font-semibold text-slate-500">Price (₹ per pack) <span className="text-red-500 font-bold ml-0.5">*</span></label>
                 <Input
                   type="number"
                   step="0.01"
                   name="price"
                   value={formData.price || ""}
                   onChange={handleChange}
-                  placeholder="Enter price per litre"
+                  placeholder="Enter price per pack"
                 />
                 {errors.price && <p className="text-xs text-destructive font-semibold">{errors.price}</p>}
+                {Number(formData.price || 0) > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Per Litre: <span className="font-semibold text-foreground">₹{(Number(formData.price) / getProductSizeInLitres(formData.size || "1ltr")).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L</span>
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1">

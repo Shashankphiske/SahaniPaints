@@ -146,24 +146,70 @@ export default function WastageMaterialLogsPage() {
     const siteProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
 
     if (siteProducts.length > 0) {
-      const siteFiltered = siteProducts
-        .filter((p: any) => !q || p.name.toLowerCase().includes(q))
-        .map((p: any) => ({ id: p.id, label: `${p.name} (Site Product)` }));
+      const siteMap = new Map<string, any[]>();
+      for (const p of siteProducts) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (!siteMap.has(key)) siteMap.set(key, []);
+        siteMap.get(key)!.push(p);
+      }
+      const siteFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of siteMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (Site Product • ${count} sizes)` 
+            : `${list[0].name} (Site Product)`;
+          siteFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      const siteIds = new Set(siteProducts.map((p: any) => p.id));
-      const catalogFiltered = allProducts
-        .filter((p) => !siteIds.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
-        .slice(0, 15)
-        .map((p) => ({ id: p.id, label: p.name }));
+      const siteKeys = new Set(siteMap.keys());
+      const catMap = new Map<string, any[]>();
+      for (const p of allProducts) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (siteKeys.has(key)) continue;
+        if (!catMap.has(key)) catMap.set(key, []);
+        catMap.get(key)!.push(p);
+      }
+      const catalogFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of catMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (${count} sizes)` 
+            : list[0].name;
+          catalogFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      return [...siteFiltered, ...catalogFiltered];
+      return [...siteFiltered, ...catalogFiltered.slice(0, 15)];
     }
 
-    return allProducts
-      .filter((p) => !q || p.name.toLowerCase().includes(q))
-      .slice(0, 20)
-      .map((p) => ({ id: p.id, label: p.name }));
+    const catMap = new Map<string, any[]>();
+    for (const p of allProducts) {
+      const key = (p.name || "").toLowerCase().trim();
+      if (!catMap.has(key)) catMap.set(key, []);
+      catMap.get(key)!.push(p);
+    }
+    const catalogFiltered: { id: string; label: string }[] = [];
+    for (const [key, list] of catMap.entries()) {
+      if (!q || key.includes(q)) {
+        const count = list.length;
+        const label = count > 1 
+          ? `${list[0].name} (${count} sizes)` 
+          : list[0].name;
+        catalogFiltered.push({ id: list[0].id, label });
+      }
+    }
+
+    return catalogFiltered.slice(0, 20);
   }, [allProducts, fullSelectedProject, productFilter]);
+
+  const availablePackSizes = useMemo(() => {
+    const clean = (materialName || "").toLowerCase().trim();
+    if (!clean) return [];
+    return allProducts.filter((p) => (p.name || "").toLowerCase().trim() === clean);
+  }, [allProducts, materialName]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -402,14 +448,24 @@ export default function WastageMaterialLogsPage() {
                       setSelectedProductId("");
                     }}
                     onSelect={(id, label) => {
-                      const cleanName = label.replace(/\s*\(Site Product\)$/, "");
-                      setSelectedProductId(id);
+                      const cleanName = label
+                        .replace(/\s*\(Site Product.*?\)$/, "")
+                        .replace(/\s*\(.*?sizes?\)$/, "")
+                        .trim();
+                      const variations = allProducts.filter(
+                        (p) => (p.name || "").toLowerCase().trim() === cleanName.toLowerCase()
+                      );
+                      const defaultSize = variations.length === 1 ? variations[0].size : "";
+                      const finalId = variations.length === 1 ? variations[0].id : id;
+                      setSelectedProductId(finalId);
                       setMaterialName(cleanName);
+                      if (defaultSize) setShade(defaultSize);
                       setProductFilter("");
                     }}
                     onClear={() => {
                       setSelectedProductId("");
                       setMaterialName("");
+                      setShade("");
                       setProductFilter("");
                     }}
                     onEnter={(val) => setMaterialName(val)}
@@ -435,13 +491,34 @@ export default function WastageMaterialLogsPage() {
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                       Size * <span className="text-rose-500 font-bold">(Compulsory)</span>
                     </label>
-                    <Input
-                      placeholder="e.g. 20 Ltr / 4 Ltr / 1 Ltr"
-                      value={shade}
-                      onChange={(e) => setShade(e.target.value)}
-                      className="h-10 text-sm font-semibold font-mono"
-                      required
-                    />
+                    {availablePackSizes.length > 0 ? (
+                      <select
+                        value={shade}
+                        onChange={(e) => {
+                          const chosenSize = e.target.value;
+                          setShade(chosenSize);
+                          const matched = availablePackSizes.find((p) => p.size === chosenSize);
+                          if (matched) setSelectedProductId(matched.id);
+                        }}
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-semibold font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        required
+                      >
+                        <option value="">Select size</option>
+                        {availablePackSizes.map((p) => (
+                          <option key={p.id} value={p.size}>
+                            {p.size} {p.price ? `(₹${Number(p.price).toLocaleString("en-IN")}/pack)` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        placeholder="e.g. 20 Ltr / 4 Ltr / 1 Ltr"
+                        value={shade}
+                        onChange={(e) => setShade(e.target.value)}
+                        className="h-10 text-sm font-semibold font-mono"
+                        required
+                      />
+                    )}
                   </div>
                 </div>
 

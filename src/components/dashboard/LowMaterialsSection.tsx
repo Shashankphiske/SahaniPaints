@@ -109,23 +109,63 @@ export function LowMaterialsSection() {
     const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
 
     if (projectProducts.length > 0) {
-      const projFiltered = projectProducts
-        .filter((p: any) => !q || p.name.toLowerCase().includes(q))
-        .map((p: any) => ({ id: p.id, label: `${p.name} (Project)` }));
+      const projMap = new Map<string, any[]>();
+      for (const p of projectProducts) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (!projMap.has(key)) projMap.set(key, []);
+        projMap.get(key)!.push(p);
+      }
+      const projFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of projMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (Project • ${count} sizes)` 
+            : `${list[0].name} (Project)`;
+          projFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      const projIds = new Set(projectProducts.map((p: any) => p.id));
-      const catalogFiltered = productsList
-        .filter((p) => !projIds.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
-        .slice(0, 15)
-        .map((p) => ({ id: p.id, label: p.name }));
+      const projKeys = new Set(projMap.keys());
+      const catMap = new Map<string, any[]>();
+      for (const p of productsList) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (projKeys.has(key)) continue;
+        if (!catMap.has(key)) catMap.set(key, []);
+        catMap.get(key)!.push(p);
+      }
+      const catalogFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of catMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (${count} sizes)` 
+            : list[0].name;
+          catalogFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      return [...projFiltered, ...catalogFiltered];
+      return [...projFiltered, ...catalogFiltered.slice(0, 15)];
     }
 
-    return productsList
-      .filter((p) => !q || p.name.toLowerCase().includes(q))
-      .slice(0, 15)
-      .map((p) => ({ id: p.id, label: p.name }));
+    const catMap = new Map<string, any[]>();
+    for (const p of productsList) {
+      const key = (p.name || "").toLowerCase().trim();
+      if (!catMap.has(key)) catMap.set(key, []);
+      catMap.get(key)!.push(p);
+    }
+    const catalogFiltered: { id: string; label: string }[] = [];
+    for (const [key, list] of catMap.entries()) {
+      if (!q || key.includes(q)) {
+        const count = list.length;
+        const label = count > 1 
+          ? `${list[0].name} (${count} sizes)` 
+          : list[0].name;
+        catalogFiltered.push({ id: list[0].id, label });
+      }
+    }
+
+    return catalogFiltered.slice(0, 15);
   };
 
   // Actions for item rows
@@ -526,7 +566,10 @@ export function LowMaterialsSection() {
                             });
                           }}
                           onSelect={(id, label) => {
-                            const cleanName = label.replace(/\s*\(Project\)$/, "");
+                            const cleanName = label
+                              .replace(/\s*\(Project.*?\)$/, "")
+                              .replace(/\s*\(.*?sizes?\)$/, "")
+                              .trim();
                             updateItemRow(item.id, {
                               selectedProductId: id,
                               materialName: cleanName,

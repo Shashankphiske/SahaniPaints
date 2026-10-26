@@ -176,7 +176,7 @@ export interface Product {
   id: string;
   name: string;
   brandId: string;
-  category?: string | null;
+  // category?: string | null; // Disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
   price: number | any;
   coverageSqFt?: number | any;
   coverageRnFt?: number | any;

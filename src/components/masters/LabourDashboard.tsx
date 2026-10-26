@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
 import type { Labour, LabourAttendance, LabourPayment, Project } from "../../types/master";
 import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Wrench, Pencil } from "lucide-react";
@@ -35,6 +36,7 @@ export default function LabourDashboard({
   initialTab?: "overview" | "attendance" | "payments" | "edit";
   initialSite?: string;
 }) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "payments" | "edit">(initialTab);
   const [selectedSite, setSelectedSite] = useState<string>("ALL");
 
@@ -172,6 +174,8 @@ export default function LabourDashboard({
       setPaymentType("OUTGOING");
       setIsPaymentModalOpen(false);
       setEditingPayment(null);
+      queryClient.invalidateQueries({ queryKey: ["labour-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
     } catch (err: any) {
       toast({
         title: "Failed to record payment",
@@ -186,6 +190,8 @@ export default function LabourDashboard({
   const handleDeletePayment = (paymentId: string, amount: number) => {
     if (window.confirm(`Are you sure you want to remove this payment entry of ${formatPrice(amount)}?`)) {
       removePayment(paymentId);
+      queryClient.invalidateQueries({ queryKey: ["labour-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["labour-payments_infinite"] });
       toast({
         title: "Payment entry removed",
         description: "The payment has been deleted successfully.",

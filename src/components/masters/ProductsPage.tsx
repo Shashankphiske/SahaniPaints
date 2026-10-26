@@ -24,14 +24,42 @@ const formatDate = (dateStr: any) => {
   }
 };
 
+const getProductSizeInLitres = (sizeStr?: string): number => {
+  if (!sizeStr) return 1;
+  const normalized = sizeStr.toLowerCase().trim();
+  if (normalized.endsWith("ml")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val / 1000;
+  }
+  if (normalized.endsWith("ltr") || normalized.endsWith("l") || normalized.endsWith("lt")) {
+    const val = parseFloat(normalized);
+    return isNaN(val) ? 1 : val;
+  }
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 1 : val;
+};
+
 const columns: ColumnDef<Product>[] = [
   { key: "name", header: "Name" },
   { key: "brand", header: "Brand", render: (p) => p.brand?.name ?? "—" },
-  { key: "category", header: "Category", render: (p) => p.category || "—" },
+  // Category column disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
+  // { key: "category", header: "Category", render: (p) => p.category || "—" },
   {
     key: "price",
-    header: "Price",
-    render: (p) => `₹${Number(p.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    header: "Price / Pack",
+    render: (p) => {
+      const packPrice = Number(p.price || 0);
+      const litres = getProductSizeInLitres(p.size);
+      const perLitre = litres > 0 ? packPrice / litres : packPrice;
+      return (
+        <div>
+          <span className="font-semibold">₹{packPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span className="text-[11px] text-muted-foreground block">
+            ₹{perLitre.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / L
+          </span>
+        </div>
+      );
+    },
   },
   {
     key: "size",
@@ -99,8 +127,8 @@ export default function ProductsPage() {
     return items.filter(
       (p) =>
         p.name?.toLowerCase().includes(term) ||
-        p.brand?.name?.toLowerCase().includes(term) ||
-        p.category?.toLowerCase().includes(term)
+        p.brand?.name?.toLowerCase().includes(term)
+        // || p.category?.toLowerCase().includes(term)
     );
   }, [items, search]);
 
@@ -110,8 +138,8 @@ export default function ProductsPage() {
       const t = term.toLowerCase();
       return (
         p.name?.toLowerCase().includes(t) ||
-        p.brand?.name?.toLowerCase().includes(t) ||
-        p.category?.toLowerCase().includes(t)
+        p.brand?.name?.toLowerCase().includes(t)
+        // || p.category?.toLowerCase().includes(t)
       );
     });
     triggerSearch(term, localHits);
@@ -141,7 +169,7 @@ export default function ProductsPage() {
       <MasterPageLayout
         title="Products"
         resource="products"
-        searchPlaceholder="Search products by name, brand or category..."
+        searchPlaceholder="Search products by name or brand..."
         onSearch={handleSearch}
         onSearchSubmit={handleSearchSubmit}
         onAdd={() => setIsModalOpen(true)}

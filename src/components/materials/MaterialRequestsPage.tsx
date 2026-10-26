@@ -172,23 +172,63 @@ export default function MaterialRequestsPage() {
     const projectProducts = fullSelectedProject?.projectProducts?.map((pp: any) => pp.product).filter(Boolean) || [];
 
     if (projectProducts.length > 0) {
-      const projFiltered = projectProducts
-        .filter((p: any) => !q || p.name.toLowerCase().includes(q))
-        .map((p: any) => ({ id: p.id, label: `${p.name} (Project)` }));
+      const projMap = new Map<string, any[]>();
+      for (const p of projectProducts) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (!projMap.has(key)) projMap.set(key, []);
+        projMap.get(key)!.push(p);
+      }
+      const projFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of projMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (Project • ${count} sizes)` 
+            : `${list[0].name} (Project)`;
+          projFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      const projIds = new Set(projectProducts.map((p: any) => p.id));
-      const catalogFiltered = productsList
-        .filter((p) => !projIds.has(p.id) && (!q || p.name.toLowerCase().includes(q)))
-        .slice(0, 15)
-        .map((p) => ({ id: p.id, label: p.name }));
+      const projKeys = new Set(projMap.keys());
+      const catMap = new Map<string, any[]>();
+      for (const p of productsList) {
+        const key = (p.name || "").toLowerCase().trim();
+        if (projKeys.has(key)) continue;
+        if (!catMap.has(key)) catMap.set(key, []);
+        catMap.get(key)!.push(p);
+      }
+      const catalogFiltered: { id: string; label: string }[] = [];
+      for (const [key, list] of catMap.entries()) {
+        if (!q || key.includes(q)) {
+          const count = list.length;
+          const label = count > 1 
+            ? `${list[0].name} (${count} sizes)` 
+            : list[0].name;
+          catalogFiltered.push({ id: list[0].id, label });
+        }
+      }
 
-      return [...projFiltered, ...catalogFiltered];
+      return [...projFiltered, ...catalogFiltered.slice(0, 15)];
     }
 
-    return productsList
-      .filter((p) => !q || p.name.toLowerCase().includes(q))
-      .slice(0, 15)
-      .map((p) => ({ id: p.id, label: p.name }));
+    const catMap = new Map<string, any[]>();
+    for (const p of productsList) {
+      const key = (p.name || "").toLowerCase().trim();
+      if (!catMap.has(key)) catMap.set(key, []);
+      catMap.get(key)!.push(p);
+    }
+    const catalogFiltered: { id: string; label: string }[] = [];
+    for (const [key, list] of catMap.entries()) {
+      if (!q || key.includes(q)) {
+        const count = list.length;
+        const label = count > 1 
+          ? `${list[0].name} (${count} sizes)` 
+          : list[0].name;
+        catalogFiltered.push({ id: list[0].id, label });
+      }
+    }
+
+    return catalogFiltered.slice(0, 15);
   };
 
   // Actions for item rows
@@ -460,7 +500,13 @@ export default function MaterialRequestsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {items.map((item, index) => (
+                  {items.map((item, index) => {
+                    const cleanItemName = (item.materialName || "").toLowerCase().trim();
+                    const availableSizes = cleanItemName
+                      ? productsList.filter((p) => (p.name || "").toLowerCase().trim() === cleanItemName)
+                      : [];
+
+                    return (
                     <div
                       key={item.id}
                       className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 space-y-2 relative shadow-2xs group"
@@ -503,10 +549,19 @@ export default function MaterialRequestsPage() {
                               });
                             }}
                             onSelect={(id, label) => {
-                              const cleanName = label.replace(/\s*\(Project\)$/, "");
+                              const cleanName = label
+                                .replace(/\s*\(Project.*?\)$/, "")
+                                .replace(/\s*\(.*?sizes?\)$/, "")
+                                .trim();
+                              const matchedVariations = productsList.filter(
+                                (p) => (p.name || "").toLowerCase().trim() === cleanName.toLowerCase()
+                              );
+                              const defaultSize = matchedVariations.length === 1 ? matchedVariations[0].size : "";
+                              const finalId = matchedVariations.length === 1 ? matchedVariations[0].id : id;
                               updateItemRow(item.id, {
-                                selectedProductId: id,
+                                selectedProductId: finalId,
                                 materialName: cleanName,
+                                shade: defaultSize || item.shade,
                                 productFilter: "",
                               });
                             }}
@@ -514,6 +569,7 @@ export default function MaterialRequestsPage() {
                               updateItemRow(item.id, {
                                 selectedProductId: "",
                                 materialName: "",
+                                shade: "",
                                 productFilter: "",
                               });
                             }}
@@ -540,13 +596,36 @@ export default function MaterialRequestsPage() {
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                             Size <span className="text-rose-500 font-bold">*</span>
                           </label>
-                          <Input
-                            placeholder="e.g. 20 Ltr"
-                            value={item.shade}
-                            onChange={(e) => updateItemRow(item.id, { shade: e.target.value })}
-                            className="h-10 text-sm font-semibold font-mono"
-                            required
-                          />
+                          {availableSizes.length > 0 ? (
+                            <select
+                              value={item.shade}
+                              onChange={(e) => {
+                                const chosenSize = e.target.value;
+                                const matched = availableSizes.find((p) => p.size === chosenSize);
+                                updateItemRow(item.id, {
+                                  shade: chosenSize,
+                                  selectedProductId: matched ? matched.id : item.selectedProductId,
+                                });
+                              }}
+                              className="h-10 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm font-semibold font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                              required
+                            >
+                              <option value="">Select size</option>
+                              {availableSizes.map((p) => (
+                                <option key={p.id} value={p.size}>
+                                  {p.size} {p.price ? `(₹${Number(p.price).toLocaleString("en-IN")}/pack)` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              placeholder="e.g. 20 Ltr"
+                              value={item.shade}
+                              onChange={(e) => updateItemRow(item.id, { shade: e.target.value })}
+                              className="h-10 text-sm font-semibold font-mono"
+                              required
+                            />
+                          )}
                         </div>
 
                         <div className="sm:col-span-3 space-y-1">
@@ -563,7 +642,8 @@ export default function MaterialRequestsPage() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

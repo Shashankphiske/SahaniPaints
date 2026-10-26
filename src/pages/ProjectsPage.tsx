@@ -873,6 +873,16 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
   const [agreedPrice, setAgreedPrice] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
 
+  const productOptionsMap = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    products.forEach((p) => {
+      const k = (p.name || "").toLowerCase().trim();
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(p);
+    });
+    return map;
+  }, [products]);
+
   const subtotal = useMemo(() => {
     return rows.reduce((sum, row) => sum + (Number(row.rate || 0) * Number(row.area || 0) || 0), 0);
   }, [rows]);
@@ -910,8 +920,10 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
       if (key === "productId" || key === "unit") {
         const prod = products.find((p) => p.id === row.productId);
         if (prod) {
+          const packSizeL = getProductSizeInLitres(prod.size);
+          const perLitrePrice = packSizeL > 0 ? Number(prod.price) / packSizeL : Number(prod.price);
           const coverage = row.unit === "sq.ft" ? Number(prod.coverageSqFt) : Number(prod.coverageRnFt);
-          row.rate = coverage && coverage > 0 ? parseFloat((Number(prod.price) / coverage).toFixed(2)) : 0;
+          row.rate = coverage && coverage > 0 ? parseFloat((perLitrePrice / coverage).toFixed(2)) : 0;
         } else {
           row.rate = 0;
         }
@@ -1113,51 +1125,83 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
                 {rows.map((row, idx) => (
                   <div key={idx} className="p-4 space-y-3">
                     <div className="flex items-start gap-2">
-                       <SearchableSelect
-                        value={row.productId}
-                        displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
-                        options={products
-                          .filter((p) => {
-                            const display = row._search !== undefined ? row._search : "";
-                            return !display || p.name.toLowerCase().includes(display.toLowerCase());
-                          })
-                          .slice(0, 10)
-                          .map((p) => ({ id: p.id, label: p.name }))}
-                        placeholder="Choose product"
-                        onSearchChange={(query) => handleRowChange(idx, "_search", query)}
-                        onSelect={(id, label) => {
-                          const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === id && r.unit === row.unit);
-                          if (otherIdx !== -1) {
-                            const currArea = Number(row.area || 0);
-                            const otherArea = Number(rows[otherIdx].area || 0);
-                            const mergedArea = Number((currArea + otherArea).toFixed(2));
-                            toast({
-                              title: "Material Merged",
-                              description: `"${label}" is already added. Merged into existing row (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
-                            });
-                            const copy = [...rows];
-                            copy[otherIdx] = {
-                              ...copy[otherIdx],
-                              area: mergedArea,
-                            };
-                            if (copy.length > 1) {
-                              copy.splice(idx, 1);
-                            } else {
-                              copy[idx] = createEmptyProductRow();
+                      <div className="flex-1 space-y-1">
+                        <SearchableSelect
+                          value={row.productId}
+                          displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
+                          options={(() => {
+                            const display = (row._search !== undefined ? row._search : "").toLowerCase().trim();
+                            const list: { id: string; label: string }[] = [];
+                            for (const [key, prods] of productOptionsMap.entries()) {
+                              if (!display || key.includes(display)) {
+                                const count = prods.length;
+                                const label = count > 1 ? `${prods[0].name} (${count} sizes)` : prods[0].name;
+                                list.push({ id: prods[0].id, label });
+                              }
                             }
-                            setRows(copy);
-                            return;
-                          }
-                          handleRowChange(idx, "productId", id);
-                          handleRowChange(idx, "_search", label);
-                        }}
-                        onClear={() => {
-                          handleRowChange(idx, "productId", "");
-                          handleRowChange(idx, "_search", "");
-                        }}
-                        onEnter={(val) => onSearchProducts?.(val)}
-                        className="flex-1"
-                      />
+                            return list.slice(0, 15);
+                          })()}
+                          placeholder="Choose product"
+                          onSearchChange={(query) => handleRowChange(idx, "_search", query)}
+                          onSelect={(id, label) => {
+                            const cleanName = label.replace(/\s*\(.*?sizes?\)$/, "").trim();
+                            const variations = productOptionsMap.get(cleanName.toLowerCase()) || [];
+                            const chosen = variations.length === 1 ? variations[0] : (products.find((p) => p.id === id) || variations[0]);
+                            const chosenId = chosen ? chosen.id : id;
+
+                            const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === chosenId && r.unit === row.unit);
+                            if (otherIdx !== -1) {
+                              const currArea = Number(row.area || 0);
+                              const otherArea = Number(rows[otherIdx].area || 0);
+                              const mergedArea = Number((currArea + otherArea).toFixed(2));
+                              toast({
+                                title: "Material Merged",
+                                description: `"${label}" is already added. Merged into existing row (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
+                              });
+                              const copy = [...rows];
+                              copy[otherIdx] = {
+                                ...copy[otherIdx],
+                                area: mergedArea,
+                              };
+                              if (copy.length > 1) {
+                                copy.splice(idx, 1);
+                              } else {
+                                copy[idx] = createEmptyProductRow();
+                              }
+                              setRows(copy);
+                              return;
+                            }
+                            handleRowChange(idx, "productId", chosenId);
+                            handleRowChange(idx, "_search", chosen ? chosen.name : cleanName);
+                          }}
+                          onClear={() => {
+                            handleRowChange(idx, "productId", "");
+                            handleRowChange(idx, "_search", "");
+                          }}
+                          onEnter={(val) => onSearchProducts?.(val)}
+                        />
+                        {(() => {
+                          const currentProd = products.find((p) => p.id === row.productId);
+                          const variations = currentProd ? (productOptionsMap.get((currentProd.name || "").toLowerCase().trim()) || []) : [];
+                          if (variations.length <= 1) return null;
+                          return (
+                            <div className="flex items-center gap-1.5 pt-1 text-xs">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pack:</span>
+                              <select
+                                value={row.productId}
+                                onChange={(e) => handleRowChange(idx, "productId", e.target.value)}
+                                className="h-7 rounded-md border border-input bg-background px-2 py-0.5 text-xs font-semibold text-foreground shadow-2xs focus:outline-none focus:ring-1 focus:ring-ring"
+                              >
+                                {variations.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.size} (₹{v.price}/pack)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
@@ -1731,7 +1775,7 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
         status,
         customerId,
         supervisorId,
-        interiorId,
+        interiorId: interiorId || null,
         interior: interiorId ? { id: interiorId, name: chosenInterior?.name || fullProject.interior?.name } : null
       } as any);
       toast({
@@ -1971,7 +2015,6 @@ function OverviewEditTab({ fullProject, setFullProject, updateAllCaches, custome
               displayValue={interiorDisplay}
               options={interiors
                 .filter((i) => !interiorDisplay || i.name.toLowerCase().includes(interiorDisplay.toLowerCase()))
-                .slice(0, 10)
                 .map((i) => ({ id: i.id, label: i.name }))}
               placeholder="Select interior designer (optional)"
               onSearchChange={setInteriorDisplay}
@@ -2166,7 +2209,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
             product: prod ? {
               id: prod.id,
               name: prod.name,
-              category: prod.category,
+              // category: prod.category, // Category disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
               price: prod.price,
               coverageSqFt: prod.coverageSqFt,
               coverageRnFt: prod.coverageRnFt,
@@ -2208,6 +2251,16 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
     }
   };
 
+  const productOptionsMap = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    products.forEach((p) => {
+      const k = (p.name || "").toLowerCase().trim();
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(p);
+    });
+    return map;
+  }, [products]);
+
   const handleRowChange = (index: number, key: keyof PaintProductRow, value: any) => {
     setRows((prev) => {
       const updated = [...prev];
@@ -2216,9 +2269,11 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
       if (key === "productId" || key === "unit") {
         const prod = products.find((p) => p.id === row.productId);
         if (prod) {
+          const packSizeL = getProductSizeInLitres(prod.size);
+          const perLitrePrice = packSizeL > 0 ? Number(prod.price) / packSizeL : Number(prod.price);
           const coverage = row.unit === "sq.ft" ? Number(prod.coverageSqFt) : Number(prod.coverageRnFt);
           if (coverage && coverage > 0) {
-            row.rate = Number((Number(prod.price) / coverage).toFixed(2));
+            row.rate = Number((perLitrePrice / coverage).toFixed(2));
           } else {
             row.rate = "";
           }
@@ -2288,7 +2343,7 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
           product: prod ? {
             id: prod.id,
             name: prod.name,
-            category: prod.category,
+            // category: prod.category, // Category disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
             price: prod.price,
             coverageSqFt: prod.coverageSqFt,
             coverageRnFt: prod.coverageRnFt,
@@ -2379,51 +2434,84 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                 {rows.map((row, idx) => (
                   <TableRow key={idx} className="overflow-visible">
                     <TableCell className="p-3 overflow-visible">
-                       <SearchableSelect
-                        value={row.productId}
-                        displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
-                        options={products
-                          .filter((p) => {
-                            const display = row._search !== undefined ? row._search : "";
-                            return !display || p.name.toLowerCase().includes(display.toLowerCase());
-                          })
-                          .slice(0, 10)
-                          .map((p) => ({ id: p.id, label: p.name }))}
-                        placeholder="Choose Product"
-                        onSearchChange={(query) => handleRowChange(idx, "_search", query)}
-                        onSelect={(id, label) => {
-                          const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === id && r.unit === row.unit);
-                          if (otherIdx !== -1) {
-                            const currArea = Number(row.area || 0);
-                            const otherArea = Number(rows[otherIdx].area || 0);
-                            const mergedArea = Number((currArea + otherArea).toFixed(2));
-                            toast({
-                              title: "Material Merged",
-                              description: `"${label}" is already in your selected products. Appended area (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
-                            });
-                            const copy = [...rows];
-                            copy[otherIdx] = {
-                              ...copy[otherIdx],
-                              area: mergedArea,
-                            };
-                            if (copy.length > 1) {
-                              copy.splice(idx, 1);
-                            } else {
-                              copy[idx] = createEmptyProductRow();
+                      <div className="space-y-1">
+                        <SearchableSelect
+                          value={row.productId}
+                          displayValue={row._search !== undefined ? row._search : (products.find((p) => p.id === row.productId)?.name || "")}
+                          options={(() => {
+                            const display = (row._search !== undefined ? row._search : "").toLowerCase().trim();
+                            const list: { id: string; label: string }[] = [];
+                            for (const [key, prods] of productOptionsMap.entries()) {
+                              if (!display || key.includes(display)) {
+                                const count = prods.length;
+                                const label = count > 1 ? `${prods[0].name} (${count} sizes)` : prods[0].name;
+                                list.push({ id: prods[0].id, label });
+                              }
                             }
-                            setRows(copy);
-                            setIsDirty(checkIfDirty(copy));
-                            return;
-                          }
-                          handleRowChange(idx, "productId", id);
-                          handleRowChange(idx, "_search", label);
-                        }}
-                        onClear={() => {
-                          handleRowChange(idx, "productId", "");
-                          handleRowChange(idx, "_search", "");
-                        }}
-                        onEnter={(val) => onSearchProducts?.(val)}
-                      />
+                            return list.slice(0, 15);
+                          })()}
+                          placeholder="Choose Product"
+                          onSearchChange={(query) => handleRowChange(idx, "_search", query)}
+                          onSelect={(id, label) => {
+                            const cleanName = label.replace(/\s*\(.*?sizes?\)$/, "").trim();
+                            const variations = productOptionsMap.get(cleanName.toLowerCase()) || [];
+                            const chosen = variations.length === 1 ? variations[0] : (products.find((p) => p.id === id) || variations[0]);
+                            const chosenId = chosen ? chosen.id : id;
+
+                            const otherIdx = rows.findIndex((r, i) => i !== idx && r.productId === chosenId && r.unit === row.unit);
+                            if (otherIdx !== -1) {
+                              const currArea = Number(row.area || 0);
+                              const otherArea = Number(rows[otherIdx].area || 0);
+                              const mergedArea = Number((currArea + otherArea).toFixed(2));
+                              toast({
+                                title: "Material Merged",
+                                description: `"${label}" is already in your selected products. Appended area (${otherArea > 0 ? `${otherArea} + ${currArea} = ${mergedArea} ${row.unit}` : `${currArea} ${row.unit}`}).`,
+                              });
+                              const copy = [...rows];
+                              copy[otherIdx] = {
+                                ...copy[otherIdx],
+                                area: mergedArea,
+                              };
+                              if (copy.length > 1) {
+                                copy.splice(idx, 1);
+                              } else {
+                                copy[idx] = createEmptyProductRow();
+                              }
+                              setRows(copy);
+                              setIsDirty(checkIfDirty(copy));
+                              return;
+                            }
+                            handleRowChange(idx, "productId", chosenId);
+                            handleRowChange(idx, "_search", chosen ? chosen.name : cleanName);
+                          }}
+                          onClear={() => {
+                            handleRowChange(idx, "productId", "");
+                            handleRowChange(idx, "_search", "");
+                          }}
+                          onEnter={(val) => onSearchProducts?.(val)}
+                        />
+                        {(() => {
+                          const currentProd = products.find((p) => p.id === row.productId);
+                          const variations = currentProd ? (productOptionsMap.get((currentProd.name || "").toLowerCase().trim()) || []) : [];
+                          if (variations.length <= 1) return null;
+                          return (
+                            <div className="flex items-center gap-1.5 pt-0.5 text-xs">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pack:</span>
+                              <select
+                                value={row.productId}
+                                onChange={(e) => handleRowChange(idx, "productId", e.target.value)}
+                                className="h-6 rounded border border-input bg-background px-1.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                              >
+                                {variations.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.size} (₹{v.price}/pack)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell className="p-3">
                       <Input
@@ -2797,26 +2885,46 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
       if (!q) return true;
       return (
         p.name?.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q) ||
         p.brand?.name?.toLowerCase().includes(q)
       );
     });
 
-    const sorted = [...matched].sort((a, b) => {
-      const aInProj = allocatedProductIds.has(a.id) ? 1 : 0;
-      const bInProj = allocatedProductIds.has(b.id) ? 1 : 0;
-      if (aInProj !== bInProj) return bInProj - aInProj;
-      return (a.name || "").localeCompare(b.name || "");
+    const grouped = new Map<string, Product[]>();
+    for (const p of matched) {
+      const key = (p.name || "").toLowerCase().trim();
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(p);
+    }
+
+    const list: { id: string; label: string; isAllocated: boolean; name: string }[] = [];
+    for (const [_, prods] of grouped.entries()) {
+      const isAllocated = prods.some((p) => allocatedProductIds.has(p.id));
+      const count = prods.length;
+      const countSuffix = count > 1 ? ` (${count} sizes)` : "";
+      const allocSuffix = isAllocated ? " (Project)" : "";
+      const brandSuffix = prods[0].brand?.name ? ` - ${prods[0].brand.name}` : "";
+      list.push({
+        id: prods[0].id,
+        label: `${prods[0].name}${allocSuffix}${countSuffix}${brandSuffix}`,
+        isAllocated,
+        name: prods[0].name,
+      });
+    }
+
+    list.sort((a, b) => {
+      if (a.isAllocated !== b.isAllocated) return a.isAllocated ? -1 : 1;
+      return a.name.localeCompare(b.name);
     });
 
-    return sorted.slice(0, 30).map((p) => {
-      const isAllocated = allocatedProductIds.has(p.id);
-      return {
-        id: p.id,
-        label: `${p.name}${isAllocated ? " (Project)" : ""}${p.brand?.name ? ` - ${p.brand.name}` : ""}`,
-      };
-    });
+    return list.slice(0, 30).map((item) => ({ id: item.id, label: item.label }));
   }, [allProducts, consolidatedMaterials, productSearchDisplay]);
+
+  const selectedProductVariations = useMemo(() => {
+    if (!matchedProduct) return [];
+    return allProducts.filter(
+      (p) => (p.name || "").toLowerCase().trim() === (matchedProduct.name || "").toLowerCase().trim()
+    );
+  }, [allProducts, matchedProduct]);
 
   const handleLogMaterialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3076,8 +3184,9 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                 placeholder="Search material from catalog or site..."
                 onSearchChange={setProductSearchDisplay}
                 onSelect={(id, label) => {
+                  const cleanLabel = label.replace(/\s*\(Project\)/, "").replace(/\s*\(.*?sizes?\)/, "").replace(/\s*-.*$/, "").trim();
                   setSelectedProductId(id);
-                  setProductSearchDisplay(label);
+                  setProductSearchDisplay(cleanLabel);
                 }}
                 onClear={() => {
                   setSelectedProductId("");
@@ -3087,17 +3196,36 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
             </div>
 
             {matchedProduct && (
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 text-xs flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100 block">{matchedProduct.name}</span>
-                  {matchedProduct.brand?.name && (
-                    <span className="text-[10px] text-muted-foreground font-medium">Brand: {matchedProduct.brand.name}</span>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 block">{matchedProduct.name}</span>
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      {matchedProduct.size ? `Size: ${matchedProduct.size}` : ""} {matchedProduct.brand?.name ? `• Brand: ${matchedProduct.brand.name}` : ""}
+                    </span>
+                  </div>
+                  {Number(matchedProduct.price || 0) > 0 && (
+                    <Badge variant="outline" className="font-mono font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 text-xs">
+                      ₹{Number(matchedProduct.price).toLocaleString("en-IN")} / pack
+                    </Badge>
                   )}
                 </div>
-                {Number(matchedProduct.price || 0) > 0 && (
-                  <Badge variant="outline" className="font-mono font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 text-xs">
-                    ₹{Number(matchedProduct.price).toLocaleString("en-IN")} / unit
-                  </Badge>
+
+                {selectedProductVariations.length > 1 && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-zinc-800/80 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Pack Size:</span>
+                    <select
+                      value={selectedProductId}
+                      onChange={(e) => setSelectedProductId(e.target.value)}
+                      className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {selectedProductVariations.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.size} (₹{Number(v.price).toLocaleString("en-IN")}/pack)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
             )}
@@ -3369,11 +3497,13 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                       Brand: {activePP.product.brand.name}
                     </Badge>
                   )}
+                  {/* Category badge disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
                   {activePP?.product?.category && (
                     <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
                       Category: {activePP.product.category}
                     </Badge>
                   )}
+                  */}
                   {activePP?.product?.size && (
                     <Badge variant="outline" className="text-[10px] bg-white dark:bg-zinc-950">
                       Pack Size: {activePP.product.size}
@@ -3642,14 +3772,16 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
           <TableHeader>
             <TableRow>
               <TableHead>Product</TableHead>
+              {/* Category column disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
               <TableHead>Category</TableHead>
+              */}
               <TableHead className="text-right">Area Size</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {consolidatedMeasurements.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-6 text-xs text-muted-foreground italic">
+                <TableCell colSpan={2} className="text-center py-6 text-xs text-muted-foreground italic">
                   No product measurements allocated yet.
                 </TableCell>
               </TableRow>
@@ -3657,9 +3789,11 @@ function MeasurementsTab({ projectProducts }: { projectProducts: any[] }) {
               consolidatedMeasurements.map((pp) => (
                 <TableRow key={pp.id || pp.productId}>
                   <TableCell className="font-semibold">{pp.product?.name || "Product"}</TableCell>
+                  {/* Category cell disabled - see Paints/SPEC_PRODUCT_CATEGORY.md
                   <TableCell className="capitalize text-sm font-medium text-muted-foreground">
                     {pp.product?.category || "—"}
                   </TableCell>
+                  */}
                   <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
                     {fmt(pp.area)} {pp.unit}
                   </TableCell>
