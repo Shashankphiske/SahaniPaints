@@ -37,6 +37,8 @@ const getTodayString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const PAINT_SIZES = ["500ml", "1ltr", "4ltr", "10ltr", "20ltr"];
+
 const formatDate = (dateStr: any) => {
   if (!dateStr) return "—";
   try {
@@ -596,36 +598,39 @@ export default function MaterialRequestsPage() {
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                             Size <span className="text-rose-500 font-bold">*</span>
                           </label>
-                          {availableSizes.length > 0 ? (
-                            <select
-                              value={item.shade}
-                              onChange={(e) => {
-                                const chosenSize = e.target.value;
-                                const matched = availableSizes.find((p) => p.size === chosenSize);
-                                updateItemRow(item.id, {
-                                  shade: chosenSize,
-                                  selectedProductId: matched ? matched.id : item.selectedProductId,
-                                });
-                              }}
-                              className="h-10 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm font-semibold font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                              required
-                            >
-                              <option value="">Select size</option>
-                              {availableSizes.map((p) => (
-                                <option key={p.id} value={p.size}>
-                                  {p.size} {p.price ? `(₹${Number(p.price).toLocaleString("en-IN")}/pack)` : ""}
+                          <select
+                            value={item.shade}
+                            onChange={(e) => {
+                              const chosenSize = e.target.value;
+                              const matched = availableSizes.find(
+                                (p) => (p.size || "").toLowerCase().trim() === chosenSize.toLowerCase().trim()
+                              );
+                              updateItemRow(item.id, {
+                                shade: chosenSize,
+                                selectedProductId: matched ? matched.id : item.selectedProductId,
+                              });
+                            }}
+                            className="h-10 w-full rounded-md border border-input bg-background px-2.5 py-1 text-sm font-semibold font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                            required
+                          >
+                            <option value="">Select size</option>
+                            {Array.from(
+                              new Set([
+                                ...PAINT_SIZES,
+                                ...availableSizes.map((p) => p.size).filter(Boolean),
+                                ...(item.shade ? [item.shade] : []),
+                              ])
+                            ).map((sz) => {
+                              const matched = availableSizes.find(
+                                (p) => (p.size || "").toLowerCase().trim() === sz.toLowerCase().trim()
+                              );
+                              return (
+                                <option key={sz} value={sz}>
+                                  {sz} {matched?.price ? `(₹${Number(matched.price).toLocaleString("en-IN")}/pack)` : ""}
                                 </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Input
-                              placeholder="e.g. 20 Ltr"
-                              value={item.shade}
-                              onChange={(e) => updateItemRow(item.id, { shade: e.target.value })}
-                              className="h-10 text-sm font-semibold font-mono"
-                              required
-                            />
-                          )}
+                              );
+                            })}
+                          </select>
                         </div>
 
                         <div className="sm:col-span-3 space-y-1">
