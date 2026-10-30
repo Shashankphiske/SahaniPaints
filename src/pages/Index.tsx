@@ -8,8 +8,9 @@ import { CashFlowWidget } from "../components/dashboard/CashFlowWidget";
 import { CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Loader2, TrendingUp, FolderOpen, IndianRupee, CalendarDays, Clock } from "lucide-react";
+import { Loader2, TrendingUp, FolderOpen, IndianRupee, CalendarDays, Clock, ExternalLink } from "lucide-react";
 import { apiRequest } from "../lib/api";
+import { DashboardCardDetailsModal, type DashboardCardType } from "../components/dashboard/DashboardCardDetailsModal";
 
 function fmt(n: number) {
   return (Number(n) || 0).toLocaleString("en-IN", {
@@ -22,20 +23,40 @@ function ReportCard({
   value,
   icon: Icon,
   color,
+  onClick,
 }: {
   title: string;
   value: string;
   icon: React.ElementType;
   color: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5 flex items-start gap-4 shadow-sm-soft flex-1">
-      <div className={`p-2.5 rounded-lg shrink-0 ${color}`}>
-        <Icon className="h-5 w-5" />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      className="bg-card border border-border rounded-xl p-5 flex items-start justify-between gap-4 shadow-sm-soft flex-1 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-primary/50 group relative overflow-hidden select-none focus:outline-none focus:ring-2 focus:ring-primary/40"
+    >
+      <div className="flex items-start gap-3.5">
+        <div className={`p-2.5 rounded-lg shrink-0 ${color} transition-transform duration-200 group-hover:scale-105`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+          <p className="text-xl font-bold font-display mt-0.5 text-foreground group-hover:text-primary transition-colors">
+            {value}
+          </p>
+        </div>
       </div>
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
-        <p className="text-xl font-bold font-display mt-0.5 text-foreground">{value}</p>
+      <div className="text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all">
+        <ExternalLink className="h-4 w-4" />
       </div>
     </div>
   );
@@ -79,6 +100,8 @@ function ReportsSection() {
   const [startDate, setStartDate] = useState(initialStart);
   const [endDate, setEndDate] = useState(initialEnd);
   const [showFilter, setShowFilter] = useState(false);
+
+  const [modalCardType, setModalCardType] = useState<DashboardCardType | null>(null);
 
   const fetchReports = async (start?: string, end?: string) => {
     try {
@@ -175,6 +198,7 @@ function ReportsSection() {
             value={String(report.totalProjects ?? 0)}
             icon={FolderOpen}
             color="bg-blue-100 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border border-blue-200/50"
+            onClick={() => setModalCardType("running-projects")}
           />
 
           <ReportCard
@@ -182,6 +206,7 @@ function ReportsSection() {
             value={`₹${fmt(report.totalRevenue ?? 0)}`}
             icon={TrendingUp}
             color="bg-emerald-100 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50"
+            onClick={() => setModalCardType("total-value")}
           />
 
           <ReportCard
@@ -189,6 +214,7 @@ function ReportsSection() {
             value={`₹${fmt(report.totalPayments ?? 0)}`}
             icon={IndianRupee}
             color="bg-indigo-100 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50"
+            onClick={() => setModalCardType("revenue-received")}
           />
 
           <ReportCard
@@ -196,10 +222,22 @@ function ReportsSection() {
             value={`₹${fmt(report.totalDue ?? Math.max(0, (report.totalRevenue ?? 0) - (report.totalPayments ?? 0)))}`}
             icon={Clock}
             color="bg-amber-100 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border border-amber-200/50"
+            onClick={() => setModalCardType("revenue-due")}
           />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground font-semibold">No analytics data recorded for this date range.</p>
+      )}
+
+      {/* Detailed Data Popup Modal */}
+      {modalCardType && (
+        <DashboardCardDetailsModal
+          isOpen={!!modalCardType}
+          onClose={() => setModalCardType(null)}
+          initialCardType={modalCardType}
+          startDate={startDate}
+          endDate={endDate}
+        />
       )}
     </div>
   );
