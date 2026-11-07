@@ -3,6 +3,7 @@ import { MasterPageLayout } from "./MasterPageLayout";
 import { DataTable } from "./DataTable";
 import type { ColumnDef } from "./DataTable";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Interior } from "../../types/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
@@ -46,6 +47,12 @@ const columns: ColumnDef<Interior>[] = [
 ];
 
 export default function InteriorsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const visibleColumns = useMemo(
+    () => columns.filter((c) => isAdmin || c.key !== "commissionFeePercentage"),
+    [isAdmin]
+  );
   const {
     data,
     isLoading,
@@ -134,7 +141,7 @@ export default function InteriorsPage() {
     >
       <DataTable
         data={filtered}
-        columns={columns}
+        columns={visibleColumns}
         isLoading={isLoading}
         onEdit={handleEdit}
         onDelete={handleDelete}

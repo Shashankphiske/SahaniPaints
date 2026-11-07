@@ -626,7 +626,7 @@ export default function MaterialRequestsPage() {
                               );
                               return (
                                 <option key={sz} value={sz}>
-                                  {sz} {matched?.price ? `(₹${Number(matched.price).toLocaleString("en-IN")}/pack)` : ""}
+                                  {sz} {isAdmin && matched?.price ? `(₹${Number(matched.price).toLocaleString("en-IN")}/pack)` : ""}
                                 </option>
                               );
                             })}

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Interior, Project } from "../../types/master";
 import { X, Award, Briefcase, IndianRupee, Percent } from "lucide-react";
 import { DataTable } from "./DataTable";
@@ -23,6 +24,8 @@ interface InteriorDashboardProps {
 }
 
 export default function InteriorDashboard({ interior, onClose }: InteriorDashboardProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectData, isLoading } = useMasterData<Project>(
     "projects",
     true,
@@ -123,41 +126,45 @@ export default function InteriorDashboard({ interior, onClose }: InteriorDashboa
             </CardContent>
           </Card>
 
-          <Card className="border border-border/80 shadow-sm bg-card">
-            <CardContent className="p-3.5 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <IndianRupee className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground">Contract Volume</p>
-                <p className="text-lg font-bold text-foreground">{fmt(stats.totalValue)}</p>
-              </div>
-            </CardContent>
-          </Card>
+          {isAdmin && (
+            <>
+              <Card className="border border-border/80 shadow-sm bg-card">
+                <CardContent className="p-3.5 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <IndianRupee className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground">Contract Volume</p>
+                    <p className="text-lg font-bold text-foreground">{fmt(stats.totalValue)}</p>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="border border-border/80 shadow-sm bg-card">
-            <CardContent className="p-3.5 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                <Percent className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground">Commission Rate</p>
-                <p className="text-lg font-bold text-foreground">{stats.commissionRate}%</p>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="border border-border/80 shadow-sm bg-card">
+                <CardContent className="p-3.5 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Percent className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground">Commission Rate</p>
+                    <p className="text-lg font-bold text-foreground">{stats.commissionRate}%</p>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className="border border-border/80 shadow-sm bg-card">
-            <CardContent className="p-3.5 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                <IndianRupee className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground">Commission Earned</p>
-                <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmt(stats.earnedCommission)}</p>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className="border border-border/80 shadow-sm bg-card">
+                <CardContent className="p-3.5 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    <IndianRupee className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground">Commission Earned</p>
+                    <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{fmt(stats.earnedCommission)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Assigned Projects Ledger */}
@@ -168,7 +175,7 @@ export default function InteriorDashboard({ interior, onClose }: InteriorDashboa
           </h3>
           <div className="border border-border/60 rounded-lg overflow-hidden">
             <DataTable
-              columns={columns}
+              columns={columns.filter((c) => isAdmin || c.key !== "totalAmount")}
               data={projects}
               isLoading={isLoading}
             />

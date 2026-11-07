@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "@/hooks/use-master-data";
+import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,8 @@ const formatDate = (dateStr: any) => {
 };
 
 export default function WastageMaterialLogsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const queryClient = useQueryClient();
 
   // Master lists
@@ -506,7 +509,7 @@ export default function WastageMaterialLogsPage() {
                         <option value="">Select size</option>
                         {availablePackSizes.map((p) => (
                           <option key={p.id} value={p.size}>
-                            {p.size} {p.price ? `(₹${Number(p.price).toLocaleString("en-IN")}/pack)` : ""}
+                            {p.size} {isAdmin && p.price ? `(₹${Number(p.price).toLocaleString("en-IN")}/pack)` : ""}
                           </option>
                         ))}
                       </select>

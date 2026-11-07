@@ -60,6 +60,7 @@ interface QueuedLabour {
 
 export default function LabourAttendancePage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: laboursData } = useMasterData<Labour>("labours");
 
@@ -901,14 +902,14 @@ export default function LabourAttendancePage() {
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Date</th>
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Project Site</th>
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Labours Present</th>
-                      <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Daily Labor Cost</th>
+                      {isAdmin && <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Daily Labor Cost</th>}
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {groupedAttendance.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="h-24 text-center text-muted-foreground align-middle">
+                        <td colSpan={isAdmin ? 5 : 4} className="h-24 text-center text-muted-foreground align-middle">
                           No results found.
                         </td>
                       </tr>
@@ -932,9 +933,11 @@ export default function LabourAttendancePage() {
                                 {g.records.length} Present
                               </Badge>
                             </td>
-                            <td className="p-4 align-middle text-right font-mono font-bold">
-                              ₹{totalCost.toLocaleString("en-IN")}
-                            </td>
+                            {isAdmin && (
+                              <td className="p-4 align-middle text-right font-mono font-bold">
+                                ₹{totalCost.toLocaleString("en-IN")}
+                              </td>
+                            )}
                             <td className="p-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 variant="ghost"
@@ -985,9 +988,11 @@ export default function LabourAttendancePage() {
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
                 {activeDetailRecords.length} Workers Present
               </Badge>
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
-                Wages: ₹{activeDetailRecords.reduce((sum, r) => sum + Number(r.labour?.paymentPerDay || 0) * Number(r.workDayValue ?? 1.0), 0).toLocaleString("en-IN")}
-              </Badge>
+              {isAdmin && (
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-bold px-3 py-1 text-xs rounded-full">
+                  Wages: ₹{activeDetailRecords.reduce((sum, r) => sum + Number(r.labour?.paymentPerDay || 0) * Number(r.workDayValue ?? 1.0), 0).toLocaleString("en-IN")}
+                </Badge>
+              )}
               <Button size="sm" className="font-bold h-8 ml-2" onClick={() => setIsModalOpen(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1.5" />
                 Add / Copy Labour
@@ -1018,7 +1023,7 @@ export default function LabourAttendancePage() {
                         <tr className="border-b bg-muted/50 transition-colors">
                           <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Worker Name</th>
                           <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Shift</th>
-                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Base / Daily Wage</th>
+                          {isAdmin && <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Base / Daily Wage</th>}
                           <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                         </tr>
                       </thead>
@@ -1042,10 +1047,12 @@ export default function LabourAttendancePage() {
                                   {shiftLabel} ({val}x)
                                 </span>
                               </td>
-                              <td className="p-4 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                                <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
-                                <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
-                              </td>
+                              {isAdmin && (
+                                <td className="p-4 align-middle text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                  <span className="text-xs text-slate-400 font-normal">₹{baseRate} / </span>
+                                  <span className="text-emerald-600 dark:text-emerald-400">₹{wage}</span>
+                                </td>
+                              )}
                               <td className="p-4 align-middle text-center">
                                 {user?.role === "ADMIN" ? (
                                   <button
@@ -1110,9 +1117,11 @@ export default function LabourAttendancePage() {
                             onMouseDown={() => handleQueueLabour(l)}
                           >
                             <span>{l.name}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono font-bold">
-                              ₹{l.paymentPerDay}/day
-                            </span>
+                            {isAdmin && (
+                              <span className="text-[10px] text-muted-foreground font-mono font-bold">
+                                ₹{l.paymentPerDay}/day
+                              </span>
+                            )}
                           </div>
                         ))}
                         {filteredLabours.length === 0 && (
@@ -1165,9 +1174,11 @@ export default function LabourAttendancePage() {
                             >
                               <div className="space-y-0.5">
                                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{l.name}</p>
-                                <p className="text-[9px] text-slate-400 font-semibold">
-                                  Base: ₹{baseRate} · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
-                                </p>
+                                {isAdmin && (
+                                  <p className="text-[9px] text-slate-400 font-semibold">
+                                    Base: ₹{baseRate} · Wage: <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{calculatedWage}</span>
+                                  </p>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <select

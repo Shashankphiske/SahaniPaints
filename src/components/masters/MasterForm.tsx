@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { apiRequest } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 import { Switch } from "../ui/switch";
 
 interface MasterFormProps {
@@ -79,6 +80,8 @@ export function MasterForm({
   onSubmit,
   onCancel,
 }: MasterFormProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   
@@ -522,7 +525,7 @@ export function MasterForm({
               </div>
             </div>
 
-            {normalizedResource === "interiors" && (
+            {isAdmin && normalizedResource === "interiors" && (
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-muted-foreground">Commission Fee Percentage (%)</label>
                 <Input
@@ -1022,23 +1025,25 @@ export function MasterForm({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-semibold text-slate-500">Price (₹ per pack) <span className="text-red-500 font-bold ml-0.5">*</span></label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  name="price"
-                  value={formData.price || ""}
-                  onChange={handleChange}
-                  placeholder="Enter price per pack"
-                />
-                {errors.price && <p className="text-xs text-destructive font-semibold">{errors.price}</p>}
-                {Number(formData.price || 0) > 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Per Litre: <span className="font-semibold text-foreground">₹{(Number(formData.price) / getProductSizeInLitres(formData.size || "1ltr")).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L</span>
-                  </p>
-                )}
-              </div>
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-slate-500">Price (₹ per pack) <span className="text-red-500 font-bold ml-0.5">*</span></label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    name="price"
+                    value={formData.price || ""}
+                    onChange={handleChange}
+                    placeholder="Enter price per pack"
+                  />
+                  {errors.price && <p className="text-xs text-destructive font-semibold">{errors.price}</p>}
+                  {Number(formData.price || 0) > 0 && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Per Litre: <span className="font-semibold text-foreground">₹{(Number(formData.price) / getProductSizeInLitres(formData.size || "1ltr")).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L</span>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-sm font-semibold text-slate-500">Pack Size <span className="text-red-500 font-bold ml-0.5">*</span></label>
@@ -1146,31 +1151,35 @@ export function MasterForm({
               {errors.name && <p className="text-xs text-destructive font-semibold">{errors.name}</p>}
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-muted-foreground">Payment Per Day (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
-              <Input
-                type="number"
-                name="paymentPerDay"
-                value={formData.paymentPerDay || ""}
-                onChange={handleChange}
-                placeholder="Enter daily payment (e.g. 500)"
-              />
-              {errors.paymentPerDay && <p className="text-xs text-destructive font-semibold">{errors.paymentPerDay}</p>}
-            </div>
+            {isAdmin && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-muted-foreground">Payment Per Day (₹) <span className="text-red-500 font-bold ml-0.5">*</span></label>
+                  <Input
+                    type="number"
+                    name="paymentPerDay"
+                    value={formData.paymentPerDay || ""}
+                    onChange={handleChange}
+                    placeholder="Enter daily payment (e.g. 500)"
+                  />
+                  {errors.paymentPerDay && <p className="text-xs text-destructive font-semibold">{errors.paymentPerDay}</p>}
+                </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-semibold text-muted-foreground flex items-center justify-between">
-                <span>Tuesday Payment Amount (₹)</span>
-                <span className="text-[11px] text-muted-foreground font-normal italic">(Optional)</span>
-              </label>
-              <Input
-                type="number"
-                name="tuesdayPaymentAmount"
-                value={formData.tuesdayPaymentAmount ?? ""}
-                onChange={handleChange}
-                placeholder="Enter Tuesday diary payment amount (e.g. 1000)"
-              />
-            </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-muted-foreground flex items-center justify-between">
+                    <span>Tuesday Payment Amount (₹)</span>
+                    <span className="text-[11px] text-muted-foreground font-normal italic">(Optional)</span>
+                  </label>
+                  <Input
+                    type="number"
+                    name="tuesdayPaymentAmount"
+                    value={formData.tuesdayPaymentAmount ?? ""}
+                    onChange={handleChange}
+                    placeholder="Enter Tuesday diary payment amount (e.g. 1000)"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-1">
               <label className="text-sm font-medium text-muted-foreground">Phone Number</label>

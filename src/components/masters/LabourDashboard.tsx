@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Labour, LabourAttendance, LabourPayment, Project } from "../../types/master";
 import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Wrench, Pencil } from "lucide-react";
 import { MasterForm } from "./MasterForm";
@@ -36,6 +37,8 @@ export default function LabourDashboard({
   initialTab?: "overview" | "attendance" | "payments" | "edit";
   initialSite?: string;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "payments" | "edit">(initialTab);
   const [selectedSite, setSelectedSite] = useState<string>("ALL");
@@ -226,7 +229,7 @@ export default function LabourDashboard({
         </div>
 
         <div className="flex bg-slate-100 dark:bg-zinc-900 p-1 rounded-xl border border-slate-200/50 dark:border-zinc-800">
-          {(["overview", "attendance", "payments", "edit"] as const).map((tab) => (
+          {(["overview", "attendance", "payments", "edit"] as const).filter((t) => isAdmin || t !== "payments").map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -246,17 +249,19 @@ export default function LabourDashboard({
       {activeTab === "overview" && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* STATS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard title="Daily Payment Rate" value={formatPrice(rate)} icon={Coins} />
-            <StatCard title="Total Charge Generated" value={formatPrice(totalCharge)} icon={Landmark} />
-            <StatCard title="Total Payments Done" value={formatPrice(totalPaid)} icon={Landmark} className="text-emerald-600 dark:text-emerald-400" />
-            <StatCard
-              title="Balance Due"
-              value={formatPrice(balanceDue)}
-              icon={Landmark}
-              className={balanceDue > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-slate-50"}
-            />
-          </div>
+          {isAdmin && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard title="Daily Payment Rate" value={formatPrice(rate)} icon={Coins} />
+              <StatCard title="Total Charge Generated" value={formatPrice(totalCharge)} icon={Landmark} />
+              <StatCard title="Total Payments Done" value={formatPrice(totalPaid)} icon={Landmark} className="text-emerald-600 dark:text-emerald-400" />
+              <StatCard
+                title="Balance Due"
+                value={formatPrice(balanceDue)}
+                icon={Landmark}
+                className={balanceDue > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-slate-50"}
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* WORKED SITES */}
@@ -306,31 +311,33 @@ export default function LabourDashboard({
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
-                    <Coins size={18} className="text-primary" />
-                    <h2 className="text-lg font-bold">Recent Payments</h2>
-                  </div>
-                  <button onClick={() => setActiveTab("payments")} className="text-xs font-semibold text-primary hover:underline">
-                    View All ({paymentsList.length})
-                  </button>
-                </div>
-                <div className="border-t pt-2 divide-y dark:divide-zinc-800">
-                  {paymentsList.slice(0, 5).map((p) => (
-                    <div key={p.id} className="py-2.5 flex items-center justify-between text-sm">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">{formatDate(p.paymentDate)}</span>
-                        {p.remarks && <span className="text-xs text-slate-400 mt-0.5">{p.remarks}</span>}
-                      </div>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(Number(p.amount))}</span>
+              {isAdmin && (
+                <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-900 dark:text-slate-50">
+                      <Coins size={18} className="text-primary" />
+                      <h2 className="text-lg font-bold">Recent Payments</h2>
                     </div>
-                  ))}
-                  {paymentsList.length === 0 && (
-                    <p className="text-sm text-slate-400 italic py-6 text-center">No payments logged yet.</p>
-                  )}
+                    <button onClick={() => setActiveTab("payments")} className="text-xs font-semibold text-primary hover:underline">
+                      View All ({paymentsList.length})
+                    </button>
+                  </div>
+                  <div className="border-t pt-2 divide-y dark:divide-zinc-800">
+                    {paymentsList.slice(0, 5).map((p) => (
+                      <div key={p.id} className="py-2.5 flex items-center justify-between text-sm">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">{formatDate(p.paymentDate)}</span>
+                          {p.remarks && <span className="text-xs text-slate-400 mt-0.5">{p.remarks}</span>}
+                        </div>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(Number(p.amount))}</span>
+                      </div>
+                    ))}
+                    {paymentsList.length === 0 && (
+                      <p className="text-sm text-slate-400 italic py-6 text-center">No payments logged yet.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -391,8 +398,8 @@ export default function LabourDashboard({
                       <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Marked Date</th>
                       <th className="p-4 text-left font-semibold text-slate-600 dark:text-slate-400">Project Site</th>
                       <th className="p-4 font-semibold text-slate-600 dark:text-slate-400">Shift Type</th>
-                      <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Daily Payment Rate</th>
-                      <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Earned Wage</th>
+                      {isAdmin && <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Daily Payment Rate</th>}
+                      {isAdmin && <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">Earned Wage</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y dark:divide-zinc-800">
@@ -405,8 +412,8 @@ export default function LabourDashboard({
                           <td className="p-4 font-semibold text-slate-800 dark:text-slate-200">{formatDate(a.date)}</td>
                           <td className="p-4 text-slate-600 dark:text-slate-400">{a.project?.name || "—"}</td>
                           <td className="p-4 font-semibold text-slate-700 dark:text-slate-350">{shiftLabel}</td>
-                          <td className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">{formatPrice(rate)}</td>
-                          <td className="p-4 text-right font-bold text-slate-800 dark:text-slate-200">{formatPrice(earnedWage)}</td>
+                          {isAdmin && <td className="p-4 text-right font-semibold text-slate-600 dark:text-slate-400">{formatPrice(rate)}</td>}
+                          {isAdmin && <td className="p-4 text-right font-bold text-slate-800 dark:text-slate-200">{formatPrice(earnedWage)}</td>}
                         </tr>
                       );
                     })}
@@ -419,7 +426,7 @@ export default function LabourDashboard({
       )}
 
       {/* PAYMENTS TAB */}
-      {activeTab === "payments" && (
+      {isAdmin && activeTab === "payments" && (
         <div className="space-y-6 animate-in fade-in duration-200">
           <div className="flex justify-between items-center bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm">
             <div>

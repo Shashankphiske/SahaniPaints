@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Labour, Project, LabourAttendance } from "../../types/master";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -39,6 +40,8 @@ const getTodayString = () => {
 };
 
 export default function LabourDailyLogPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   // Local state for selected date
   const [selectedDate, setSelectedDate] = useState(() => getTodayString());
   
@@ -528,8 +531,8 @@ export default function LabourDailyLogPage() {
                           </div>
                           <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 font-semibold">
                             <span className="flex items-center gap-1"><Phone className="h-2.5 w-2.5" /> {labour.phonenumber || "—"}</span>
-                            {labour.paymentPerDay ? <span>Daily: ₹{labour.paymentPerDay}</span> : null}
-                            {labour.tuesdayPaymentAmount && Number(labour.tuesdayPaymentAmount) > 0 ? (
+                            {isAdmin && labour.paymentPerDay ? <span>Daily: ₹{labour.paymentPerDay}</span> : null}
+                            {isAdmin && labour.tuesdayPaymentAmount && Number(labour.tuesdayPaymentAmount) > 0 ? (
                               <span>Tuesday: ₹{labour.tuesdayPaymentAmount}</span>
                             ) : null}
                           </div>
@@ -645,7 +648,7 @@ export default function LabourDailyLogPage() {
                           <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 font-semibold">
                             <span>Phone: {labour.phonenumber || "—"}</span>
                             <span>Type: {labour.type || "WEEKLY"}</span>
-                            {labour.paymentPerDay ? <span>Daily Rate: ₹{labour.paymentPerDay}</span> : null}
+                            {isAdmin && labour.paymentPerDay ? <span>Daily Rate: ₹{labour.paymentPerDay}</span> : null}
                           </div>
                         </div>
                         <Badge className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 text-[9px] font-bold">

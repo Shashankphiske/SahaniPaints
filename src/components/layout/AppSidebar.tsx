@@ -106,7 +106,7 @@ export function AppSidebar() {
 
   const filterByAccess = <T extends { url: string }>(items: T[]) =>
     items.filter((i) => {
-      if ((i.url === "/payments" || i.url === "/contractor-payments" || i.url === "/activity-logs") && user?.role !== "ADMIN") {
+      if ((i.url === "/payments" || i.url === "/contractor-payments" || i.url === "/weekly-diary" || i.url === "/reports" || i.url === "/activity-logs") && user?.role !== "ADMIN") {
         return false;
       }
       const key = getAccessKeyForPath(i.url);

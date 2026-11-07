@@ -3,6 +3,7 @@ import { MasterPageLayout } from "./MasterPageLayout";
 import { DataTable } from "./DataTable";
 import type { ColumnDef } from "./DataTable";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Labour } from "../../types/master";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { MasterForm } from "./MasterForm";
@@ -74,6 +75,9 @@ const columns: ColumnDef<Labour>[] = [
 ];
 
 export default function LaboursPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+  const visibleColumns = useMemo(() => columns.filter((c) => isAdmin || (c.key !== "paymentPerDay" && c.key !== "tuesdayPaymentAmount")), [isAdmin]);
   const { toast } = useToast();
   const {
     data,
@@ -175,7 +179,7 @@ export default function LaboursPage() {
         onAdd={() => setIsModalOpen(true)}
       >
         <DataTable
-          columns={columns}
+          columns={visibleColumns}
           data={filtered}
           isLoading={isLoading || isServerSearching}
           onRowClick={(item) => setSelectedLabour(item)}

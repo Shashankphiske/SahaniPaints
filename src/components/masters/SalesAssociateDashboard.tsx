@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { User, Project } from "../../types/master";
 import { X } from "lucide-react";
 import { MasterForm } from "./MasterForm";
@@ -33,6 +34,8 @@ export default function SalesAssociateDashboard({
   onBack: () => void;
   handleSave: (data: any) => void;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectData, isLoading } = useMasterData<Project>(
     "projects",
     true,
@@ -119,7 +122,7 @@ export default function SalesAssociateDashboard({
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat title="Total Projects" value={projects.length} />
-        <Stat title="Total Value" value={fmt(stats.totalValue)} />
+        {isAdmin && <Stat title="Total Value" value={fmt(stats.totalValue)} />}
         <Stat title="Active" value={stats.active} />
         <Stat title="Completed" value={stats.completed} />
       </div>
@@ -128,7 +131,7 @@ export default function SalesAssociateDashboard({
       <div className="bg-card rounded-xl border border-border p-5 shadow-sm-soft space-y-4">
         <h2 className="text-lg font-bold font-display text-foreground">Projects Ledger</h2>
         <DataTable
-          columns={columns}
+          columns={columns.filter((c) => isAdmin || c.key !== "totalAmount")}
           data={projects}
           isLoading={isLoading}
         />

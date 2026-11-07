@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Contractor, ContractorPayment, Project } from "../../types/master";
 import { ArrowLeft, Calendar, Coins, Landmark, Loader2, Plus, Trash2, User, Briefcase } from "lucide-react";
 import { MasterForm } from "./MasterForm";
@@ -37,6 +38,8 @@ export default function ContractorDashboard({
   onBack: () => void;
   handleSave: (data: any) => void;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"overview" | "payments" | "work-logs" | "edit">("overview");
 
@@ -280,16 +283,18 @@ export default function ContractorDashboard({
         >
           Overview
         </button>
-        <button
-          onClick={() => setActiveTab("payments")}
-          className={`pb-2.5 text-sm font-bold border-b-2 transition-all duration-150 -mb-[2px] ${
-            activeTab === "payments"
-              ? "border-primary text-primary"
-              : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-          }`}
-        >
-          Payment History
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab("payments")}
+            className={`pb-2.5 text-sm font-bold border-b-2 transition-all duration-150 -mb-[2px] ${
+              activeTab === "payments"
+                ? "border-primary text-primary"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+            }`}
+          >
+            Payment History
+          </button>
+        )}
         <button
           onClick={() => setActiveTab("work-logs")}
           className={`pb-2.5 text-sm font-bold border-b-2 transition-all duration-150 -mb-[2px] ${
@@ -316,10 +321,14 @@ export default function ContractorDashboard({
       {activeTab === "overview" && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <StatCard title="Total Payments Logged" value={formatPrice(totalPaid)} icon={Coins} className="text-emerald-600 dark:text-emerald-400" />
             <StatCard title="Total Work Done" value={`${totalSqFt.toLocaleString("en-IN", { maximumFractionDigits: 2 })} sq.ft`} icon={Briefcase} />
-            <StatCard title="Total Earned" value={formatPrice(totalEarned)} icon={Coins} className="text-blue-600 dark:text-blue-400" />
-            <StatCard title="Balance Due" value={formatPrice(balanceDue)} icon={Coins} className={balanceDue >= 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} />
+            {isAdmin && (
+              <>
+                <StatCard title="Total Payments Logged" value={formatPrice(totalPaid)} icon={Coins} className="text-emerald-600 dark:text-emerald-400" />
+                <StatCard title="Total Earned" value={formatPrice(totalEarned)} icon={Coins} className="text-blue-600 dark:text-blue-400" />
+                <StatCard title="Balance Due" value={formatPrice(balanceDue)} icon={Coins} className={balanceDue >= 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"} />
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -347,50 +356,52 @@ export default function ContractorDashboard({
             </div>
 
             {/* Quick Summary list of last payments */}
-            <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm md:col-span-2 space-y-4 flex flex-col justify-between">
-              <div>
-                <h3 className="text-xs font-extrabold uppercase text-slate-400 dark:text-zinc-650 tracking-wider flex items-center gap-1.5 select-none">
-                  <Landmark size={13} />
-                  Recent Payout Activities
-                </h3>
-                {paymentsList.length === 0 ? (
-                  <div className="text-slate-400 text-xs italic font-medium pt-8 pb-4 text-center">
-                    No payment logs recorded yet.
-                  </div>
-                ) : (
-                  <div className="divide-y pt-2 max-h-56 overflow-y-auto space-y-2">
-                    {paymentsList.slice(0, 5).map((p) => (
-                      <div key={p.id} className="flex justify-between items-center py-2.5 first:pt-0">
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-250 truncate">
-                            {p.project?.name || "General Payout"}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-semibold">
-                            {formatDate(p.paymentDate)} {p.remarks ? `| ${p.remarks}` : ""}
-                          </p>
+            {isAdmin && (
+              <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-6 rounded-2xl shadow-sm md:col-span-2 space-y-4 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase text-slate-400 dark:text-zinc-650 tracking-wider flex items-center gap-1.5 select-none">
+                    <Landmark size={13} />
+                    Recent Payout Activities
+                  </h3>
+                  {paymentsList.length === 0 ? (
+                    <div className="text-slate-400 text-xs italic font-medium pt-8 pb-4 text-center">
+                      No payment logs recorded yet.
+                    </div>
+                  ) : (
+                    <div className="divide-y pt-2 max-h-56 overflow-y-auto space-y-2">
+                      {paymentsList.slice(0, 5).map((p) => (
+                        <div key={p.id} className="flex justify-between items-center py-2.5 first:pt-0">
+                          <div>
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-250 truncate">
+                              {p.project?.name || "General Payout"}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-semibold">
+                              {formatDate(p.paymentDate)} {p.remarks ? `| ${p.remarks}` : ""}
+                            </p>
+                          </div>
+                          <span className={`text-xs font-extrabold ${p.type === "INCOMING" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                            {p.type === "INCOMING" ? "+" : "-"}{formatPrice(Number(p.amount))}
+                          </span>
                         </div>
-                        <span className={`text-xs font-extrabold ${p.type === "INCOMING" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                          {p.type === "INCOMING" ? "+" : "-"}{formatPrice(Number(p.amount))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {paymentsList.length > 5 && (
+                  <button
+                    onClick={() => setActiveTab("payments")}
+                    className="w-full text-center text-xs font-bold text-primary hover:underline border-t pt-3"
+                  >
+                    View All Transaction Records
+                  </button>
                 )}
               </div>
-              {paymentsList.length > 5 && (
-                <button
-                  onClick={() => setActiveTab("payments")}
-                  className="w-full text-center text-xs font-bold text-primary hover:underline border-t pt-3"
-                >
-                  View All Transaction Records
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
 
-      {activeTab === "payments" && (
+      {isAdmin && activeTab === "payments" && (
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white dark:bg-zinc-950 p-6 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm mb-6">
             <div>
@@ -592,8 +603,8 @@ export default function ContractorDashboard({
                     <TableHead>Date</TableHead>
                     <TableHead>Project / Site</TableHead>
                     <TableHead>Work Done (Sq.Ft)</TableHead>
-                    <TableHead>Rate / Sq.Ft</TableHead>
-                    <TableHead className="text-right">Subtotal</TableHead>
+                    {isAdmin && <TableHead>Rate / Sq.Ft</TableHead>}
+                    {isAdmin && <TableHead className="text-right">Subtotal</TableHead>}
                     <TableHead>Remarks</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -615,8 +626,8 @@ export default function ContractorDashboard({
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">{Number(log.sqFt).toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-xs">₹{rate.toFixed(2)}</TableCell>
-                        <TableCell className="font-bold text-right text-xs">₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                        {isAdmin && <TableCell className="font-mono text-xs">₹{rate.toFixed(2)}</TableCell>}
+                        {isAdmin && <TableCell className="font-bold text-right text-xs">₹{subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>}
                         <TableCell className="text-slate-500 text-[11px]">{log.remarks || "—"}</TableCell>
                       </TableRow>
                     );

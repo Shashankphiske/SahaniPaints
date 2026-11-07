@@ -32,6 +32,7 @@ import {
   Check,
 } from "lucide-react";
 import { apiRequest } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 
 export type DashboardCardType =
   | "running-projects"
@@ -123,6 +124,8 @@ export function DashboardCardDetailsModal({
   endDate,
 }: DashboardCardDetailsModalProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [activeTab, setActiveTab] = useState<DashboardCardType>(initialCardType);
   const [allTime, setAllTime] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -232,8 +235,10 @@ export function DashboardCardDetailsModal({
     let rows: (string | number)[][] = [];
 
     if (activeTab === "running-projects" || activeTab === "total-value") {
-      headers = ["Project Name", "Customer", "Phone", "Status", "Valuation (₹)", "Paid (₹)", "Due (₹)", "Progress (%)", "Project Date", "Supervisor"];
-      rows = displayItems.map((p) => [
+      headers = isAdmin
+        ? ["Project Name", "Customer", "Phone", "Status", "Valuation (₹)", "Paid (₹)", "Due (₹)", "Progress (%)", "Project Date", "Supervisor"]
+        : ["Project Name", "Customer", "Phone", "Status", "Progress (%)", "Project Date", "Supervisor"];
+      rows = displayItems.map((p) => isAdmin ? [
         p.name ?? "",
         p.customerName ?? "",
         p.customerPhone ?? "",
@@ -241,6 +246,14 @@ export function DashboardCardDetailsModal({
         p.valuation ?? 0,
         p.paid ?? 0,
         p.due ?? 0,
+        p.progress ?? 0,
+        formatDate(p.projectDate || p.createdAt),
+        p.supervisorName ?? "",
+      ] : [
+        p.name ?? "",
+        p.customerName ?? "",
+        p.customerPhone ?? "",
+        p.status ?? "",
         p.progress ?? 0,
         formatDate(p.projectDate || p.createdAt),
         p.supervisorName ?? "",
@@ -419,18 +432,22 @@ export function DashboardCardDetailsModal({
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Running Count</p>
                 <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">{summary.totalCount ?? 0}</p>
               </div>
-              <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Valuation</p>
-                <p className="text-lg font-bold text-foreground mt-0.5">₹{fmt(summary.totalValuation ?? 0)}</p>
-              </div>
-              <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collected Revenue</p>
-                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">₹{fmt(summary.totalPaid ?? 0)}</p>
-              </div>
-              <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding Due</p>
-                <p className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">₹{fmt(summary.totalDue ?? 0)}</p>
-              </div>
+              {isAdmin && (
+                <>
+                  <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Valuation</p>
+                    <p className="text-lg font-bold text-foreground mt-0.5">₹{fmt(summary.totalValuation ?? 0)}</p>
+                  </div>
+                  <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collected Revenue</p>
+                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">₹{fmt(summary.totalPaid ?? 0)}</p>
+                  </div>
+                  <div className="bg-card border border-border/80 rounded-xl p-3 shadow-xs">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outstanding Due</p>
+                    <p className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-0.5">₹{fmt(summary.totalDue ?? 0)}</p>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -654,9 +671,13 @@ export function DashboardCardDetailsModal({
                         <th className="py-3 px-4">Project Name</th>
                         <th className="py-3 px-4">Customer</th>
                         <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4 text-right">Valuation</th>
-                        <th className="py-3 px-4 text-right">Paid</th>
-                        <th className="py-3 px-4 text-right">Due</th>
+                        {isAdmin && (
+                          <>
+                            <th className="py-3 px-4 text-right">Valuation</th>
+                            <th className="py-3 px-4 text-right">Paid</th>
+                            <th className="py-3 px-4 text-right">Due</th>
+                          </>
+                        )}
                         <th className="py-3 px-4">Progress / Stage</th>
                         <th className="py-3 px-4">Project Date</th>
                         <th className="py-3 px-4 text-right">Action</th>
@@ -794,35 +815,39 @@ export function DashboardCardDetailsModal({
                           </Badge>
                         </td>
 
-                        <td className="py-3 px-4 text-right whitespace-nowrap font-bold text-foreground font-mono">
-                          ₹{fmt(item.valuation)}
-                          {item.agreedPrice != null &&
-                            item.totalAmount > 0 &&
-                            Number(item.agreedPrice) < Number(item.totalAmount) && (
-                              <span className="block text-[10px] line-through text-muted-foreground font-normal">
-                                ₹{fmt(item.totalAmount)}
-                              </span>
-                            )}
-                        </td>
+                        {isAdmin && (
+                          <>
+                            <td className="py-3 px-4 text-right whitespace-nowrap font-bold text-foreground font-mono">
+                              ₹{fmt(item.valuation)}
+                              {item.agreedPrice != null &&
+                                item.totalAmount > 0 &&
+                                Number(item.agreedPrice) < Number(item.totalAmount) && (
+                                  <span className="block text-[10px] line-through text-muted-foreground font-normal">
+                                    ₹{fmt(item.totalAmount)}
+                                  </span>
+                                )}
+                            </td>
 
-                        <td className="py-3 px-4 text-right whitespace-nowrap font-medium text-emerald-600 dark:text-emerald-400 font-mono">
-                          ₹{fmt(item.paid)}
-                        </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap font-medium text-emerald-600 dark:text-emerald-400 font-mono">
+                              ₹{fmt(item.paid)}
+                            </td>
 
-                        <td
-                          className={`py-3 px-4 text-right whitespace-nowrap font-bold font-mono ${
-                            isDueHighlighted && Number(item.due) > 0
-                              ? "text-rose-600 dark:text-rose-400"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          ₹{fmt(item.due)}
-                          {item.duePercent !== undefined && Number(item.due) > 0 && (
-                            <span className="block text-[10px] font-semibold opacity-80">
-                              ({item.duePercent}% due)
-                            </span>
-                          )}
-                        </td>
+                            <td
+                              className={`py-3 px-4 text-right whitespace-nowrap font-bold font-mono ${
+                                isDueHighlighted && Number(item.due) > 0
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              ₹{fmt(item.due)}
+                              {item.duePercent !== undefined && Number(item.due) > 0 && (
+                                <span className="block text-[10px] font-semibold opacity-80">
+                                  ({item.duePercent}% due)
+                                </span>
+                              )}
+                            </td>
+                          </>
+                        )}
 
                         <td className="py-3 px-4 whitespace-nowrap">
                           <div className="w-28 space-y-1">
@@ -874,15 +899,17 @@ export function DashboardCardDetailsModal({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="font-semibold text-foreground">
-              Total Valuation in view: ₹
-              {fmt(
-                displayItems.reduce(
-                  (sum, item) => sum + Number(item.valuation ?? item.amount ?? 0),
-                  0
-                )
-              )}
-            </span>
+            {isAdmin && (
+              <span className="font-semibold text-foreground">
+                Total Valuation in view: ₹
+                {fmt(
+                  displayItems.reduce(
+                    (sum, item) => sum + Number(item.valuation ?? item.amount ?? 0),
+                    0
+                  )
+                )}
+              </span>
+            )}
             <Button size="sm" variant="outline" onClick={onClose} className="text-xs h-7 px-3 rounded-lg">
               Close
             </Button>

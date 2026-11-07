@@ -7,6 +7,7 @@ import { Input } from "../ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { FolderOpen, Calendar, User, IndianRupee, Loader2, Search, ExternalLink } from "lucide-react";
 import type { Project } from "../../types/master";
+import { useAuth } from "../../context/AuthContext";
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/20 dark:text-amber-300",
@@ -66,6 +67,8 @@ const formatDate = (dateStr: any) => {
 };
 
 export function ProjectSection() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data, isLoading } = useMasterData<Project>("projects");
   const [viewItem, setViewItem] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -207,44 +210,46 @@ export function ProjectSection() {
 
 
                     {/* Vertical Financial Pills with Simple Light Colors */}
-                    <div className="flex flex-col gap-1.5 text-xs">
-                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 min-w-0">
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
-                          {hasDiscount && (
-                            <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
-                              Discounted
+                    {isAdmin && (
+                      <div className="flex flex-col gap-1.5 text-xs">
+                        <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 min-w-0">
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-tight">Total</span>
+                            {hasDiscount && (
+                              <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-1 py-0.5 rounded leading-none">
+                                Discounted
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end text-right min-w-0">
+                            {hasDiscount && (
+                              <span className="text-[10px] line-through text-slate-400 font-medium leading-none mb-0.5">
+                                ₹{fmt(originalTotal)}
+                              </span>
+                            )}
+                            <span className="text-xs font-bold text-blue-900 dark:text-blue-200 leading-tight">
+                              ₹{fmt(finalTotal)}
                             </span>
-                          )}
+                          </div>
                         </div>
-                        <div className="flex flex-col items-end text-right min-w-0">
-                          {hasDiscount && (
-                            <span className="text-[10px] line-through text-slate-400 font-medium leading-none mb-0.5">
-                              ₹{fmt(originalTotal)}
-                            </span>
-                          )}
-                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200 leading-tight">
-                            ₹{fmt(finalTotal)}
+                        <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 min-w-0">
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight shrink-0">Paid</span>
+                          <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                            ₹{fmt(paid)}
+                          </span>
+                        </div>
+                        <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border min-w-0 ${
+                          due > 0
+                            ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
+                            : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
+                        }`}>
+                          <span className={`text-[10px] font-bold uppercase tracking-tight shrink-0 ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
+                          <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
+                            ₹{fmt(due)}
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/40 min-w-0">
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-tight shrink-0">Paid</span>
-                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                          ₹{fmt(paid)}
-                        </span>
-                      </div>
-                      <div className={`flex items-center justify-between p-1.5 px-3 rounded-lg border min-w-0 ${
-                        due > 0
-                          ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/60 dark:border-rose-800/40"
-                          : "bg-slate-50 dark:bg-zinc-900 border-slate-200/60 dark:border-zinc-800/40"
-                      }`}>
-                        <span className={`text-[10px] font-bold uppercase tracking-tight shrink-0 ${due > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"}`}>Due</span>
-                        <span className={`text-xs font-bold ${due > 0 ? "text-rose-900 dark:text-rose-200" : "text-slate-700 dark:text-slate-300"}`}>
-                          ₹{fmt(due)}
-                        </span>
-                      </div>
-                    </div>
+                    )}
 
                     {/* Bottom Link indicator */}
                     <div className="flex items-center justify-end text-[11px] font-medium text-primary/80 group-hover:text-primary transition-colors pt-0.5">
@@ -306,39 +311,43 @@ export function ProjectSection() {
                         <span className="text-muted-foreground font-semibold">Project Date</span>
                         <span className="font-semibold text-foreground">{formatDate(viewItem.projectDate)}</span>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground font-semibold">Total Cost</span>
-                        <div className="text-right flex items-center gap-1.5 flex-wrap justify-end">
-                          {itemHasDiscount && (
-                            <span className="text-xs line-through text-slate-400 font-medium">
-                              ₹{fmt(itemOriginalTotal)}
+                      {isAdmin && (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground font-semibold">Total Cost</span>
+                            <div className="text-right flex items-center gap-1.5 flex-wrap justify-end">
+                              {itemHasDiscount && (
+                                <span className="text-xs line-through text-slate-400 font-medium">
+                                  ₹{fmt(itemOriginalTotal)}
+                                </span>
+                              )}
+                              <span className="font-semibold text-foreground flex items-center">
+                                <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                                {fmt(itemFinalTotal)}
+                              </span>
+                              {itemHasDiscount && (
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                  (Discounted)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground font-semibold">Amount Paid</span>
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center">
+                              <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                              {fmt(itemPaid)}
                             </span>
-                          )}
-                          <span className="font-semibold text-foreground flex items-center">
-                            <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                            {fmt(itemFinalTotal)}
-                          </span>
-                          {itemHasDiscount && (
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                              (Discounted)
+                          </div>
+                          <div className="flex justify-between border-t border-border/60 pt-2 font-bold">
+                            <span className="text-muted-foreground">Due Balance</span>
+                            <span className={`flex items-center ${itemDue > 0 ? "text-rose-600" : "text-emerald-600 dark:text-emerald-400"}`}>
+                              <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
+                              {fmt(itemDue)}
                             </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground font-semibold">Amount Paid</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center">
-                          <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                          {fmt(itemPaid)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between border-t border-border/60 pt-2 font-bold">
-                        <span className="text-muted-foreground">Due Balance</span>
-                        <span className={`flex items-center ${itemDue > 0 ? "text-rose-600" : "text-emerald-600 dark:text-emerald-400"}`}>
-                          <IndianRupee className="h-3.5 w-3.5 shrink-0 mr-0.5" />
-                          {fmt(itemDue)}
-                        </span>
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </>
                   );
                 })()}

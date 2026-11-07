@@ -11,6 +11,7 @@ import { Button } from "../components/ui/button";
 import { Loader2, TrendingUp, FolderOpen, IndianRupee, CalendarDays, Clock, ExternalLink } from "lucide-react";
 import { apiRequest } from "../lib/api";
 import { DashboardCardDetailsModal, type DashboardCardType } from "../components/dashboard/DashboardCardDetailsModal";
+import { useAuth } from "../context/AuthContext";
 
 function fmt(n: number) {
   return (Number(n) || 0).toLocaleString("en-IN", {
@@ -70,6 +71,8 @@ interface ReportData {
 }
 
 function ReportsSection() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { initialStart, initialEnd } = useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -192,7 +195,7 @@ function ReportsSection() {
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       ) : report ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 ${isAdmin ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 max-w-sm"} gap-4`}>
           <ReportCard
             title="Running Projects"
             value={String(report.totalProjects ?? 0)}
@@ -201,7 +204,9 @@ function ReportsSection() {
             onClick={() => setModalCardType("running-projects")}
           />
 
-          <ReportCard
+          {isAdmin && (
+            <>
+              <ReportCard
             title="Total Projects Value"
             value={`₹${fmt(report.totalRevenue ?? 0)}`}
             icon={TrendingUp}
@@ -224,6 +229,8 @@ function ReportsSection() {
             color="bg-amber-100 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 border border-amber-200/50"
             onClick={() => setModalCardType("revenue-due")}
           />
+            </>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground font-semibold">No analytics data recorded for this date range.</p>
@@ -244,6 +251,8 @@ function ReportsSection() {
 }
 
 export default function Index() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   return (
     <DashboardLayout>
       <div className="space-y-8 animate-fade-in">
@@ -252,7 +261,7 @@ export default function Index() {
           <p className="text-sm text-muted-foreground">Welcome to your Paints overview panel</p>
         </div>
         <ReportsSection />
-        <CashFlowWidget />
+        {isAdmin && <CashFlowWidget />}
         <LowMaterialsSection />
         <ProjectSection />
         <TaskSection />

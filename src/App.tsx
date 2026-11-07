@@ -98,7 +98,7 @@ export default function App() {
               <Route path="/material-wastage" element={<Protected><WastageMaterialLogsPage /></Protected>} />
               <Route path="/payments" element={<AdminProtected><PaymentsPage /></AdminProtected>} />
               <Route path="/contractor-payments" element={<AdminProtected><ContractorPaymentsPage /></AdminProtected>} />
-              <Route path="/weekly-diary" element={<Protected><WeeklyDiaryPage /></Protected>} />
+              <Route path="/weekly-diary" element={<AdminProtected><WeeklyDiaryPage /></AdminProtected>} />
               <Route path="/activity-logs" element={<AdminProtected><ActivityLogsPage /></AdminProtected>} />
               <Route
                 path="/settings"
@@ -111,9 +111,9 @@ export default function App() {
               <Route
                 path="/reports"
                 element={
-                  <ProtectedRoute>
+                  <AdminProtected>
                     <ReportsPage />
-                  </ProtectedRoute>
+                  </AdminProtected>
                 }
               />
 

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMasterData } from "../../hooks/use-master-data";
+import { useAuth } from "../../context/AuthContext";
 import type { Customer, Project } from "../../types/master";
 import { X } from "lucide-react";
 import { MasterForm } from "./MasterForm";
@@ -42,6 +43,8 @@ export default function CustomerDashboard({
   customerId?: string;
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   // Fetch projects related to the customer
   const { data: projectData, isLoading: isProjectsLoading } = useMasterData<Project>(
     "projects",
@@ -172,16 +175,20 @@ export default function CustomerDashboard({
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Stat title="Total Projects" value={String(projects.length)} />
-            <Stat title="Total Value" value={fmt(stats.total)} variant="total" />
-            <Stat title="Received" value={fmt(stats.received)} variant="paid" />
-            <Stat title="Due Balance" value={fmt(stats.due)} variant="due" />
+            {isAdmin && (
+              <>
+                <Stat title="Total Value" value={fmt(stats.total)} variant="total" />
+                <Stat title="Received" value={fmt(stats.received)} variant="paid" />
+                <Stat title="Due Balance" value={fmt(stats.due)} variant="due" />
+              </>
+            )}
           </div>
 
           {/* Projects List */}
           <div className="bg-card rounded-xl border border-border p-5 shadow-sm-soft space-y-4">
             <h2 className="text-lg font-bold font-display text-foreground">Active Projects</h2>
             <DataTable
-              columns={columns}
+              columns={columns.filter((c) => isAdmin || (c.key !== "totalAmount" && c.key !== "paid" && c.key !== "due"))}
               data={projects}
               isLoading={isProjectsLoading}
             />

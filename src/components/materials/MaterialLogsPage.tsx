@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMasterData } from "@/hooks/use-master-data";
+import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,8 @@ interface QueuedMaterial {
 }
 
 export default function MaterialLogsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: projectsData } = useMasterData<Project>("projects");
   const { data: allProductsData } = useMasterData<Product>("products");
 
@@ -680,7 +683,7 @@ export default function MaterialLogsPage() {
                           const perLitre = litres > 0 ? Number(v.price) / litres : Number(v.price);
                           return (
                             <option key={v.id} value={v.id}>
-                              {v.size || "1ltr"} — ₹{Number(v.price).toLocaleString("en-IN")} (₹{perLitre.toFixed(2)}/L)
+                              {v.size || "1ltr"}{isAdmin ? ` — ₹${Number(v.price).toLocaleString("en-IN")} (₹${perLitre.toFixed(2)}/L)` : ""}
                             </option>
                           );
                         })}
@@ -762,13 +765,13 @@ export default function MaterialLogsPage() {
                                       {p.size}
                                     </span>
                                   )}
-                                  {Number(p.price || 0) > 0 && (
+                                  {isAdmin && Number(p.price || 0) > 0 && (
                                     <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 px-1.5 py-0.5 rounded">
                                       ₹{Number(p.price).toLocaleString("en-IN")} / pack
                                     </span>
                                   )}
                                 </div>
-                                {Number(p.price || 0) > 0 && Number(quantity) > 0 && (
+                                {isAdmin && Number(p.price || 0) > 0 && Number(quantity) > 0 && (
                                   <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                                     Total: <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{(Number(quantity) * Number(p.price)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     <span className="text-[10px] text-muted-foreground ml-2">
@@ -847,7 +850,7 @@ export default function MaterialLogsPage() {
                           Total Quantity:{" "}
                           <strong className="text-foreground font-mono">{totalStagedQuantity} Packs</strong>
                         </span>
-                        {totalStagedAmount > 0 && (
+                        {isAdmin && totalStagedAmount > 0 && (
                           <span className="text-muted-foreground font-medium">
                             Total Value:{" "}
                             <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
@@ -1054,14 +1057,14 @@ export default function MaterialLogsPage() {
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Date</th>
                       <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">Project Site</th>
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Items Logged</th>
-                      <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Value</th>
+                      {isAdmin && <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">Total Value</th>}
                       <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {groupedLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="h-28 text-center text-muted-foreground align-middle">
+                        <td colSpan={isAdmin ? 5 : 4} className="h-28 text-center text-muted-foreground align-middle">
                           <div className="flex flex-col items-center justify-center space-y-1.5">
                             {siteSearch ? (
                               <>
@@ -1137,11 +1140,13 @@ export default function MaterialLogsPage() {
                                 {g.records.length} Item{g.records.length > 1 ? "s" : ""}
                               </Badge>
                             </td>
-                            <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                              {totalAmount > 0
-                                ? `₹${totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : "—"}
-                            </td>
+                            {isAdmin && (
+                              <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                {totalAmount > 0
+                                  ? `₹${totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : "—"}
+                              </td>
+                            )}
                             <td className="p-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 variant="ghost"
@@ -1203,7 +1208,7 @@ export default function MaterialLogsPage() {
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1 text-xs rounded-full">
                 {activeDetailRecords.length} Items Logged
               </Badge>
-              {activeDetailRecords.reduce((sum, r) => {
+              {isAdmin && activeDetailRecords.reduce((sum, r) => {
                 const prod = r.product || allProducts.find((p) => p.id === r.productId);
                 return sum + Number(r.quantity || 0) * Number(prod?.price || 0);
               }, 0) > 0 && (
@@ -1305,15 +1310,19 @@ export default function MaterialLogsPage() {
                           <th className="h-12 px-4 text-left font-medium text-muted-foreground select-none">
                             Product Name
                           </th>
-                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
-                            Price / Unit
-                          </th>
+                          {isAdmin && (
+                            <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
+                              Price / Unit
+                            </th>
+                          )}
                           <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">
                             Pack Quantity
                           </th>
-                          <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
-                            Total Price
-                          </th>
+                          {isAdmin && (
+                            <th className="h-12 px-4 text-right font-medium text-muted-foreground select-none">
+                              Total Price
+                            </th>
+                          )}
                           <th className="h-12 px-4 text-center font-medium text-muted-foreground select-none">
                             Actions
                           </th>
@@ -1334,17 +1343,21 @@ export default function MaterialLogsPage() {
                                   </span>
                                 )}
                               </td>
-                              <td className="p-4 align-middle text-right font-mono text-slate-700 dark:text-slate-300">
-                                {unitPrice > 0 ? `₹${unitPrice.toLocaleString("en-IN")}` : "—"}
-                              </td>
+                              {isAdmin && (
+                                <td className="p-4 align-middle text-right font-mono text-slate-700 dark:text-slate-300">
+                                  {unitPrice > 0 ? `₹${unitPrice.toLocaleString("en-IN")}` : "—"}
+                                </td>
+                              )}
                               <td className="p-4 align-middle text-center font-semibold">
                                 {Number(r.quantity)} Pack{Number(r.quantity) > 1 ? "s" : ""}
                               </td>
-                              <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                {totalPrice > 0
-                                  ? `₹${totalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                  : "—"}
-                              </td>
+                              {isAdmin && (
+                                <td className="p-4 align-middle text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  {totalPrice > 0
+                                    ? `₹${totalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : "—"}
+                                </td>
+                              )}
                               <td className="p-4 align-middle text-center">
                                 <button
                                   onClick={() => handleDeleteLog(r.id, r.product?.name || "Product")}

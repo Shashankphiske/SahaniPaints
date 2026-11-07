@@ -126,6 +126,7 @@ const createEmptyProductRow = (): PaintProductRow => ({
 
 export default function ProjectsPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const projectIdParam = searchParams.get("projectId") || searchParams.get("id");
@@ -618,6 +619,7 @@ export default function ProjectsPage() {
                           </div>
 
                           {/* Vertical Financial Pills with Simple Light Colors */}
+                          {isAdmin && (
                           <div className="flex flex-col gap-1.5 text-xs">
                             <div className="flex items-center justify-between p-1.5 px-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/40 min-w-0">
                               <div className="flex items-center gap-1.5 shrink-0">
@@ -656,6 +658,7 @@ export default function ProjectsPage() {
                               </span>
                             </div>
                           </div>
+                          )}
 
                           {/* Actions */}
                           <div className="flex items-center justify-between pt-1 border-t border-border/40">
@@ -690,8 +693,8 @@ export default function ProjectsPage() {
                         <TableHead>Deadline Date</TableHead>
                         <TableHead>Supervisor</TableHead>
                         <TableHead>Interior Designer</TableHead>
-                        <TableHead>Total Charges</TableHead>
-                        <TableHead>Agreed Price</TableHead>
+                        {isAdmin && <TableHead>Total Charges</TableHead>}
+                        {isAdmin && <TableHead>Agreed Price</TableHead>}
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
@@ -731,12 +734,16 @@ export default function ProjectsPage() {
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          <TableCell onClick={() => setViewingProject(project)}>
-                            ₹{fmt(project.totalAmount)}
-                          </TableCell>
-                          <TableCell onClick={() => setViewingProject(project)}>
-                            ₹{fmt(project.agreedPrice || project.totalAmount)}
-                          </TableCell>
+                          {isAdmin && (
+                            <TableCell onClick={() => setViewingProject(project)}>
+                              ₹{fmt(project.totalAmount)}
+                            </TableCell>
+                          )}
+                          {isAdmin && (
+                            <TableCell onClick={() => setViewingProject(project)}>
+                              ₹{fmt(project.agreedPrice || project.totalAmount)}
+                            </TableCell>
+                          )}
                           <TableCell onClick={() => setViewingProject(project)}>
                             <Badge
                               variant="outline"
@@ -847,6 +854,8 @@ interface CreateProjectFormProps {
 }
 
 function CreateProjectForm({ customers, products, supervisors, interiors, onCancel, onCreateCustomer, onSave, onSearchCustomers, onSearchProducts, onSearchInteriors }: CreateProjectFormProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   // Form fields
   const [name, setName] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -1194,7 +1203,7 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
                               >
                                 {variations.map((v) => (
                                   <option key={v.id} value={v.id}>
-                                    {v.size} (₹{v.price}/pack)
+                                    {v.size} {isAdmin ? `(₹${v.price}/pack)` : ""}
                                   </option>
                                 ))}
                               </select>
@@ -1260,6 +1269,7 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
             </section>
 
             {/* Step 3: Tax & discount (collapsed by default) */}
+            {isAdmin && (
             <section className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200/80 dark:border-zinc-800/80">
               <button
                 type="button"
@@ -1314,10 +1324,12 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
                 </div>
               )}
             </section>
+            )}
           </div>
 
           {/* RIGHT COLUMN — sticky summary */}
           <div className="lg:sticky lg:top-4 space-y-4">
+            {isAdmin && (
             <div className="bg-slate-50/60 dark:bg-zinc-900/40 p-5 rounded-xl border border-slate-200/60 dark:border-zinc-800/50 space-y-4">
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Summary</h3>
 
@@ -1367,6 +1379,7 @@ function CreateProjectForm({ customers, products, supervisors, interiors, onCanc
                 </span>
               </div>
             </div>
+            )}
 
             <div className="space-y-2">
               <Button type="submit" disabled={saving} className="w-full font-semibold">
@@ -1557,17 +1570,21 @@ function ProjectDetailView({
           <TabsTrigger value="products" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Selected Products
           </TabsTrigger>
-          <TabsTrigger value="quotation" className="rounded-lg text-xs font-bold py-1.5 px-3">
-            Quotation
-          </TabsTrigger>
+          {user?.role === "ADMIN" && (
+            <TabsTrigger value="quotation" className="rounded-lg text-xs font-bold py-1.5 px-3">
+              Quotation
+            </TabsTrigger>
+          )}
           {user?.role === "ADMIN" && (
             <TabsTrigger value="payments" className="rounded-lg text-xs font-bold py-1.5 px-3">
               Customer Payments
             </TabsTrigger>
           )}
-          <TabsTrigger value="profitloss" className="rounded-lg text-xs font-bold py-1.5 px-3">
-            Profit / Loss
-          </TabsTrigger>
+          {user?.role === "ADMIN" && (
+            <TabsTrigger value="profitloss" className="rounded-lg text-xs font-bold py-1.5 px-3">
+              Profit / Loss
+            </TabsTrigger>
+          )}
           <TabsTrigger value="materialrequests" className="rounded-lg text-xs font-bold py-1.5 px-3">
             Material Requests
           </TabsTrigger>
@@ -1606,6 +1623,7 @@ function ProjectDetailView({
         </TabsContent>
 
         {/* TAB 3: TAX, DISCOUNT & QUOTATION SUMMARY */}
+        {user?.role === "ADMIN" && (
         <TabsContent value="quotation">
           <QuotationTab
             fullProject={fullProject}
@@ -1613,11 +1631,14 @@ function ProjectDetailView({
             updateAllCaches={updateAllCaches}
           />
         </TabsContent>
+        )}
 
         {/* TAB 4: PROFIT & LOSS CALCULATOR */}
+        {user?.role === "ADMIN" && (
         <TabsContent value="profitloss">
           <ProfitLossTab fullProject={fullProject} onSelectLabour={setSelectedLabour} />
         </TabsContent>
+        )}
 
         {/* TAB 4.5: MATERIAL REQUESTS LOG */}
         <TabsContent value="materialrequests">
@@ -2112,6 +2133,8 @@ interface SelectedProductsTabProps {
 }
 
 function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, products, onSearchProducts }: SelectedProductsTabProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [rows, setRows] = useState<PaintProductRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -2425,8 +2448,8 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                   <TableHead className="w-5/12">Product Description</TableHead>
                   <TableHead className="w-2/12">Designated Area</TableHead>
                   <TableHead className="w-2/12">Unit Option</TableHead>
-                  <TableHead className="w-2/12">Rate (₹/Unit)</TableHead>
-                  <TableHead className="w-1/12 text-right">Total</TableHead>
+                  {isAdmin && <TableHead className="w-2/12">Rate (₹/Unit)</TableHead>}
+                  {isAdmin && <TableHead className="w-1/12 text-right">Total</TableHead>}
                   <TableHead className="w-10 text-right"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -2532,24 +2555,28 @@ function SelectedProductsTab({ fullProject, setFullProject, updateAllCaches, pro
                         <option value="rn.ft">rn.ft</option>
                       </select>
                     </TableCell>
-                    <TableCell className="p-3">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row.rate !== "" && row.rate !== undefined ? row.rate : ""}
-                        onChange={(e) => handleRowChange(idx, "rate", e.target.value)}
-                        onBlur={(e) => {
-                          const val = Number(e.target.value);
-                          if (!isNaN(val) && e.target.value !== "") {
-                            handleRowChange(idx, "rate", Number(val.toFixed(2)));
-                          }
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="p-3 text-right font-semibold">
-                      ₹{fmt(Number(row.rate || 0) * Number(row.area || 0))}
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="p-3">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={row.rate !== "" && row.rate !== undefined ? row.rate : ""}
+                          onChange={(e) => handleRowChange(idx, "rate", e.target.value)}
+                          onBlur={(e) => {
+                            const val = Number(e.target.value);
+                            if (!isNaN(val) && e.target.value !== "") {
+                              handleRowChange(idx, "rate", Number(val.toFixed(2)));
+                            }
+                          }}
+                        />
+                      </TableCell>
+                    )}
+                    {isAdmin && (
+                      <TableCell className="p-3 text-right font-semibold">
+                        ₹{fmt(Number(row.rate || 0) * Number(row.area || 0))}
+                      </TableCell>
+                    )}
                     <TableCell className="p-3 text-right">
                       <Button
                         type="button"
@@ -2788,6 +2815,8 @@ interface MaterialUsedTabProps {
 }
 
 function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProject }: MaterialUsedTabProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [selectedPP, setSelectedPP] = useState<any | null>(null);
   const [isAddingLog, setIsAddingLog] = useState(false);
   const [newLogQuantity, setNewLogQuantity] = useState("");
@@ -3142,7 +3171,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
               <span>{unallocatedCount} Not in Selected Products</span>
             </Badge>
           )}
-          {totalProjectMaterialCost > 0 && (
+          {isAdmin && totalProjectMaterialCost > 0 && (
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border-emerald-200 font-mono font-bold px-3 py-1 text-xs">
               Total Logged: ₹{fmt(totalProjectMaterialCost)}
             </Badge>
@@ -3445,9 +3474,11 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                   </TableCell>
 
                   {/* 6. Total Cost */}
-                  <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                    {totalCost > 0 ? `₹${fmt(totalCost)}` : "—"}
-                  </TableCell>
+                  {isAdmin && (
+                    <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                      {totalCost > 0 ? `₹${fmt(totalCost)}` : "—"}
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             }))}
@@ -3466,9 +3497,11 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                 )}
               </TableCell>
               <TableCell colSpan={3} className="py-3.5" />
-              <TableCell className="text-right font-mono font-extrabold text-sm text-emerald-600 dark:text-emerald-400 py-3.5">
-                ₹{fmt(totalProjectMaterialCost)}
-              </TableCell>
+              {isAdmin ? (
+                <TableCell className="text-right font-mono font-extrabold text-sm text-emerald-600 dark:text-emerald-400 py-3.5">
+                  ₹{fmt(totalProjectMaterialCost)}
+                </TableCell>
+              ) : (<TableCell className="py-3.5" />)}
             </TableRow>
           </TableFooter>
         </Table>
@@ -3676,7 +3709,7 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                             <TableHead className="text-xs">Packs Logged</TableHead>
                             <TableHead className="text-xs">Volume (Litres)</TableHead>
                             <TableHead className="text-xs">Coverage Contribution</TableHead>
-                            <TableHead className="text-xs text-right">Cost</TableHead>
+                            {isAdmin && <TableHead className="text-xs text-right">Cost</TableHead>}
                             <TableHead className="text-xs text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -3701,9 +3734,11 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                                 <TableCell className="font-semibold text-xs">
                                   +{fmt(entryCoverage)} {activePP.unit}
                                 </TableCell>
-                                <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                                  {entryCost > 0 ? `₹${fmt(entryCost)}` : "—"}
-                                </TableCell>
+                                {isAdmin && (
+                                  <TableCell className="text-right font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                                    {entryCost > 0 ? `₹${fmt(entryCost)}` : "—"}
+                                  </TableCell>
+                                )}
                                 <TableCell className="text-right">
                                   <Button
                                     size="icon"
@@ -3721,12 +3756,14 @@ function MaterialUsedTab({ projectId, projectProducts, materialLogs, setFullProj
                         </TableBody>
                         <TableFooter className="bg-slate-50/90 dark:bg-zinc-900/90 border-t border-slate-200 dark:border-zinc-800">
                           <TableRow className="hover:bg-transparent">
-                            <TableCell colSpan={4} className="font-extrabold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 py-3">
-                              Total Cost for {activePP.product?.name || "Material"}
+                            <TableCell colSpan={isAdmin ? 4 : 3} className="font-extrabold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300 py-3">
+                              {isAdmin ? `Total Cost for ${activePP.product?.name || "Material"}` : "Logged Records"}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-extrabold text-xs text-emerald-600 dark:text-emerald-400 py-3">
-                              ₹{fmt(selectedMetrics.totalCost)}
-                            </TableCell>
+                            {isAdmin && (
+                              <TableCell className="text-right font-mono font-extrabold text-xs text-emerald-600 dark:text-emerald-400 py-3">
+                                ₹{fmt(selectedMetrics.totalCost)}
+                              </TableCell>
+                            )}
                             <TableCell />
                           </TableRow>
                         </TableFooter>
@@ -3816,6 +3853,8 @@ interface LabourCrewTabProps {
 }
 
 function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   // Aggregate attendance data: Group by worker
   const aggregatedLabour = useMemo(() => {
     const map: Record<string, { labour: any; name: string; paymentPerDay: number; daysValueSum: number; phone: string }> = {};
@@ -3888,9 +3927,9 @@ function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
                 <TableRow>
                   <TableHead>Labour Name</TableHead>
                   <TableHead>Contact Phone</TableHead>
-                  <TableHead>Wages / Day</TableHead>
+                  {isAdmin && <TableHead>Wages / Day</TableHead>}
                   <TableHead>Days Present</TableHead>
-                  <TableHead className="text-right">Total Wages</TableHead>
+                  {isAdmin && <TableHead className="text-right">Total Wages</TableHead>}
                   <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -3905,15 +3944,17 @@ function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
                       {item.name}
                     </TableCell>
                     <TableCell className="text-slate-500 text-xs font-mono">{item.phone}</TableCell>
-                    <TableCell>₹{fmt(item.paymentPerDay)}</TableCell>
+                    {isAdmin && <TableCell>₹{fmt(item.paymentPerDay)}</TableCell>}
                     <TableCell>
                       <Badge variant="secondary" className="font-bold px-2 py-0.5 rounded-full">
                         {item.daysPresentCount} days
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
-                      ₹{fmt(item.totalWages)}
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-right font-bold text-slate-800 dark:text-slate-200">
+                        ₹{fmt(item.totalWages)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors shrink-0 ml-auto" />
                     </TableCell>
@@ -3923,6 +3964,7 @@ function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
             </Table>
           </Card>
 
+          {isAdmin && (
           <Card className="bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200/60 dark:border-zinc-800/50 shadow-sm p-5 space-y-4">
             <div className="flex items-center gap-2 text-primary">
               <Hammer className="h-5 w-5" />
@@ -3947,6 +3989,7 @@ function LabourCrewTab({ attendance, onSelectLabour }: LabourCrewTabProps) {
               </span>
             </div>
           </Card>
+          )}
         </div>
       )}
     </div>
@@ -4838,6 +4881,8 @@ interface ContractorWorkLedgerTabProps {
 }
 
 function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject }: ContractorWorkLedgerTabProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const { data: contractorsRaw } = useMasterData<Contractor>("contractors");
   const allContractors = useMemo(() => Array.isArray(contractorsRaw) ? contractorsRaw : [], [contractorsRaw]);
 
@@ -5021,8 +5066,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
                     <TableHead>Date</TableHead>
                     <TableHead>Contractor Name</TableHead>
                     <TableHead>Work (Sq.Ft)</TableHead>
-                    <TableHead>Rate / Sq.Ft</TableHead>
-                    <TableHead className="text-right">Subtotal</TableHead>
+                    {isAdmin && <TableHead>Rate / Sq.Ft</TableHead>}
+                    {isAdmin && <TableHead className="text-right">Subtotal</TableHead>}
                     <TableHead className="text-center w-12">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -5051,8 +5096,8 @@ function ContractorWorkLedgerTab({ projectId, contractorWorkLogs, setFullProject
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-sm">{Number(log.sqFt).toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>
-                        <TableCell className="font-bold text-right">₹{fmt(subtotal)}</TableCell>
+                        {isAdmin && <TableCell className="font-mono text-sm">₹{rate.toFixed(2)}</TableCell>}
+                        {isAdmin && <TableCell className="font-bold text-right">₹{fmt(subtotal)}</TableCell>}
                         <TableCell className="text-center">
                           <button
                             type="button"
