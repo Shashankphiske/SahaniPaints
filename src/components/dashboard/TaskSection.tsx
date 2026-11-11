@@ -270,7 +270,7 @@ function TaskCard({ task, onView, onEdit, onDelete, onMarkDone }: TaskCardProps)
       </div>
 
       <CardContent className="p-5 pr-10 space-y-3">
-        <h4 className="font-bold text-foreground leading-snug line-clamp-1 pr-2 text-sm">
+        <h4 className="font-bold text-foreground leading-snug break-words pr-2 text-sm">
           {task.title}
         </h4>
 
